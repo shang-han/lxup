@@ -14,6 +14,8 @@ import yaml
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from ..services.hermes_manager import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/hermes", tags=["hermes"])
@@ -22,9 +24,13 @@ router = APIRouter(prefix="/api/hermes", tags=["hermes"])
 # ── 工具 ──
 
 
-def _config_path(request: Request) -> Path:
+def _hermes_home_dir(request: Request) -> Path:
     home = getattr(request.app.state.config, "hermes_home", "") or "runtime/hermes-home"
-    return Path(home) / "config.yaml"
+    return Path(home)
+
+
+def _config_path(request: Request) -> Path:
+    return _hermes_home_dir(request) / "config.yaml"
 
 
 def _gateway_url(request: Request) -> str:
@@ -171,3 +177,128 @@ async def stop(request: Request):
 async def restart(request: Request):
     """重启 Hermes 网关"""
     return await _manager(request).restart()
+
+
+# ── config.yaml 原始读写 ──
+
+
+class ConfigWriteRequest(BaseModel):
+    content: str = Field(default="", description="config.yaml 原始 YAML 文本")
+
+
+@router.get("/config")
+async def get_config(request: Request):
+    """读取 config.yaml 原始内容"""
+    p = _config_path(request)
+    content = p.read_text(encoding="utf-8") if p.exists() else ""
+    return {"content": content, "path": str(p)}
+
+
+@router.post("/config")
+async def set_config(request: Request, body: ConfigWriteRequest):
+    """保存 config.yaml（先校验 YAML；Hermes 热加载生效）"""
+    try:
+        yaml.safe_load(body.content)
+    except Exception as e:
+        return {"success": False, "message": f"YAML 格式错误：{e}"}
+    p = _config_path(request)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body.content, encoding="utf-8")
+    return {"success": True, "message": "已保存，Hermes 热加载生效"}
+
+
+# ── .env 键值读写 ──
+
+
+class EnvVar(BaseModel):
+    name: str = ""
+    value: str = ""
+
+
+class EnvWriteRequest(BaseModel):
+    vars: list[EnvVar] = Field(default_factory=list)
+
+
+@router.get("/env")
+async def get_env(request: Request):
+    """读取 .env 的自定义变量"""
+    p = _hermes_home_dir(request) / ".env"
+    vars_list: list[dict] = []
+    if p.exists():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            k, _, v = s.partition("=")
+            vars_list.append({"name": k.strip(), "value": v.strip()})
+    return {"vars": vars_list, "path": str(p)}
+
+
+@router.post("/env")
+async def set_env(request: Request, body: EnvWriteRequest):
+    """保存 .env（下次网关重启生效）"""
+    p = _hermes_home_dir(request) / ".env"
+    lines = []
+    for v in body.vars or []:
+        name = (v.name or "").strip()
+        if not name:
+            continue
+        lines.append(f"{name}={v.value}")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    return {"success": True, "message": "已保存（下次网关重启生效）"}
+
+
+# ── 日志列表 / 内容 ──
+
+
+def _log_dirs(request: Request) -> list[Path]:
+    return [
+        _hermes_home_dir(request) / "logs",
+        Path(PROJECT_ROOT) / "runtime" / "logs",
+    ]
+
+
+def _resolve_log_path(request: Request, name: str) -> Path | None:
+    """只允许 basename，杜绝路径穿越；在日志目录中查找"""
+    base = (name or "").strip()
+    if not base or base in (".", "..") or "/" in base or "\\" in base:
+        return None
+    for d in _log_dirs(request):
+        candidate = d / base
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+@router.get("/logs")
+async def list_logs(request: Request):
+    """列出日志文件（hermes-home/logs + runtime/logs）"""
+    files: dict[str, dict] = {}
+    for d in _log_dirs(request):
+        if not d.is_dir():
+            continue
+        for f in d.glob("*.log"):
+            if f.name in files:
+                continue
+            try:
+                st = f.stat()
+                files[f.name] = {"name": f.name, "size": st.st_size, "modified": int(st.st_mtime)}
+            except OSError:
+                continue
+    out = sorted(files.values(), key=lambda x: x["modified"], reverse=True)
+    return {"files": out}
+
+
+@router.get("/logs/content")
+async def log_content(request: Request, file: str, lines: int = 200):
+    """读取日志文件尾部若干行"""
+    p = _resolve_log_path(request, file)
+    if p is None:
+        return {"name": file, "lines": []}
+    try:
+        all_lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        all_lines = []
+    n = max(1, min(int(lines or 200), 5000))
+    return {"name": p.name, "lines": all_lines[-n:]}
