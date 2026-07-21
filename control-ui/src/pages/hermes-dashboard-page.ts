@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
+import { listModels, type ResolvedModel } from '../utils/model-config.js';
 import '../components/page-header.js';
 
 const TERMINAL_COMMANDS = [
@@ -198,32 +199,115 @@ export class HermesDashboardPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: Function }) onNavigate = () => {};
 
-  @state() _gatewayRunning = false;
   @state() _connTarget = 'local';
   @state() _modelConfigOpen = false;
   @state() _apiBase = 'https://api.deepseek.com/v1';
   @state() _apiKey = '';
   @state() _model = 'deepseek-chat';
-  @state() _selectedPreset = '';
 
-  _providerPresets = [
-    'GPT+Claude推荐中转', '硅基流动', '火山引擎', '火山引擎 Coding',
-    '阿里云百炼', '智谱 AI', 'MiniMax', 'Moonshot / Kimi',
-    'OpenAI 官方', 'Anthropic 官方', 'DeepSeek',
-    'Google Gemini', 'xAI (Grok)', 'Groq',
-    'OpenRouter', 'NVIDIA NIM', 'Ollama (本地)',
-  ];
+  // 真实状态（来自 Sidecar / Hermes 网关）
+  @state() _models: ResolvedModel[] = [];
+  @state() _selectedModelKey = '';
+  @state() _currentName = '';
+  @state() _currentBaseUrl = '';
+  @state() _hasKey = false;
+  @state() _hermesOnline = false;
+  @state() _hermesVersion = '';
+  @state() _saving = false;
+  @state() _saveMsg = '';
+
+  /** Sidecar HTTP 基址（Hermes 模型配置经 Sidecar 写入 config.yaml） */
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._models = listModels();
+    void this._loadCurrentConfig();
+    void this._loadStatus();
+  }
+
+  /** 读取 Hermes 当前模型配置（Sidecar GET /api/hermes/model） */
+  async _loadCurrentConfig() {
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model`);
+      if (!r.ok) return;
+      const c = (await r.json()) as { name?: string; baseUrl?: string; apiKey?: string; hasKey?: boolean };
+      this._currentName = c.name || '';
+      this._currentBaseUrl = c.baseUrl || '';
+      this._hasKey = !!c.hasKey;
+      if (c.name) this._model = c.name;
+      if (c.baseUrl) this._apiBase = c.baseUrl;
+      if (c.apiKey) this._apiKey = c.apiKey; // 打码值，保存时后端会保留原 Key
+    } catch { /* Sidecar 离线时忽略 */ }
+  }
+
+  /** 探测 Hermes 网关在线状态（Sidecar GET /api/hermes/status） */
+  async _loadStatus() {
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/status`);
+      if (r.ok) {
+        const s = (await r.json()) as { online?: boolean; version?: string };
+        this._hermesOnline = !!s.online;
+        this._hermesVersion = s.version || '';
+      } else {
+        this._hermesOnline = false;
+      }
+    } catch {
+      this._hermesOnline = false;
+    }
+  }
+
+  /** 选中「模型配置」里的某个模型 → 自动填充表单 */
+  _pickModel(m: ResolvedModel) {
+    this._selectedModelKey = `${m.providerId}::${m.model}`;
+    this._model = m.model;
+    this._apiBase = m.baseUrl;
+    this._apiKey = m.apiKey;
+    this._saveMsg = '';
+  }
+
+  /** 保存模型配置（Sidecar POST /api/hermes/model → Hermes 热加载） */
+  async _saveModelConfig() {
+    this._saving = true;
+    this._saveMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: this._model.trim(),
+          baseUrl: this._apiBase.trim(),
+          apiKey: this._apiKey.trim(),
+        }),
+      });
+      const d = (await r.json()) as { success?: boolean };
+      if (d.success) {
+        this._saveMsg = `✓ ${L('hermesDashboard.savedHotReload')}`;
+        await this._loadCurrentConfig();
+      } else {
+        this._saveMsg = `✗ ${L('hermesDashboard.saveFailed')}`;
+      }
+    } catch {
+      this._saveMsg = `✗ ${L('hermesDashboard.sidecarOffline')}`;
+    }
+    this._saving = false;
+  }
+
+  _refreshAll() {
+    this._models = listModels();
+    void this._loadCurrentConfig();
+    void this._loadStatus();
+  }
 
   render() {
     return html`
       <page-header title=${this.title} subtitle=${`127.0.0.1:8642 · ${L('hermesDashboard.subtitle')} · v0.11.0`}>
         <div style="display:flex;gap:8px;align-items:center;">
-          <button style="padding:6px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:var(--accent-foreground);display:inline-flex;align-items:center;gap:6px;"
-                  @click=${() => { this._gatewayRunning = !this._gatewayRunning; }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-            ${this._gatewayRunning ? L('hermesDashboard.stopGateway') : L('hermesDashboard.startGateway')}
-          </button>
-          <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);">
+          <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);display:inline-flex;align-items:center;gap:6px;"
+                  @click=${() => this._refreshAll()}>
             ${L('common.refresh')}
           </button>
         </div>
@@ -236,26 +320,24 @@ export class HermesDashboardPage extends LitElement {
             <div class="hermes-status-card__label">${L('hermesDashboard.gatewayStatus')}</div>
             <div class="hermes-status-card__value">
               <div class="hermes-status-card__status">
-                <span class="hermes-status-card__dot ${this._gatewayRunning ? 'running' : 'stopped'}"></span>
-                ${this._gatewayRunning ? L('hermesDashboard.running') : L('hermesDashboard.stopped')}
+                <span class="hermes-status-card__dot ${this._hermesOnline ? 'running' : 'stopped'}"></span>
+                ${this._hermesOnline ? L('hermesDashboard.running') : L('hermesDashboard.stopped')}
               </div>
             </div>
             <div class="hermes-status-card__sub">${L('hermesDashboard.listeningPort')}</div>
           </div>
           <div class="hermes-status-card">
             <div class="hermes-status-card__label">${L('hermesDashboard.currentModel')}</div>
-            <div class="hermes-status-card__value">${L('hermesDashboard.notConfigured')}</div>
+            <div class="hermes-status-card__value" style="font-size:${this._currentName ? '15px' : '13px'};">${this._currentName || L('hermesDashboard.notConfigured')}</div>
             <div class="hermes-status-card__sub">
-              <select style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input);color:var(--text-soft);">
-                <option>${L('hermesDashboard.provider')}</option>
-              </select>
+              <span style="font-size:10px;padding:2px 6px;background:var(--bg-muted);border-radius:var(--radius-sm);color:var(--muted);">${this._hasKey ? 'Key ✓' : 'Key —'}</span>
             </div>
           </div>
           <div class="hermes-status-card">
             <div class="hermes-status-card__label">${L('hermesDashboard.version')}</div>
-            <div class="hermes-status-card__value" style="font-size:20px;">v0.11.0</div>
+            <div class="hermes-status-card__value" style="font-size:20px;">${this._hermesVersion ? `v${this._hermesVersion}` : '—'}</div>
             <div class="hermes-status-card__sub">
-              <span style="font-size:10px;padding:2px 6px;background:var(--bg-muted);border-radius:var(--radius-sm);color:var(--muted);">uv-tool</span>
+              <span style="font-size:10px;padding:2px 6px;background:var(--bg-muted);border-radius:var(--radius-sm);color:var(--muted);">hermes-agent</span>
             </div>
           </div>
           <div class="hermes-status-card">
@@ -278,7 +360,7 @@ export class HermesDashboardPage extends LitElement {
             <div class="hermes-section__title">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               ${L('hermesDashboard.modelConfig')}
-              <span class="hermes-section__badge">17</span>
+              <span class="hermes-section__badge">${this._models.length}</span>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
               style="transform:${this._modelConfigOpen ? 'rotate(180deg)' : 'rotate(0)'};transition:transform var(--duration-fast);color:var(--muted);">
@@ -287,14 +369,20 @@ export class HermesDashboardPage extends LitElement {
           </div>
 
           ${this._modelConfigOpen ? html`
-            <!-- Provider presets -->
-            <div style="font-size:12px;color:var(--text-soft);margin-bottom:8px;">${L('hermesDashboard.providerPresets', '服务商预设')}</div>
-            <div class="hermes-model-presets">
-              ${this._providerPresets.map((p: string) => html`
-                <button class="${this._selectedPreset === p ? 'active' : ''}"
-                  @click=${() => { this._selectedPreset = p; this.requestUpdate(); }}>${p}</button>
-              `)}
-            </div>
+            <!-- 从「模型配置」选择已配好的模型 -->
+            <div style="font-size:12px;color:var(--text-soft);margin-bottom:8px;">${L('hermesDashboard.pickConfiguredModel')}</div>
+            ${this._models.length === 0 ? html`
+              <div style="font-size:12px;color:var(--muted);padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius-sm);margin-bottom:12px;">
+                ${L('hermesDashboard.noConfiguredModel')}
+              </div>
+            ` : html`
+              <div class="hermes-model-presets">
+                ${this._models.map((m) => html`
+                  <button class="${this._selectedModelKey === `${m.providerId}::${m.model}` ? 'active' : ''}"
+                    @click=${() => this._pickModel(m)}>${m.model} · ${m.providerName}</button>
+                `)}
+              </div>
+            `}
 
             <!-- API Base URL & API Key -->
             <div class="hermes-form-row">
@@ -302,12 +390,12 @@ export class HermesDashboardPage extends LitElement {
                 <div class="hermes-form-label">API Base URL</div>
                 <input class="hermes-form-input" type="text" .value=${this._apiBase}
                   placeholder="https://api.deepseek.com/v1"
-                  @input=${(e: Event) => { this._apiBase = (e.target as HTMLInputElement).value; this._selectedPreset = ''; }} />
+                  @input=${(e: Event) => { this._apiBase = (e.target as HTMLInputElement).value; this._selectedModelKey = ''; }} />
               </div>
               <div class="hermes-form-group">
                 <div class="hermes-form-label">API Key</div>
                 <input class="hermes-form-input" type="password" .value=${this._apiKey}
-                  placeholder="sk-..."
+                  placeholder="sk-...（留空=保留原 Key）"
                   @input=${(e: Event) => { this._apiKey = (e.target as HTMLInputElement).value; }} />
               </div>
             </div>
@@ -319,15 +407,15 @@ export class HermesDashboardPage extends LitElement {
                 <input class="hermes-form-input" style="flex:1;" type="text" .value=${this._model}
                   placeholder="deepseek-chat"
                   @input=${(e: Event) => { this._model = (e.target as HTMLInputElement).value; }} />
-                <button class="hermes-btn-ghost">${L('hermesDashboard.fetchModelList', '获取模型列表')}</button>
-                <button class="hermes-btn-ghost">${L('hermesDashboard.testConnectivity', '测试连通性')}</button>
               </div>
             </div>
 
             <!-- Actions -->
             <div class="hermes-form-actions">
-              <button class="hermes-btn-save">${L('hermesDashboard.saveConfig', '保存配置')}</button>
-              <a class="hermes-link">${L('hermesDashboard.envAdvancedEdit', '.env 高级编辑')} →</a>
+              <button class="hermes-btn-save" ?disabled=${this._saving} @click=${this._saveModelConfig}>
+                ${this._saving ? L('hermesDashboard.saving') : L('hermesDashboard.saveConfig', '保存配置')}
+              </button>
+              <span style="font-size:11px;color:var(--muted);">${this._saveMsg}</span>
             </div>
           ` : ''}
         </div>
