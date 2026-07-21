@@ -621,6 +621,11 @@ const en = {
     maintenanceOps: 'Maintenance Operations',
     upgradeHermes: 'Upgrade Hermes', uninstallHermes: 'Uninstall Hermes', uninstallClean: 'Uninstall & Clean Config',
     openLogs: 'Open Logs', backToInstaller: 'Back to Installer',
+    running: 'Running', stopGateway: 'Stop Gateway', restartGateway: 'Restart Gateway',
+    notInstalled: 'Not Installed', needBootstrap: 'Run bootstrap-portable.bat first',
+    recheck: 'Re-check', healthy: 'Healthy', pid: 'PID',
+    portablePython: 'Portable Python', keyOk: 'Key ✓', keyNone: 'Key —', operating: 'Working…',
+    platform: 'Platform',
   },
   hermesConfig: {
     title: 'Hermes Config',
@@ -1470,6 +1475,11 @@ const zhCN = {
     maintenanceOps: '维护操作',
     upgradeHermes: '升级 Hermes', uninstallHermes: '卸载 Hermes', uninstallClean: '卸载并清理配置',
     openLogs: '打开日志', backToInstaller: '返回安装向导',
+    running: '运行中', stopGateway: '停止 Gateway', restartGateway: '重启 Gateway',
+    notInstalled: '未安装', needBootstrap: '需先运行 bootstrap-portable.bat',
+    recheck: '重新检查', healthy: '健康', pid: 'PID',
+    portablePython: '便携 Python', keyOk: 'Key ✓', keyNone: 'Key —', operating: '操作中…',
+    platform: '平台',
   },
   hermesConfig: {
     title: 'Hermes 配置',

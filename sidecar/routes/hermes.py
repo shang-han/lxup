@@ -34,6 +34,10 @@ def _gateway_url(request: Request) -> str:
     ).rstrip("/")
 
 
+def _manager(request: Request):
+    return request.app.state.hermes_manager
+
+
 def _load_config(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -126,17 +130,44 @@ async def set_model(request: Request, body: HermesModelRequest):
 
 @router.get("/status")
 async def status(request: Request):
-    """探测 Hermes 网关是否在线（GET /health）"""
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{_gateway_url(request)}/health")
-            if r.status_code == 200:
-                data = r.json()
-                return {
-                    "online": True,
-                    "version": str(data.get("version") or ""),
-                    "platform": str(data.get("platform") or ""),
-                }
-    except Exception:
-        pass
-    return {"online": False, "version": "", "platform": ""}
+    """Hermes 网关状态：在线/已安装/PID/家目录 + 版本（探测 /health）"""
+    st = await _manager(request).status()
+    out = {
+        "online": st["running"],
+        "running": st["running"],
+        "pid": st["pid"],
+        "port": st["port"],
+        "installed": st["installed"],
+        "homeDir": st["hermes_home"],
+        "version": "",
+        "platform": "",
+    }
+    if st["running"]:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                r = await client.get(f"{_gateway_url(request)}/health")
+                if r.status_code == 200:
+                    data = r.json()
+                    out["version"] = str(data.get("version") or "")
+                    out["platform"] = str(data.get("platform") or "")
+        except Exception:
+            pass
+    return out
+
+
+@router.post("/start")
+async def start(request: Request):
+    """启动 Hermes 网关（便携 Python + vendored 源码）"""
+    return await _manager(request).start()
+
+
+@router.post("/stop")
+async def stop(request: Request):
+    """停止 Hermes 网关"""
+    return await _manager(request).stop()
+
+
+@router.post("/restart")
+async def restart(request: Request):
+    """重启 Hermes 网关"""
+    return await _manager(request).restart()
