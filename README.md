@@ -8,6 +8,7 @@
 ```
 D:\lxup\
 ├── control-ui/        控制台前端（Lit + Vite，:5173）
+├── ai-assistant/      独立 AI 助手 JS 服务（对话 + 命令行工具，不经过网关，:8080）
 ├── sidecar/           Python 伴侣服务（授权客户端 + 微信扫码登录桥接，:7889）
 ├── license_server/    授权服务器（云端，激活码校验，:9000）
 ├── engines/           上游引擎参考源码（openclaw / codex / hermes）

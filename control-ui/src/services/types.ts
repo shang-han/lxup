@@ -61,6 +61,7 @@ export interface Conversation {
   preview: string;
   ts: string;
   pinned: boolean;
+  count?: number;
 }
 
 export interface Message {

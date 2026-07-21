@@ -237,7 +237,7 @@ export class OpenClawApp extends LitElement {
           return html`<hermes-dashboard-page title=${title('dashboard')} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-dashboard-page>`;
         }
         return html`<dashboard-page title=${title('dashboard')} subtitle=${L('dashboard.subtitle')} .connected=${this._connected} .instances=${this._instances} .sessions=${this._sessions} .cronJobs=${this._cronJobs} .skills=${this._skills} .models=${this._agents} .snapshot=${this._snapshot} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
-      case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected}></chat-page>`;
+      case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected} .engine=${this._engine}></chat-page>`;
       case 'sessions': return html`<sessions-page title=${title('sessions')} subtitle=${sub('sessions')} .sessions=${this._sessions}></sessions-page>`;
       case 'logs':
         if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;

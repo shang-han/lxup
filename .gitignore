@@ -21,6 +21,9 @@ __pycache__/
 *.pem
 *.key
 
+# ── AI 助手本地数据（config.json 含密钥、会话记录）──
+ai-assistant/data/
+
 # ── 编辑器 / 系统 ──
 .DS_Store
 Thumbs.db

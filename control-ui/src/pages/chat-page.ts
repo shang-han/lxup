@@ -3,23 +3,16 @@ import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
-import type { GatewayStore } from '../store/gateway-store.js';
 import { listModels, getActiveModel, setSelectedModel, type ResolvedModel } from '../utils/model-config.js';
-
-/** 从 chat.history 的消息里提取可展示文本。
- *  user 消息 content 是字符串；assistant 消息 content 是 parts 数组（取 type:'text'）。 */
-function extractMessageText(msg: Record<string, unknown>): string {
-  const content = msg.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((p: unknown): p is Record<string, unknown> =>
-        typeof p === 'object' && p !== null && (p as Record<string, unknown>).type === 'text')
-      .map(p => String((p as Record<string, unknown>).text ?? ''))
-      .join('');
-  }
-  return '';
-}
+import {
+  createChatEngine,
+  type ChatEngine,
+  type ChatSession,
+  type ChatStreamEvent,
+  type Cancellable,
+  type EngineId,
+  type ToolEvent,
+} from '../services/chat-engine.js';
 
 /** 时间戳 → 相对时间（刚刚 / N 分钟前 / N 小时前 / 日期） */
 function formatRelTime(ts: number): string {
@@ -34,6 +27,8 @@ function formatRelTime(ts: number): string {
   if (day < 7) return L('chat.daysAgo', { n: day });
   return new Date(ts).toLocaleDateString();
 }
+
+type ViewMessage = { role: 'user' | 'assistant'; text: string; tools?: ToolEvent[] };
 
 export class ChatPage extends LitElement {
   static styles = css`
@@ -165,7 +160,7 @@ export class ChatPage extends LitElement {
     }
     .message__body {
       padding: 10px 14px; border-radius: var(--radius-md);
-      font-size: 14px; line-height: 1.6;
+      font-size: 14px; line-height: 1.6; min-width: 0;
     }
     .message.assistant .message__body {
       background: var(--card); border: 1px solid var(--border);
@@ -173,6 +168,24 @@ export class ChatPage extends LitElement {
     .message.user .message__body {
       background: var(--accent); color: var(--accent-foreground);
     }
+    .msg-text { white-space: pre-wrap; word-break: break-word; }
+
+    /* === tool cards (命令/工具执行，内联) === */
+    .msg-tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+    .tool-card {
+      background: var(--bg-hover); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+      padding: 8px 10px; font-family: var(--font-mono); font-size: 12px; text-align: left;
+    }
+    .tool-card.run { border-left-color: var(--warn); }
+    .tool-card.ok { border-left-color: var(--success); }
+    .tool-card.err { border-left-color: var(--danger); }
+    .tool-card__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .tool-card__name { color: var(--accent); font-weight: 600; }
+    .tool-card__cmd { background: var(--bg); color: var(--text); padding: 2px 7px; border-radius: 4px; word-break: break-all; font-size: 11.5px; }
+    .tool-card__out { margin: 7px 0 0; white-space: pre-wrap; word-break: break-word; color: var(--text-soft); font-size: 11px; line-height: 1.5; max-height: 190px; overflow-y: auto; }
+    .tool-card.run .tool-card__out { color: var(--warn); }
+    .tool-card.err .tool-card__out { color: var(--danger); }
 
     /* === gateway idle state === */
     .gw-idle {
@@ -247,83 +260,139 @@ export class ChatPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
   @property({ type: Boolean }) connected = false;
+  /** 当前引擎（由 app.ts 传入）：决定实时聊天连哪个引擎自己的网关 */
+  @property({ type: String }) engine: EngineId = 'openclaw';
 
   @state() _input = '';
-  @state() _messages: Array<{role: string; text: string}> = [];
+  @state() _messages: ViewMessage[] = [];
   @state() _showSessionList = false;
   @state() _showBanner = true;
-  @state() _sessionKey = 'agent:main:main';
-  @state() _sessions: Array<{key: string; name: string; kind: string; updatedAt: number | null}> = [];
+  @state() _sessionKey = '';
+  @state() _sessions: ChatSession[] = [];
   @state() _loadingHistory = false;
-  _historyLoaded = false;
+  @state() _engineReady = false;
   @state() _thinkingEnabled = false;
   @state() _managed = false;
   @state() _streaming = false;
-  @state() _runId: string | null = null;
   @state() _models: ResolvedModel[] = [];
   @state() _activeModel: ResolvedModel | null = null;
   @state() _modelWarning = '';
 
-  _store!: GatewayStore;
-  _eventUnsubs: Array<() => void> = [];
+  _engineAdapter!: ChatEngine;
+  _readyUnsub: (() => void) | null = null;
+  _sessUnsub: (() => void) | null = null;
+  _chatCancel: Cancellable | null = null;
+  _historyLoaded = false;
+  _inited = false;
 
   connectedCallback() {
     super.connectedCallback();
-    this._store = getSharedStore();
     this._refreshModels();
-    // 订阅真实 OpenClaw 网关的 chat 流式事件（单一 "chat" 事件，按 state 分发）；
-    // 并在网关连上后加载会话列表与历史记录（连接是异步的，不能在 connectedCallback 直接加载）
-    this._eventUnsubs = [
-      this._store.onEvent('chat', (p) => this._onChatEvent(p)),
-      this._store.onEvent('sessions.changed', () => this._loadSessions()),
-      this._store.subscribe((snap) => {
-        if (snap.connected && !this._historyLoaded) {
-          this._historyLoaded = true;
-          this._loadSessions();
-          this._loadHistory();
-        }
-      }),
-    ];
+    this._setupEngine();
+    this._inited = true;
+  }
+
+  updated(changed: Map<string, unknown>) {
+    // 引擎切换 → 换用对应引擎的网关
+    if (this._inited && changed.has('engine')) this._setupEngine();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this._eventUnsubs.forEach(u => u());
-    this._eventUnsubs = [];
+    this._teardownEngine();
   }
 
-  /** 拉取真实会话列表（sessions.list） */
+  // ── 引擎适配 ──
+
+  _setupEngine() {
+    const id: EngineId = this.engine === 'hermes' || this.engine === 'codex' ? this.engine : 'openclaw';
+    if (this._engineAdapter && this._engineAdapter.id === id) return;
+    this._teardownEngine();
+
+    this._engineAdapter = createChatEngine(id, { store: getSharedStore() });
+    this._messages = [];
+    this._sessions = [];
+    this._sessionKey = '';
+    this._historyLoaded = false;
+    this._streaming = false;
+    this._engineReady = false;
+
+    this._readyUnsub = this._engineAdapter.onReadyChange((ready) => {
+      this._engineReady = ready;
+      if (ready && !this._historyLoaded) {
+        this._historyLoaded = true;
+        void this._bootstrapSessions();
+      }
+    });
+    if (this._engineAdapter.onSessionsChange) {
+      this._sessUnsub = this._engineAdapter.onSessionsChange(() => void this._loadSessions());
+    }
+    void this._engineAdapter.refresh();
+  }
+
+  _teardownEngine() {
+    this._readyUnsub?.();
+    this._readyUnsub = null;
+    this._sessUnsub?.();
+    this._sessUnsub = null;
+    this._chatCancel?.abort();
+    this._chatCancel = null;
+  }
+
+  async _bootstrapSessions() {
+    await this._loadSessions();
+    if (!this._sessionKey) {
+      const dflt = this._engineAdapter.defaultSessionId();
+      if (dflt) {
+        this._sessionKey = dflt;
+      } else if (this._sessions.length) {
+        this._sessionKey = this._sessions[0].id;
+      } else {
+        try {
+          const s = await this._engineAdapter.createSession();
+          if (s) {
+            this._sessionKey = s.id;
+            this._sessions = [s, ...this._sessions];
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    await this._loadHistory();
+  }
+
   async _loadSessions() {
-    if (!this._store || !this._store.connected) return;
     try {
-      const res = await this._store.request<{ sessions?: Array<Record<string, unknown>> }>('sessions.list', {});
-      const list = (res?.sessions || []).map(s => ({
-        key: String(s.key ?? ''),
-        name: String(s.displayName ?? s.key ?? ''),
-        kind: String(s.kind ?? 'direct'),
-        updatedAt: (typeof s.updatedAt === 'number' ? s.updatedAt : null),
-      })).filter(s => s.key);
-      this._sessions = list;
-    } catch { /* 网关未就绪时忽略 */ }
+      this._sessions = await this._engineAdapter.listSessions();
+    } catch { /* 引擎未就绪时忽略 */ }
   }
 
-  /** 加载当前会话的历史记录（chat.history） */
   async _loadHistory() {
-    if (!this._store || !this._store.connected) return;
+    if (!this._sessionKey) return;
     this._loadingHistory = true;
     try {
-      const res = await this._store.request<{ messages?: Array<Record<string, unknown>> }>(
-        'chat.history', { sessionKey: this._sessionKey, limit: 100 },
-      );
-      const msgs = (res?.messages || [])
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({ role: String(m.role), text: extractMessageText(m) }))
-        .filter(m => m.text);
-      this._messages = msgs;
+      const msgs = await this._engineAdapter.getHistory(this._sessionKey);
+      this._messages = msgs.map((m) => ({ role: m.role, text: m.text }));
       this._scrollToBottom();
-    } catch { /* 忽略 */ } finally {
+    } catch { /* ignore */ } finally {
       this._loadingHistory = false;
     }
+  }
+
+  async _ensureSession(): Promise<string> {
+    if (this._sessionKey) return this._sessionKey;
+    const dflt = this._engineAdapter.defaultSessionId();
+    if (dflt) {
+      this._sessionKey = dflt;
+      return dflt;
+    }
+    try {
+      const s = await this._engineAdapter.createSession();
+      if (s) {
+        this._sessionKey = s.id;
+        this._sessions = [s, ...this._sessions];
+      }
+    } catch { /* ignore */ }
+    return this._sessionKey;
   }
 
   _refreshModels() {
@@ -340,35 +409,78 @@ export class ChatPage extends LitElement {
     }
   }
 
-  _onChatEvent(p: Record<string, unknown> | undefined) {
-    if (!p || p.sessionKey !== this._sessionKey) return;
-    // 只处理本次发送对应的 run（runId 与 idempotencyKey 一致）
-    if (this._runId && p.runId && p.runId !== this._runId) return;
+  // ── 发送 / 流式事件 ──
 
-    const state = p.state;
-    if (state === 'delta') {
-      const deltaText = String(p.deltaText ?? '');
-      const replace = p.replace === true;
-      if (!deltaText && !replace) return;
+  async _send() {
+    const text = this._input.trim();
+    if (!text || this._streaming) return;
+    if (!this._engineAdapter.ready()) {
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
+      this._scrollToBottom();
+      return;
+    }
+
+    this._messages = [...this._messages, { role: 'user', text }];
+    this._input = '';
+    this._streaming = true;
+    this._scrollToBottom();
+
+    const sid = await this._ensureSession();
+    if (!sid) {
+      this._streaming = false;
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
+      this._scrollToBottom();
+      return;
+    }
+    this._chatCancel = this._engineAdapter.send(sid, text, (ev) => this._onEngineEvent(ev));
+  }
+
+  _onEngineEvent(ev: ChatStreamEvent) {
+    if (ev.type === 'delta') {
       const msgs = [...this._messages];
       const last = msgs[msgs.length - 1];
-      if (replace) {
-        if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: deltaText };
-        else msgs.push({ role: 'assistant', text: deltaText });
-      } else if (deltaText) {
-        if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: last.text + deltaText };
-        else msgs.push({ role: 'assistant', text: deltaText });
+      if (ev.replace) {
+        if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: ev.text };
+        else msgs.push({ role: 'assistant', text: ev.text });
+      } else if (ev.text) {
+        if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: last.text + ev.text };
+        else msgs.push({ role: 'assistant', text: ev.text });
       }
       this._messages = msgs;
       this._scrollToBottom();
-    } else if (state === 'final') {
+    } else if (ev.type === 'tool') {
+      const msgs = [...this._messages];
+      let last = msgs[msgs.length - 1];
+      if (!last || last.role !== 'assistant') {
+        last = { role: 'assistant', text: '', tools: [] };
+        msgs.push(last);
+      }
+      const tools = [...(last.tools || [])];
+      const t = ev.tool;
+      if (t.running) {
+        tools.push({ name: t.name, args: t.args, running: true });
+      } else {
+        let matched = false;
+        for (let i = tools.length - 1; i >= 0; i--) {
+          if (tools[i].running && tools[i].name === t.name) {
+            tools[i] = { ...tools[i], ok: t.ok, result: t.result, running: false };
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) tools.push({ name: t.name, ok: t.ok, result: t.result, running: false });
+      }
+      msgs[msgs.length - 1] = { ...last, tools };
+      this._messages = msgs;
+      this._scrollToBottom();
+    } else if (ev.type === 'final') {
       this._streaming = false;
-      this._runId = null;
-    } else if (state === 'aborted' || state === 'error') {
+      this._chatCancel = null;
+      void this._loadSessions();
+    } else if (ev.type === 'error') {
       this._streaming = false;
-      this._runId = null;
-      const errMsg = String(p.errorMessage ?? '请求失败');
-      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${errMsg}` }];
+      this._chatCancel = null;
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${ev.message}` }];
       this._scrollToBottom();
     }
   }
@@ -380,60 +492,66 @@ export class ChatPage extends LitElement {
     });
   }
 
-  async _send() {
-    const text = this._input.trim();
-    if (!text || this._streaming) return;
-
-    this._messages = [...this._messages, { role: 'user', text }];
-    this._input = '';
-    this._streaming = true;
-    this._scrollToBottom();
-
-    // 真实 OpenClaw 协议：chat.send 必须带 idempotencyKey（即 runId），
-    // 不接受 history / temperature / provider —— 模型由网关的 agent 配置决定，
-    // 会话历史由网关按 session 自行管理。
-    const runId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-      ? crypto.randomUUID()
-      : `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    this._runId = runId;
-
-    try {
-      const ack = await this._store.request<{ runId?: string }>('chat.send', {
-        sessionKey: this._sessionKey,
-        message: text,
-        idempotencyKey: runId,
-        deliver: false,
-      });
-      // 服务端回传 runId，用它关联后续流式事件
-      if (ack && ack.runId) this._runId = ack.runId;
-    } catch (e: unknown) {
-      this._streaming = false;
-      this._runId = null;
-      const msg = e instanceof Error ? e.message : String(e);
-      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${msg}` }];
-      this._scrollToBottom();
-    }
-  }
-
   _onKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      this._send();
+      void this._send();
     }
   }
 
   _toggleSessionList() { this._showSessionList = !this._showSessionList; }
 
-  _selectSession(key: string) {
-    if (key === this._sessionKey) {
+  _selectSession(id: string) {
+    if (id === this._sessionKey) {
       this._showSessionList = false;
       return;
     }
-    this._sessionKey = key;
+    this._sessionKey = id;
     this._showSessionList = false;
     this._streaming = false;
-    this._runId = null;
-    this._loadHistory();
+    this._chatCancel?.abort();
+    this._chatCancel = null;
+    void this._loadHistory();
+  }
+
+  async _newChat() {
+    try {
+      const s = await this._engineAdapter.createSession();
+      if (s) {
+        this._sessions = [s, ...this._sessions];
+        this._sessionKey = s.id;
+      } else {
+        this._sessionKey = this._engineAdapter.defaultSessionId();
+      }
+    } catch { /* ignore */ }
+    this._messages = [];
+    this._showSessionList = false;
+  }
+
+  _refresh() {
+    void this._engineAdapter.refresh();
+    void this._loadSessions();
+    if (this._sessionKey) void this._loadHistory();
+  }
+
+  // ── 渲染 ──
+
+  _renderToolCard(t: ToolEvent) {
+    const state = t.running ? 'run' : (t.ok ? 'ok' : 'err');
+    const cmd = t.args && typeof t.args.command === 'string'
+      ? t.args.command
+      : (t.args ? JSON.stringify(t.args) : '');
+    return html`
+      <div class="tool-card ${state}">
+        <div class="tool-card__head">
+          <span class="tool-card__name">⚙ ${t.name}</span>
+          ${cmd ? html`<code class="tool-card__cmd">$ ${cmd}</code>` : ''}
+        </div>
+        <pre class="tool-card__out">${t.running
+          ? L('chat.toolRunning')
+          : ((t.ok ? '' : '✗ ') + (t.result || L('chat.toolNoOutput')))}</pre>
+      </div>
+    `;
   }
 
   _renderMessages() {
@@ -442,7 +560,11 @@ export class ChatPage extends LitElement {
       ${this._messages.map(m => html`
         <div class="message ${m.role}">
           <div class="message__avatar">${m.role === 'user' ? 'U' : 'A'}</div>
-          <div class="message__body">${m.text}</div>
+          <div class="message__body">
+            ${m.role === 'assistant' && m.tools && m.tools.length
+              ? html`<div class="msg-tools">${m.tools.map(t => this._renderToolCard(t))}</div>` : ''}
+            ${m.text ? html`<div class="msg-text">${m.text}</div>` : ''}
+          </div>
         </div>
       `)}
     `;
@@ -455,7 +577,7 @@ export class ChatPage extends LitElement {
         <div class="gw-title">${L('chat.gatewayNotReady')}</div>
         <div class="gw-sub">${L('chat.connecting')}</div>
         <div class="gw-actions">
-          <button class="gw-btn primary">${L('chat.repairReconnect')}</button>
+          <button class="gw-btn primary" @click=${this._refresh}>${L('chat.repairReconnect')}</button>
           <button class="gw-btn secondary">${L('chat.gatewaySettings')}</button>
         </div>
         <div class="gw-hint">${L('chat.firstUseHint')}</div>
@@ -469,7 +591,7 @@ export class ChatPage extends LitElement {
         <div class="session-list__header">
           <span class="session-list__title">${L('chat.sessionList')}</span>
           <div class="session-list__actions">
-            <button title="${L('chat.newChat')}" @click=${() => {}}>
+            <button title="${L('chat.newChat')}" @click=${() => this._newChat()}>
               ${icons['plus']}
             </button>
             <button @click=${() => this._toggleSessionList()}>
@@ -481,9 +603,9 @@ export class ChatPage extends LitElement {
           ${this._sessions.length === 0
             ? html`<div style="padding:16px 12px;font-size:12px;color:var(--muted);">${this._loadingHistory ? '…' : L('chat.noSessions')}</div>`
             : this._sessions.map(s => html`
-            <div class="session-item ${this._sessionKey === s.key ? 'active' : ''}"
-                 @click=${() => this._selectSession(s.key)}>
-              <span class="session-item__dot ${this._sessionKey === s.key ? 'active' : 'idle'}"></span>
+            <div class="session-item ${this._sessionKey === s.id ? 'active' : ''}"
+                 @click=${() => this._selectSession(s.id)}>
+              <span class="session-item__dot ${this._sessionKey === s.id ? 'active' : 'idle'}"></span>
               <span class="session-item__name">${s.name}</span>
               ${s.updatedAt ? html`<span class="session-item__time">${formatRelTime(s.updatedAt)}</span>` : ''}
             </div>
@@ -495,7 +617,8 @@ export class ChatPage extends LitElement {
 
   render() {
     const layoutClass = this._showSessionList ? 'chat-layout with-list' : 'chat-layout';
-    const bannerVisible = this._showBanner && !this.connected;
+    const bannerVisible = this._showBanner && !this._engineReady;
+    const isHermes = this._engineAdapter?.id === 'hermes';
 
     return html`
       <div class="${layoutClass}">
@@ -508,28 +631,32 @@ export class ChatPage extends LitElement {
                 ${this._showSessionList ? icons['panel-left-close'] : icons['menu']}
               </button>
               <div class="chat-header__title">
-                <span class="status-dot ${this.connected ? '' : 'offline'}"></span>
-                ${this.connected ? L('chat.chat') : L('chat.mainSession')}
+                <span class="status-dot ${this._engineReady ? '' : 'offline'}"></span>
+                ${this._engineReady ? L('chat.chat') : L('chat.mainSession')}
               </div>
             </div>
             <div class="chat-header__right">
-              <select title="model" @change=${this._onSelectModel}>
-                ${this._models.length === 0
-                  ? html`<option value="">${L('chat.noModelOption')}</option>`
-                  : this._models.map(m => html`
-                      <option value="${m.providerId}::${m.model}"
-                        ?selected=${this._activeModel && this._activeModel.providerId === m.providerId && this._activeModel.model === m.model}>
-                        ${m.model} · ${m.providerName}
-                      </option>`)}
-              </select>
-              <button class="ws-btn" title="${L('common.refresh')}">
+              ${isHermes
+                ? html`<div class="workspace-pill"><span class="ws-name">${L('chat.hermesModel')}</span></div>`
+                : html`
+                  <select title="model" @change=${this._onSelectModel}>
+                    ${this._models.length === 0
+                      ? html`<option value="">${L('chat.noModelOption')}</option>`
+                      : this._models.map(m => html`
+                          <option value="${m.providerId}::${m.model}"
+                            ?selected=${this._activeModel && this._activeModel.providerId === m.providerId && this._activeModel.model === m.model}>
+                            ${m.model} · ${m.providerName}
+                          </option>`)}
+                  </select>`}
+              <button class="ws-btn" title="${L('common.refresh')}" @click=${this._refresh}>
                 ${icons['refresh-cw']}
               </button>
-              <div class="workspace-pill">
-                ${icons['folder-open']}
-                <span class="ws-label">${L('chat.workspace')}</span>
-                <span class="ws-name">main</span>
-              </div>
+              ${isHermes ? '' : html`
+                <div class="workspace-pill">
+                  ${icons['folder-open']}
+                  <span class="ws-label">${L('chat.workspace')}</span>
+                  <span class="ws-name">main</span>
+                </div>`}
               <button class="ws-btn" title="tools">
                 ${icons['layout-panel-left']}
               </button>
@@ -562,7 +689,7 @@ export class ChatPage extends LitElement {
                   <div class="chat-banner__desc">${this._modelWarning}</div>
                 </div>
               </div>` : ''}
-            ${!this.connected && !this._messages.length
+            ${!this._engineReady && !this._messages.length
               ? this._renderGatewayIdle()
               : this._renderMessages()
             }
