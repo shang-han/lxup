@@ -1,0 +1,14 @@
+# Unified Agent Gateway — 运行时依赖
+fastapi>=0.110.0
+uvicorn[standard]>=0.30.0
+sqlalchemy[asyncio]>=2.0.30
+aiosqlite>=0.20.0
+pydantic>=2.7.0
+websockets>=12.0
+apscheduler>=3.10.0
+pyyaml>=6.0
+httpx>=0.27.0
+cryptography>=42.0.0
+
+# 开发依赖
+# pip install -r requirements-dev.txt
