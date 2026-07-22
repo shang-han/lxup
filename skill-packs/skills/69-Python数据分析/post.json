@@ -1,0 +1,18 @@
+{
+  "id": "69",
+  "name": "Python数据分析师",
+  "industry": "互联网/新经济",
+  "category": "互联网/新经济",
+  "priority": "P1",
+  "icon": "📊",
+  "version": "1.0.0",
+  "description": "面向 Python 数据分析师的岗位技能包：数据处理脚本生成、可视化图表生成、AB测试分析、特征工程方案、业务指标归因分析，覆盖从取数清洗到统计验证与业务洞察的全链路。",
+  "skills": [
+    { "file": "01-数据处理脚本生成.SKILL.md", "name": "数据处理脚本生成", "triggers": ["Pandas", "数据处理", "SQL", "数据清洗", "取数"] },
+    { "file": "02-可视化图表生成.SKILL.md", "name": "可视化图表生成", "triggers": ["可视化", "图表", "Matplotlib", "Plotly", "Tableau"] },
+    { "file": "03-AB测试分析.SKILL.md", "name": "AB测试分析", "triggers": ["AB测试", "实验", "显著性", "转化率", "假设检验"] },
+    { "file": "04-特征工程方案.SKILL.md", "name": "特征工程方案", "triggers": ["特征工程", "缺失值", "异常值", "编码", "建模"] },
+    { "file": "05-业务指标归因分析.SKILL.md", "name": "业务指标归因分析", "triggers": ["指标拆解", "归因", "下跌", "波动", "漏斗"] }
+  ],
+  "knowledge": ["行业基础.md"]
+}

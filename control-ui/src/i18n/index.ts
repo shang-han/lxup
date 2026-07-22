@@ -480,8 +480,6 @@ const en = {
     buySuccess: 'Purchased "{name}"',
     downloadSuccess: '"{name}" downloaded & installed',
     uninstallSuccess: '"{name}" uninstalled',
-    packFilterPlaceholder: 'Filter job packs...',
-    noPackMatch: 'No matching job packs',
   },
   settings: {
     subtitle: 'Manage network, proxy, and download source configurations for OpenClaw U-Disk.',
@@ -1351,8 +1349,6 @@ const zhCN = {
     buySuccess: '已购买「{name}」',
     downloadSuccess: '「{name}」下载完成并已安装',
     uninstallSuccess: '已卸载「{name}」',
-    packFilterPlaceholder: '过滤岗位包...',
-    noPackMatch: '没有匹配的岗位包',
   },
   settings: {
     subtitle: '管理 OpenClaw U盘版 的网络、代理和下载源配置',

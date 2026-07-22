@@ -1,0 +1,18 @@
+{
+  "id": "70",
+  "name": "软件测试工程师",
+  "industry": "互联网/新经济",
+  "category": "互联网/新经济",
+  "priority": "P1",
+  "icon": "🧪",
+  "version": "1.0.0",
+  "description": "面向软件测试工程师的岗位技能包：测试用例设计、接口测试脚本、自动化测试脚本、Bug报告撰写、性能测试方案，覆盖从用例设计、测试执行到缺陷推进与质量保障的全链路。",
+  "skills": [
+    { "file": "01-测试用例设计.SKILL.md", "name": "测试用例设计", "triggers": ["测试用例", "等价类", "边界值", "场景法", "正交表"] },
+    { "file": "02-接口测试脚本.SKILL.md", "name": "接口测试脚本", "triggers": ["接口测试", "Postman", "Pytest", "Jmeter", "API测试"] },
+    { "file": "03-自动化测试脚本.SKILL.md", "name": "自动化测试脚本", "triggers": ["自动化测试", "Selenium", "Playwright", "Appium", "UI自动化"] },
+    { "file": "04-Bug报告撰写.SKILL.md", "name": "Bug报告撰写", "triggers": ["Bug", "缺陷", "重现步骤", "缺陷报告", "提单"] },
+    { "file": "05-性能测试方案.SKILL.md", "name": "性能测试方案", "triggers": ["性能测试", "压测", "并发", "TPS", "瓶颈"] }
+  ],
+  "knowledge": ["行业基础.md"]
+}

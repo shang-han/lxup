@@ -42,15 +42,26 @@ export class SkillpackPanel extends LitElement {
 
     .summary { font-size: 12px; color: var(--text-soft); margin-bottom: 14px; }
 
-    /* === toolbar === */
-    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-    .toolbar input {
-      flex: 1; max-width: 320px; padding: 6px 12px; background: var(--input);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text); font-size: 13px; outline: none;
+    /* === category chips === */
+    .cat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .cat-chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 5px 8px 5px 14px; border-radius: var(--radius-full);
+      font-size: 12px; font-weight: 500;
+      border: 1px solid var(--border); background: var(--card); color: var(--text-soft);
+      cursor: pointer; white-space: nowrap;
+      transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease,
+                  background var(--duration-fast) ease, transform var(--duration-fast) ease;
     }
-    .toolbar input::placeholder { color: var(--muted); }
-    .toolbar input:focus { border-color: var(--accent); }
+    .cat-chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+    .cat-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-foreground); }
+    .cat-chip.active:hover { transform: none; }
+    .cat-chip .chip-count {
+      font-size: 10px; font-weight: 600; padding: 0 7px; border-radius: var(--radius-full);
+      background: var(--bg-muted); color: var(--muted); line-height: 16px;
+      transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+    }
+    .cat-chip.active .chip-count { background: rgba(255,255,255,0.22); color: var(--accent-foreground); }
 
     /* === section === */
     .section {
@@ -65,7 +76,7 @@ export class SkillpackPanel extends LitElement {
     }
     .section__header .count { font-size: 12px; font-weight: 400; color: var(--text-soft); }
     .section__header .installed-mark { color: var(--success); }
-    .section__body { max-height: 480px; overflow-y: auto; padding: 6px 8px; }
+    .section__body { padding: 6px 8px; }
 
     /* === pack item === */
     .pack-item {
@@ -162,7 +173,7 @@ export class SkillpackPanel extends LitElement {
   @state() _catalog: Pack[] = [];
   @state() _loaded = false;
   @state() _loadError = '';
-  @state() _search = '';
+  @state() _category: string | null = null;
   @state() _purchased = new Set<string>();
   @state() _installed: Record<string, number> = {};
   @state() _downloading: string | null = null;
@@ -251,13 +262,15 @@ export class SkillpackPanel extends LitElement {
   }
 
   _filtered(): Pack[] {
-    const q = this._search.trim().toLowerCase();
-    if (!q) return this._catalog;
-    return this._catalog.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.skills.some(s => s.name.toLowerCase().includes(q))
-    );
+    if (!this._category) return this._catalog;
+    return this._catalog.filter(p => p.category === this._category);
+  }
+
+  /** 分类（按目录出现顺序）及各分类岗位数 */
+  _getCategories(): Array<{ name: string; count: number }> {
+    const m = new Map<string, number>();
+    for (const p of this._catalog) m.set(p.category, (m.get(p.category) ?? 0) + 1);
+    return [...m.entries()].map(([name, count]) => ({ name, count }));
   }
 
   _renderActions(pack: Pack) {
@@ -377,13 +390,15 @@ export class SkillpackPanel extends LitElement {
 
       ${this._renderInstalledSection()}
 
-      <div class="toolbar">
-        <input type="text" .value=${this._search}
-          placeholder=${L('skills.packFilterPlaceholder')}
-          @input=${(e: Event) => { this._search = (e.target as HTMLInputElement).value; }} />
+      <div class="cat-row">
+        ${this._getCategories().map(c => html`
+          <button class="cat-chip ${this._category === c.name ? 'active' : ''}"
+                  @click=${() => { this._category = this._category === c.name ? null : c.name; }}>
+            ${c.name}
+            <span class="chip-count">${c.count}</span>
+          </button>
+        `)}
       </div>
-
-      ${filtered.length === 0 ? html`<div class="empty">${L('skills.noPackMatch')}</div>` : ''}
 
       ${this._grouped(filtered).map(([category, packs]) => html`
         <div class="section">
