@@ -10,7 +10,7 @@ echo [1/6] 启动 LXUP Sidecar (7889)...
 start "LXUP-Sidecar-7889" cmd /k "cd /d D:\lxup && python -m sidecar.main --port 7889 --db-path D:\lxup\runtime\data\gateway.db"
 
 echo [2/6] 启动 OpenClaw 网关 (18789)...
-start "OpenClaw-Gateway-18789" cmd /k "cd /d D:\lxup && openclaw gateway --port 18789 --force"
+start "OpenClaw-Gateway-18789" cmd /k "cd /d D:\lxup && D:\lxup\runtime\data\node.exe D:\lxup\runtime\openclaw\node_modules\openclaw\openclaw.mjs gateway --port 18789 --force"
 
 echo [3/6] 启动 Hermes 网关 (8642)...
 start "Hermes-Gateway-8642" cmd /k "cd /d D:\lxup && start-hermes.bat"
@@ -19,10 +19,10 @@ echo [4/6] 启动 License Server (9000)...
 start "License-Server-9000" cmd /k "cd /d D:\lxup && python -m license_server.main --port 9000 --db-path D:\lxup\runtime\data\license.db --jwt-secret lxup-dev-secret-2026"
 
 echo [5/6] 启动 AI 助手 (8080)...
-start "AI-Assistant-8080" cmd /k "cd /d D:\lxup\ai-assistant && node server.js"
+start "AI-Assistant-8080" cmd /k "cd /d D:\lxup\ai-assistant && D:\lxup\runtime\data\node.exe server.js"
 
 echo [6/6] 启动前端 (5173)...
-start "Frontend-5173" cmd /k "cd /d D:\lxup\control-ui && npm run dev"
+start "Frontend-5173" cmd /k "cd /d D:\lxup\control-ui && D:\lxup\runtime\data\node.exe node_modules\vite\bin\vite.js"
 
 echo.
 echo ============================================================
