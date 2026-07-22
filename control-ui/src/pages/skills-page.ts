@@ -3,6 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/page-header.js';
+import '../components/skillpack-panel.js';
 
 const SKILLS = [
   { id: '1password', name: '1password', source: 'OpenClaw 银呼通', desc: 'Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.', status: 'available' },
@@ -136,7 +137,7 @@ export class SkillsPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
 
-  @state() _activeTab = 'installed'; // 'installed' | 'search'
+  @state() _activeTab = 'installed'; // 'installed' | 'search' | 'packs'
   @state() _search = '';
 
   _filteredSkills() {
@@ -168,6 +169,10 @@ export class SkillsPage extends LitElement {
           <div class="skills-tab ${this._activeTab === 'search' ? 'active' : ''}"
                @click=${() => { this._activeTab = 'search'; }}>
             ${L('skills.searchInstall')}
+          </div>
+          <div class="skills-tab ${this._activeTab === 'packs' ? 'active' : ''}"
+               @click=${() => { this._activeTab = 'packs'; }}>
+            ${L('skills.jobPacks')}
           </div>
         </div>
 
@@ -226,6 +231,9 @@ export class SkillsPage extends LitElement {
           ${filtered.length === 0 ? html`
             <div class="skills-empty">${L('skills.noMatch')}</div>
           ` : ''}
+        ` : this._activeTab === 'packs' ? html`
+          <!-- 岗位技能包 -->
+          <skillpack-panel></skillpack-panel>
         ` : html`
           <!-- Search & Install -->
           <div class="skills-toolbar">

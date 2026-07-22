@@ -1,0 +1,517 @@
+{
+  "format": "lxup-skillpack/1",
+  "version": "1.0.0",
+  "note": "岗位技能包索引，三引擎（Hermes/OpenClaw/Codex）共享。sha256 为岗位目录内全部文件按路径排序拼接后的内容指纹；正式打包时由启动器追加 AES 加密与数字签名。",
+  "packs": [
+    {
+      "post": "01-餐饮店长",
+      "name": "餐饮店长/经理",
+      "category": "餐饮门店",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/01-餐饮店长",
+      "sha256": "dcd04322dc57de41dec231eae2b4c62b3309cbe267f6a65e9fde6065451f0e7e"
+    },
+    {
+      "post": "02-连锁加盟运营",
+      "name": "连锁加盟运营",
+      "category": "餐饮门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/02-连锁加盟运营",
+      "sha256": "59b4448681a6fb5a2939d0c47a73791de2b5d5aa537ce46e959ce1d6369cd1ee"
+    },
+    {
+      "post": "03-外卖运营",
+      "name": "外卖运营专员",
+      "category": "餐饮门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/03-外卖运营",
+      "sha256": "11570ec37c099566fd5a2772de05ac08092740a4155ebee069f03855d1aa7f17"
+    },
+    {
+      "post": "04-便利店店长",
+      "name": "便利店/超市店长",
+      "category": "零售门店",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/04-便利店店长",
+      "sha256": "4bcd4e3ea8fd8298587d3a4431b9ada09ace0c551deec4c07a312811667fbdc5"
+    },
+    {
+      "post": "05-服装店老板",
+      "name": "服装店老板/店长",
+      "category": "零售门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/05-服装店老板",
+      "sha256": "7c3015e4416166a95d3f13f3eb632887c77627afdc107098844487eac98c6184"
+    },
+    {
+      "post": "06-建材门店经理",
+      "name": "建材/家居门店经理",
+      "category": "零售门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/06-建材门店经理",
+      "sha256": "2a6af8a8ad44ac1010c8d72970cc9e5b2dbf762a7e1ef3315d5614089417aa56"
+    },
+    {
+      "post": "07-美容院店长",
+      "name": "美容院店长",
+      "category": "生活服务门店",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/07-美容院店长",
+      "sha256": "dd2ef319a125a6ac151d0f394341fe3a77527892fb8d816a11065259d3cc956a"
+    },
+    {
+      "post": "08-养生馆店长",
+      "name": "养生馆店长",
+      "category": "生活服务门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/08-养生馆店长",
+      "sha256": "d382e9bec0a7a48b190478a5a86c34d1679dd2da7309485a6239c4ed4ded10b1"
+    },
+    {
+      "post": "09-宠物店老板",
+      "name": "宠物店老板",
+      "category": "生活服务门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/09-宠物店老板",
+      "sha256": "8e7ddd1e81ca2d4ca1d1af12b509a8e9108d90d8002267d77b770ae6ab707873"
+    },
+    {
+      "post": "10-家政门店经理",
+      "name": "洗衣/家政门店经理",
+      "category": "生活服务门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/10-家政门店经理",
+      "sha256": "daf4a3d231a5d331ec4752b523a060fdff896fa7e88edad3cd662a9b16b846a8"
+    },
+    {
+      "post": "11-汽修店老板",
+      "name": "汽修店老板/店长",
+      "category": "汽车后市场",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/11-汽修店老板",
+      "sha256": "b4b97e86dc16f5ad42f41250cf1b410cd53def14dc116ab0ffbb207cfe64d748"
+    },
+    {
+      "post": "12-二手车评估师",
+      "name": "二手车评估师/门店经理",
+      "category": "汽车后市场",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/12-二手车评估师",
+      "sha256": "425f12adf0484304a9447e39d740442e5a9c40f2198419d34b2d113d1fc88b39"
+    },
+    {
+      "post": "13-药店店长",
+      "name": "药店店长/经理",
+      "category": "医药健康门店",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/13-药店店长",
+      "sha256": "454e73fbf9da5e4bd0b67e993f1083ab16b405522a23ad774bac0e4dcabacef0"
+    },
+    {
+      "post": "14-保健品店长",
+      "name": "保健品/健康食品店长",
+      "category": "医药健康门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/14-保健品店长",
+      "sha256": "793af0aace1977644de2b83d2d9af8b58fc9d1cadb42a9272fef1a822cee77d5"
+    },
+    {
+      "post": "15-民宿酒店店长",
+      "name": "民宿主/酒店店长",
+      "category": "住宿/出行",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/15-民宿酒店店长",
+      "sha256": "be789b13bf630004b931263b03e382824fbd0757a9d78cd208606d2b7d46a428"
+    },
+    {
+      "post": "16-旅行社门店经理",
+      "name": "旅行社/票务门店经理",
+      "category": "住宿/出行",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/16-旅行社门店经理",
+      "sha256": "a1da2c0523dc1c7f0143973c3ab74ec2a8f8adf06ea08eeb9556987dfe5ff706"
+    },
+    {
+      "post": "17-手机数码店长",
+      "name": "手机/数码店店长",
+      "category": "其他门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/17-手机数码店长",
+      "sha256": "b64452ac0db3c6b0f1915e6824423ea8ce888f0175bc99fd0b80212b1083323b"
+    },
+    {
+      "post": "18-水果生鲜店老板",
+      "name": "水果/生鲜店老板",
+      "category": "其他门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/18-水果生鲜店老板",
+      "sha256": "0470862ce9617d310b73945b9c9548f3233a629ca05dbec20de2333702598bbe"
+    },
+    {
+      "post": "19-健身房店长",
+      "name": "健身房/瑜伽馆店长",
+      "category": "文娱/教育门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/19-健身房店长",
+      "sha256": "e2606f871ce227707f159f2f424f75694e8cf1e49cfd55b6aa3fe9bcd4f733c1"
+    },
+    {
+      "post": "20-教培机构校长",
+      "name": "教育培训机构校长",
+      "category": "文娱/教育门店",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/20-教培机构校长",
+      "sha256": "cd6b1df63bf1ac8d444e58fa0db518a140629cb9695cbccc85680002ea9a6222"
+    },
+    {
+      "post": "21-物业经理",
+      "name": "物业经理/社区运营",
+      "category": "酒店/物业",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/21-物业经理",
+      "sha256": "27a396876e232cec74b94726ba2eb68fa8fa33ac67fb7f1d81de9d22cb01e4d3"
+    },
+    {
+      "post": "22-考研规划师",
+      "name": "考研规划师",
+      "category": "教育培训",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/22-考研规划师",
+      "sha256": "de69f8334b5a3a6b7b7864abda3b7184b0a57c40c2a8b88d9031ed5b5cb7488e"
+    },
+    {
+      "post": "23-留学顾问",
+      "name": "留学顾问",
+      "category": "教育培训",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/23-留学顾问",
+      "sha256": "b6c170f0dcaf1ac5ef20cf797224260685602d756c9c98dfd649aafb6dc4744a"
+    },
+    {
+      "post": "24-公考培训师",
+      "name": "公考培训师",
+      "category": "教育培训",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/24-公考培训师",
+      "sha256": "21e556182c7ca8e315a3da99f5acb096d8fdd67480d565833e2696ac96317ae8"
+    },
+    {
+      "post": "25-在线课程运营",
+      "name": "在线课程运营",
+      "category": "教育培训",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/25-在线课程运营",
+      "sha256": "4b1172c12b1675495b4c2f7b689ce2f7dffe2c76c37b7b3db3fe8c39132ffe48"
+    },
+    {
+      "post": "26-健康管理师",
+      "name": "健康管理师",
+      "category": "健康养生",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/26-健康管理师",
+      "sha256": "0bdd61c4cad24ea6581f98237380b077ff6d2ebcf06a706f254ecb80686407b2"
+    },
+    {
+      "post": "27-营养师",
+      "name": "营养师",
+      "category": "健康养生",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/27-营养师",
+      "sha256": "a7b2597ad533a8321ee41d77cae013890ca0e2e481b8b0831313e8f565cd1e50"
+    },
+    {
+      "post": "28-健身教练",
+      "name": "健身教练/私教",
+      "category": "健康养生",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/28-健身教练",
+      "sha256": "a91ad77b762d7e146541dca47b5f3ac0cc97459078112e351ca71b53bd427886"
+    },
+    {
+      "post": "29-保险代理人",
+      "name": "保险代理人",
+      "category": "商业营销",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/29-保险代理人",
+      "sha256": "bc68d78883c6493b0e23f7989cf9f0d566208fa8f68097a665d6eefdc2fd61fd"
+    },
+    {
+      "post": "30-房产经纪人",
+      "name": "房产经纪人",
+      "category": "商业营销",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/30-房产经纪人",
+      "sha256": "30390dfcd3c154a16b3203e84397a94275158276afda34b781fc9b33cea5fb3b"
+    },
+    {
+      "post": "31-广告投放师",
+      "name": "广告投放优化师",
+      "category": "商业营销",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/31-广告投放师",
+      "sha256": "fdaed13258e2284f323a2e568cc872895649a6b732830b162878f9605e590bc9"
+    },
+    {
+      "post": "32-新媒体运营",
+      "name": "新媒体运营",
+      "category": "商业营销",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/32-新媒体运营",
+      "sha256": "7f936a57b13625ff20a168ec26daf69dfee9faf5a26ee30497fd2d71d8abb59e"
+    },
+    {
+      "post": "33-电商运营",
+      "name": "电商运营/店长",
+      "category": "商业营销",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/33-电商运营",
+      "sha256": "1e004e1ee4d3c632db7c5709f15dd9052ec889c590c53b84c80af0aacd67be37"
+    },
+    {
+      "post": "34-平面设计师",
+      "name": "平面设计师",
+      "category": "创意设计",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/34-平面设计师",
+      "sha256": "736637af7b7f07986d871c982a52d9d700fcd329fe2fbad49cc518c407ba2307"
+    },
+    {
+      "post": "35-视频剪辑师",
+      "name": "视频剪辑师",
+      "category": "创意设计",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/35-视频剪辑师",
+      "sha256": "3791f8e5ed90d374b7c98d671b0b8edb3c38298d4afee98ea2726e6e09f18ea9"
+    },
+    {
+      "post": "36-婚礼策划师",
+      "name": "婚礼策划师",
+      "category": "创意设计",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/36-婚礼策划师",
+      "sha256": "bab0d0162e9eb5d67d022ae25c9b4087d4e768d20f8a77ddd3718bf44b15324a"
+    },
+    {
+      "post": "37-HR招聘专员",
+      "name": "HR/招聘专员",
+      "category": "行政人资",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/37-HR招聘专员",
+      "sha256": "50ed5c8183afccc9cbbfa734ee4596f14e89d0ac253b18036f6e1a7c744bab84"
+    },
+    {
+      "post": "38-行政主管",
+      "name": "行政主管/经理",
+      "category": "行政人资",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/38-行政主管",
+      "sha256": "00aba310125e8190619c81a29705cb6255f92693c087e0df0b420d718075c04d"
+    },
+    {
+      "post": "39-企业培训专员",
+      "name": "企业培训专员",
+      "category": "行政人资",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/39-企业培训专员",
+      "sha256": "81c3c4aa81f3dc390d857162e5641710d136bc44ab8195530b195d8a19da9577"
+    },
+    {
+      "post": "40-装修项目经理",
+      "name": "装修老板/项目经理",
+      "category": "建筑工程",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/40-装修项目经理",
+      "sha256": "c5ac92312e32966e305fa134e72314c271907b9581f50654188cfef554ea4c57"
+    },
+    {
+      "post": "41-工程预算员",
+      "name": "工程预算员",
+      "category": "建筑工程",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/41-工程预算员",
+      "sha256": "519cde170d764ea52c1afc68f0919ddd05aa1e23bfffc5b2f13c7fd847226b98"
+    },
+    {
+      "post": "42-工程资料员",
+      "name": "工程资料员",
+      "category": "建筑工程",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/42-工程资料员",
+      "sha256": "c3ab5e7e3e94a33dc16f157ece647ee7adc6d8f08894d55e4b918f194894f5ee"
+    },
+    {
+      "post": "43-工程监理",
+      "name": "工程监理",
+      "category": "建筑工程",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/43-工程监理",
+      "sha256": "f2eb547c49742ebff42f596031c322142c1fa9c0cdf4322e9c165d6179cf4969"
+    },
+    {
+      "post": "44-自媒体博主",
+      "name": "自媒体博主/创作者",
+      "category": "蓝海/自由职业",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/44-自媒体博主",
+      "sha256": "efa596434310afbc549e790db097fab3c934313ca5b6ba444c767cd6e56e5cf9"
+    },
+    {
+      "post": "45-社区团长",
+      "name": "社区团长/社群运营",
+      "category": "蓝海/自由职业",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/45-社区团长",
+      "sha256": "7a54cda3b5871a95467e14d1e9da74aa745a6fcf7c2df7905f7342638e9422ee"
+    },
+    {
+      "post": "46-旅游定制师",
+      "name": "旅游定制师",
+      "category": "蓝海/自由职业",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/46-旅游定制师",
+      "sha256": "4cea293a458808bebe7f107aa504296a43a12e09b9a1914f02e201806db5d3c7"
+    },
+    {
+      "post": "47-电商主播",
+      "name": "电商主播/带货主播",
+      "category": "蓝海/自由职业",
+      "priority": "P0",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/47-电商主播",
+      "sha256": "c16b814f03f354ddb92d14722b658fadaf840776a36940dde22fd6d33c7f9505"
+    },
+    {
+      "post": "48-客服主管",
+      "name": "客服主管/经理",
+      "category": "零售/电商",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/48-客服主管",
+      "sha256": "1eee0522f0c8a45314fc1fefeaf070fa254d7452701bc91d37c951b8add63d4c"
+    },
+    {
+      "post": "49-导购销售",
+      "name": "导购/销售顾问",
+      "category": "零售/电商",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/49-导购销售",
+      "sha256": "29d549df45d6ecb2bda57fc27c5129a6a60cf2f6c2a6061c6949d825a6acf668"
+    },
+    {
+      "post": "50-心理咨询师",
+      "name": "心理咨询师",
+      "category": "蓝海/自由职业",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/50-心理咨询师",
+      "sha256": "318cc0655d3292015540185946b469bba1ae82822e1298f0382cc8186c3c282a"
+    },
+    {
+      "post": "51-销售经理",
+      "name": "销售经理/BD",
+      "category": "零售/电商",
+      "priority": "P1",
+      "version": "1.0.0",
+      "skills": 5,
+      "dir": "skills/51-销售经理",
+      "sha256": "e93ab1eaa20948df85c70a5b00a4bc2b04405f49f96113f4dd61358afdb4a520"
+    }
+  ]
+}
