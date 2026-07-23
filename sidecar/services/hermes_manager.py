@@ -111,12 +111,8 @@ class HermesManager:
 
         env = os.environ.copy()
         env["HERMES_HOME"] = self.hermes_home
-        env["PYTHONPATH"] = os.pathsep.join(
-            [
-                os.path.join(PROJECT_ROOT, "engines", "hermes"),
-                os.path.join(PROJECT_ROOT, "runtime", "hermes-libs"),
-            ]
-        )
+        # hermes 代码 + 依赖都在 hermes-libs（pip 安装），不再依赖 engines/hermes 源码
+        env["PYTHONPATH"] = os.path.join(PROJECT_ROOT, "runtime", "hermes-libs")
         env["API_SERVER_ENABLED"] = "true"
         env["API_SERVER_HOST"] = self.host
         env["API_SERVER_PORT"] = str(self.port)

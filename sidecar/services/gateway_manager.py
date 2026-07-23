@@ -38,7 +38,20 @@ class GatewayManager:
         self.config = config
         self.port = config.openclaw_port
         self.cmd = config.openclaw_cmd
+        # 便携运行：项目内 node.exe + 打包的 openclaw（留空用默认路径）
+        self._node_exe = config.openclaw_node or os.path.join(
+            PROJECT_ROOT, "runtime", "data", "node.exe"
+        )
+        self._oc_entry = config.openclaw_entry or os.path.join(
+            PROJECT_ROOT, "runtime", "openclaw", "node_modules", "openclaw", "openclaw.mjs"
+        )
         self._log_path = os.path.join(PROJECT_ROOT, "runtime", "logs", "openclaw-gateway.log")
+
+    def _build_command(self) -> str:
+        """优先便携 node + 项目内打包的 openclaw；未打包则回退全局 openclaw 命令"""
+        if os.path.exists(self._node_exe) and os.path.exists(self._oc_entry):
+            return f'"{self._node_exe}" "{self._oc_entry}" gateway --port {self.port} --force'
+        return f'{self.cmd} gateway --port {self.port} --force'
 
     # ── 状态 ──────────────────────────────────────────
 
@@ -82,7 +95,7 @@ class GatewayManager:
         """以分离进程启动网关（--force 会接管已有端口）"""
         os.makedirs(os.path.dirname(self._log_path), exist_ok=True)
         log_file = open(self._log_path, "a", encoding="utf-8")
-        command = f'{self.cmd} gateway run --port {self.port} --force'
+        command = self._build_command()
         try:
             subprocess.Popen(
                 command,
