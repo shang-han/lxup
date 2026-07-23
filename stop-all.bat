@@ -26,7 +26,7 @@ echo Stopping all LXUP services...
 echo.
 
 REM --- for each service port, find the listening PID and kill its tree ---
-set "PORTS=7889 18789 8642 9000 8080 5173"
+set "PORTS=7889 18789 8642 8080 5173"
 set "FOUND="
 for %%P in (%PORTS%) do (
     set "KILLED="
