@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from ..services.hermes_manager import PROJECT_ROOT
+from ..services.skills_scan import scan_skills
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,14 @@ async def set_model(request: Request, body: HermesModelRequest):
         "baseUrl": str(model.get("base_url") or ""),
         "hasKey": bool(model.get("api_key")),
     }
+
+
+@router.get("/skills")
+async def list_skills(request: Request):
+    """Hermes 技能包清单（扫描 hermes-home/skills/**/SKILL.md 的 frontmatter）"""
+    root = _hermes_home_dir(request) / "skills"
+    data = scan_skills(root)
+    return {"data": data, "count": len(data), "root": str(root)}
 
 
 @router.get("/status")

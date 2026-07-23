@@ -24,7 +24,8 @@ from fastapi.responses import JSONResponse
 
 from .config import GatewayConfig
 from .database import close_database, init_database
-from .routes import gateway_routes, health, hermes, license, weixin_login_routes
+from .routes import codex, gateway_routes, health, hermes, license, weixin_login_routes
+from .services.codex_manager import CodexManager
 from .services.gateway_manager import GatewayManager
 from .services.hermes_manager import HermesManager
 from .services.license import LicenseService
@@ -130,6 +131,7 @@ def create_app(config: GatewayConfig) -> FastAPI:
     app.state.license_service = LicenseService(config)
     app.state.gateway_manager = GatewayManager(config)
     app.state.hermes_manager = HermesManager(config)
+    app.state.codex_manager = CodexManager(config)
 
     # 认证中间件（无 token 时跳过，用于开发模式）
     if config.auth_token:
@@ -160,6 +162,7 @@ def create_app(config: GatewayConfig) -> FastAPI:
     app.include_router(weixin_login_routes.router)
     app.include_router(gateway_routes.router)
     app.include_router(hermes.router)
+    app.include_router(codex.router)
 
     return app
 

@@ -619,6 +619,7 @@ export class ChatPage extends LitElement {
     const layoutClass = this._showSessionList ? 'chat-layout with-list' : 'chat-layout';
     const bannerVisible = this._showBanner && !this._engineReady;
     const isHermes = this._engineAdapter?.id === 'hermes';
+    const isCodex = this._engineAdapter?.id === 'codex';
 
     return html`
       <div class="${layoutClass}">
@@ -638,6 +639,8 @@ export class ChatPage extends LitElement {
             <div class="chat-header__right">
               ${isHermes
                 ? html`<div class="workspace-pill"><span class="ws-name">${L('chat.hermesModel')}</span></div>`
+                : isCodex
+                ? html`<div class="workspace-pill"><span class="ws-name">${L('chat.codexModel')}</span></div>`
                 : html`
                   <select title="model" @change=${this._onSelectModel}>
                     ${this._models.length === 0
@@ -651,7 +654,7 @@ export class ChatPage extends LitElement {
               <button class="ws-btn" title="${L('common.refresh')}" @click=${this._refresh}>
                 ${icons['refresh-cw']}
               </button>
-              ${isHermes ? '' : html`
+              ${isHermes || isCodex ? '' : html`
                 <div class="workspace-pill">
                   ${icons['folder-open']}
                   <span class="ws-label">${L('chat.workspace')}</span>

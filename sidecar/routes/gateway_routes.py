@@ -8,13 +8,16 @@ OpenClaw 网关进程。
   POST /api/gateway/start     启动网关
   POST /api/gateway/stop      停止网关
   POST /api/gateway/restart   重启网关
+  GET  /api/gateway/skills    OpenClaw 内置技能包（打包 npm 包内 skills/）
 """
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 
 from ..services.gateway_manager import GatewayManager
+from ..services.skills_scan import scan_skills
 
 logger = logging.getLogger(__name__)
 
@@ -47,3 +50,12 @@ async def gateway_stop(request: Request) -> dict:
 async def gateway_restart(request: Request) -> dict:
     """重启网关"""
     return await _manager(request).restart()
+
+
+@router.get("/skills")
+async def gateway_skills(request: Request) -> dict:
+    """OpenClaw 内置技能包清单（扫描打包 npm 包内的 skills/**/SKILL.md）"""
+    entry = Path(_manager(request)._oc_entry)
+    root = entry.parent / "skills"
+    data = scan_skills(root)
+    return {"data": data, "count": len(data), "root": str(root)}

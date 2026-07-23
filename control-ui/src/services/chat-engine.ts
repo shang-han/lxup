@@ -4,7 +4,7 @@
  * 「三个引擎的实时聊天各用自己的网关，不共用」：
  *   - OpenClaw  → 自己的 WebSocket JSON-RPC 网关（:18789）
  *   - Hermes    → 自己的 HTTP + SSE 网关（api_server，:8642）
- *   - Codex     → 预留（它自己的网关，后续接入）
+ *   - Codex     → 经 Sidecar(:7889) 桥接的 CLI（每轮 codex exec --json 子进程，SSE）
  *
  * chat-page 只依赖下面的 ChatEngine 归一化接口，按当前引擎选用对应实现，
  * 不直接接触任何具体网关协议。
@@ -12,6 +12,7 @@
 
 import type { GatewayStore } from '../store/gateway-store.js';
 import * as hermes from './hermes-client.js';
+import * as codex from './codex-client.js';
 
 export type EngineId = 'openclaw' | 'hermes' | 'codex';
 
@@ -279,6 +280,116 @@ export class HermesChatEngine implements ChatEngine {
   }
 }
 
+// ── Codex：经 Sidecar(:7889) 桥接的 CLI（每轮 codex exec --json 子进程）──
+
+export class CodexChatEngine implements ChatEngine {
+  readonly id: EngineId = 'codex';
+  private _ready = false;
+  private _cbs = new Set<(ready: boolean) => void>();
+
+  ready(): boolean {
+    return this._ready;
+  }
+  async refresh(): Promise<void> {
+    // health() = Sidecar 可达且 codex 已安装
+    this._setReady(await codex.health());
+  }
+  private _setReady(v: boolean): void {
+    if (v !== this._ready) {
+      this._ready = v;
+      for (const cb of this._cbs) cb(v);
+    }
+  }
+  onReadyChange(cb: (ready: boolean) => void): () => void {
+    this._cbs.add(cb);
+    return () => {
+      this._cbs.delete(cb);
+    };
+  }
+  defaultSessionId(): string {
+    return ''; // Codex 会话需动态创建（sidecar 注册表）
+  }
+
+  async listSessions(): Promise<ChatSession[]> {
+    const list = await codex.listSessions(100);
+    return list.map((s) => ({ id: s.id, name: s.title || s.id, updatedAt: normalizeTs(s.updatedAt) }));
+  }
+
+  async getHistory(sessionId: string): Promise<ChatHistoryMessage[]> {
+    if (!sessionId) return [];
+    const msgs = await codex.getMessages(sessionId);
+    return msgs
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content) }))
+      .filter((m) => m.text);
+  }
+
+  async createSession(): Promise<ChatSession | null> {
+    const s = await codex.createSession();
+    return { id: s.id, name: s.title || s.id, updatedAt: normalizeTs(s.updatedAt) };
+  }
+
+  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
+    let cancelled = false;
+    let inner: AbortController | null = null;
+    void (async () => {
+      let sid = sessionId;
+      try {
+        if (!sid) {
+          const s = await codex.createSession();
+          sid = s.id;
+        }
+      } catch (e: unknown) {
+        onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+        onEvent({ type: 'final' });
+        return;
+      }
+      if (cancelled) return;
+      // SSE 事件词表与 Hermes 一致（sidecar 已归一化 codex exec --json）
+      inner = codex.chatStream(sid, text, (ev) => {
+        const d = ev.data;
+        switch (ev.event) {
+          case 'assistant.delta':
+            onEvent({ type: 'delta', text: String(d.delta ?? '') });
+            break;
+          case 'tool.started':
+            onEvent({
+              type: 'tool',
+              tool: { name: String(d.tool_name ?? 'tool'), args: (d.args as Record<string, unknown>) || undefined, running: true },
+            });
+            break;
+          case 'tool.completed':
+            onEvent({
+              type: 'tool',
+              tool: { name: String(d.tool_name ?? 'tool'), result: d.preview != null ? String(d.preview) : '', ok: true, running: false },
+            });
+            break;
+          case 'tool.failed':
+            onEvent({
+              type: 'tool',
+              tool: { name: String(d.tool_name ?? 'tool'), result: d.preview != null ? String(d.preview) : '失败', ok: false, running: false },
+            });
+            break;
+          case 'error':
+            onEvent({ type: 'error', message: String(d.message ?? 'Codex 错误') });
+            break;
+          case 'done':
+            onEvent({ type: 'final' });
+            break;
+          default:
+            break; // run.started 等
+        }
+      });
+    })();
+    return {
+      abort: () => {
+        cancelled = true;
+        inner?.abort(); // Sidecar 检测到断开后杀掉 codex 子进程
+      },
+    };
+  }
+}
+
 // ── 工厂 ──
 
 export function createChatEngine(
@@ -286,6 +397,6 @@ export function createChatEngine(
   deps: { store: GatewayStore },
 ): ChatEngine {
   if (id === 'hermes') return new HermesChatEngine();
-  // codex 暂未接入，先回退到 OpenClaw（后续新增 CodexChatEngine）
+  if (id === 'codex') return new CodexChatEngine();
   return new OpenClawChatEngine(deps.store);
 }

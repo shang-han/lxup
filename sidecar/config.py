@@ -37,6 +37,11 @@ class GatewayConfig:
     # Hermes 引擎家目录（config.yaml/会话/日志所在）；默认项目根下 runtime/hermes-home
     hermes_home: str = str(_PROJECT_ROOT / "runtime" / "hermes-home")
 
+    # Codex 引擎便携家目录（config.toml / auth.json / 会话注册表所在）；默认项目根下 runtime/codex-home
+    codex_home: str = str(_PROJECT_ROOT / "runtime" / "codex-home")
+    # Codex CLI 二进制覆盖（留空则自动发现 runtime/codex 内 vendored 二进制，再回退全局 codex）
+    codex_bin: str = ""
+
     # Hermes 网关地址（状态探测用）
     hermes_gateway_url: str = "http://127.0.0.1:8642"
 
@@ -61,6 +66,9 @@ class GatewayConfig:
             # 用专用变量 LXUP_HERMES_HOME，避免被全局 HERMES_HOME（hermes 自带、可能指向项目外）劫持，保证便携
             hermes_home=os.getenv("LXUP_HERMES_HOME", cls.hermes_home),
             hermes_gateway_url=os.getenv("LXUP_HERMES_GATEWAY_URL", cls.hermes_gateway_url),
+            # 同理用 LXUP_CODEX_HOME，避免被全局 CODEX_HOME（codex 自带、可能指向项目外）劫持，保证便携
+            codex_home=os.getenv("LXUP_CODEX_HOME", cls.codex_home),
+            codex_bin=os.getenv("LXUP_CODEX_BIN", cls.codex_bin),
             log_level=os.getenv("GATEWAY_LOG_LEVEL", cls.log_level),
             license_server_url=os.getenv("LICENSE_SERVER_URL", cls.license_server_url),
         )

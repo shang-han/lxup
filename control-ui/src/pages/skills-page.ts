@@ -4,21 +4,6 @@ import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/page-header.js';
 
-const SKILLS = [
-  { id: '1password', name: '1password', source: 'OpenClaw 银呼通', desc: 'Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.', status: 'available' },
-  { id: 'apple-notes', name: 'apple-notes', source: 'OpenClaw 银呼通', desc: 'Manage Apple Notes via the `memo` CLI on macOS (create, view, edit, delete, search, move, and export notes). Use when a user asks OpenClaw to add a note, list notes, search notes, or manage note folders.', status: 'available' },
-  { id: 'apple-reminders', name: 'apple-reminders', source: 'OpenClaw 银呼通', desc: 'Manage Apple Reminders via remindctl CLI (list, add, edit, complete, delete). Supports lists, date filters, and JSON/plain output.', status: 'available' },
-  { id: 'bear-notes', name: 'bear-notes', source: 'OpenClaw 银呼通', desc: 'Create, search, and manage Bear notes via grizzly CLI.', status: 'available' },
-  { id: 'blogwatcher', name: 'blogwatcher', source: 'OpenClaw 银呼通', desc: 'Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.', status: 'available' },
-  { id: 'blucli', name: 'blucli', source: 'OpenClaw 银呼通', desc: 'BluOS CLI (blu) for discovery, playback, grouping, and volume.', status: 'available' },
-  { id: 'bluetooth', name: 'bluetooth', source: 'OpenClaw 银呼通', desc: 'Bluetooth device management: scan, pair, connect, disconnect, and check device status.', status: 'available' },
-  { id: 'brightness', name: 'brightness', source: 'OpenClaw 银呼通', desc: 'Control screen brightness and display settings on supported platforms.', status: 'available' },
-  { id: 'calendar', name: 'calendar', source: 'OpenClaw 银呼通', desc: 'Read and manage calendar events. Create, update, delete, and list events across calendars.', status: 'available' },
-  { id: 'clipboard', name: 'clipboard', source: 'OpenClaw 银呼通', desc: 'Read from and write to the system clipboard for cross-application text transfer.', status: 'available' },
-  { id: 'contacts', name: 'contacts', source: 'OpenClaw 银呼通', desc: 'Search, read, create, and update contacts from the system address book.', status: 'available' },
-  { id: 'cpu', name: 'cpu', source: 'OpenClaw 银呼通', desc: 'Monitor CPU usage, temperature, and core information in real-time.', status: 'available' },
-];
-
 export class SkillsPage extends LitElement {
   static styles = css`
     :host { display: block; }
@@ -138,11 +123,43 @@ export class SkillsPage extends LitElement {
 
   @state() _activeTab = 'installed'; // 'installed' | 'search'
   @state() _search = '';
+  @state() _skills: any[] = [];
+  @state() _loading = true;
+
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    void this._loadSkills();
+  }
+
+  /** 从 Sidecar 读取 OpenClaw 内置技能包（扫描打包 npm 包内 skills 目录下各 SKILL.md） */
+  async _loadSkills() {
+    this._loading = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills`);
+      const d = await r.json() as { data?: any[] };
+      this._skills = (d.data || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        source: `OpenClaw ${L('skills.bundled')}${s.version ? ' · v' + s.version : ''}`,
+        desc: (s.description || '') + ((s.requires && s.requires.length) ? `\n${L('skills.requires')}: ${s.requires.join(', ')}` : ''),
+        status: 'available',
+      }));
+    } catch {
+      this._skills = [];
+    }
+    this._loading = false;
+    this.requestUpdate();
+  }
 
   _filteredSkills() {
-    if (!this._search) return SKILLS;
+    if (!this._search) return this._skills;
     const q = this._search.toLowerCase();
-    return SKILLS.filter(s =>
+    return this._skills.filter(s =>
       s.name.toLowerCase().includes(q) ||
       s.desc.toLowerCase().includes(q) ||
       s.source.toLowerCase().includes(q)
@@ -179,7 +196,7 @@ export class SkillsPage extends LitElement {
               @input=${(e: Event) => { this._search = (e.target as HTMLInputElement).value; }}
               placeholder=${L('skills.filterPlaceholder')}
             />
-            <button>${L('common.refresh')}</button>
+            <button @click=${() => this._loadSkills()}>${L('common.refresh')}</button>
           </div>
 
           <!-- Summary -->
@@ -224,7 +241,7 @@ export class SkillsPage extends LitElement {
           ` : ''}
 
           ${filtered.length === 0 ? html`
-            <div class="skills-empty">${L('skills.noMatch')}</div>
+            <div class="skills-empty">${this._skills.length === 0 && !this._loading ? L('skills.notInstalled') : L('skills.noMatch')}</div>
           ` : ''}
         ` : html`
           <!-- Search & Install -->
