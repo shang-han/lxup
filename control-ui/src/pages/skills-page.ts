@@ -3,6 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/page-header.js';
+import '../components/skillpack-panel.js';
 
 export class SkillsPage extends LitElement {
   static styles = css`
@@ -121,7 +122,7 @@ export class SkillsPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
 
-  @state() _activeTab = 'installed'; // 'installed' | 'search'
+  @state() _activeTab = 'installed'; // 'installed' | 'search' | 'packs'
   @state() _search = '';
   @state() _skills: any[] = [];
   @state() _loading = true;
@@ -186,6 +187,10 @@ export class SkillsPage extends LitElement {
                @click=${() => { this._activeTab = 'search'; }}>
             ${L('skills.searchInstall')}
           </div>
+          <div class="skills-tab ${this._activeTab === 'packs' ? 'active' : ''}"
+               @click=${() => { this._activeTab = 'packs'; }}>
+            ${L('skills.jobPacks')}
+          </div>
         </div>
 
         ${this._activeTab === 'installed' ? html`
@@ -243,6 +248,9 @@ export class SkillsPage extends LitElement {
           ${filtered.length === 0 ? html`
             <div class="skills-empty">${this._skills.length === 0 && !this._loading ? L('skills.notInstalled') : L('skills.noMatch')}</div>
           ` : ''}
+        ` : this._activeTab === 'packs' ? html`
+          <!-- 岗位技能包 -->
+          <skillpack-panel></skillpack-panel>
         ` : html`
           <!-- Search & Install -->
           <div class="skills-toolbar">

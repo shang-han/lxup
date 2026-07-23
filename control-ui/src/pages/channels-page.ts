@@ -527,11 +527,6 @@ export class ChannelsPage extends LitElement {
     this._wechatCopyTimer = setTimeout(() => { this._wechatCopied = false; }, 2500);
   }
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this._wechatCopyTimer) clearTimeout(this._wechatCopyTimer);
-  }
-
   _openDialog(channelId: string) {
     this._dialogChannel = channelId;
   }
