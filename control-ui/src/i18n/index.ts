@@ -3,7 +3,7 @@ const en = {
     health: 'Health', ok: 'OK', online: 'Online', offline: 'Offline',
     connect: 'Connect', refresh: 'Refresh', enabled: 'Enabled', disabled: 'Disabled',
     na: 'n/a', version: 'Version', docs: 'Docs', search: 'Search',
-    darkMode: 'Dark mode', lightMode: 'Light mode', systemMode: 'System mode',
+    darkMode: 'Dark Mode', lightMode: 'Light Mode', systemMode: 'System Mode',
     uptime: 'Uptime', connectedClients: 'connected clients', activeSessions: 'active sessions',
     scheduled: 'scheduled', gatewaySnapshot: 'Gateway Snapshot', recentSessions: 'Recent Sessions',
     quickActions: 'Quick Actions', newSession: 'New Session', automation: 'Automation',
