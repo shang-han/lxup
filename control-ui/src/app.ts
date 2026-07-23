@@ -67,7 +67,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
   if (engine === 'codex') {
     return [
       { heading: L('sections.Monitor'), tabs: ['ai','chat'] },
-      { heading: L('sections.Config'), tabs: ['codex','models','sandbox'] },
+      { heading: L('sections.Config'), tabs: ['codex','sandbox'] },
       { heading: L('sections.Extensions'), tabs: ['settings'] },
     ];
   }
@@ -215,8 +215,8 @@ export class OpenClawApp extends LitElement {
         const s = JSON.parse(raw);
         if (s.page && TAB_ICONS[s.page]) this._page = s.page;
         if (s.engine && (s.engine==='openclaw'||s.engine==='hermes'||s.engine==='codex')) this._engine = s.engine;
-        // codex 引擎没有 dashboard/logs/skills/memory 等页，恢复状态时回落到 codex 配置页
-        if (this._engine === 'codex' && !['ai','chat','codex','models','sandbox','settings'].includes(this._page)) this._page = 'codex';
+        // codex 引擎没有 dashboard/models/logs/skills/memory 等页，恢复状态时回落到 codex 配置页
+        if (this._engine === 'codex' && !['ai','chat','codex','sandbox','settings'].includes(this._page)) this._page = 'codex';
       }
       const theme = localStorage.getItem('openclaw-control-theme');
       if (theme) { const t = JSON.parse(theme); this._theme = t.theme||'claw'; this._themeMode = t.mode||'dark'; }
