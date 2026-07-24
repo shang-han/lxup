@@ -4,9 +4,98 @@ import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
+import { fetchTimeout } from '../utils/net.js';
 import type { GatewayStore } from '../store/gateway-store.js';
 import '../components/page-header.js';
 import '../components/oc-dialog.js';
+
+/** 页面渠道 id → OpenClaw 真实渠道 id（目录名与页面命名不一致的两个） */
+const CHANNEL_ALIASES: Record<string, string> = { qq: 'qqbot', teams: 'msteams' };
+
+/** 接入表单字段规格（字段名来自各渠道插件源码/CLI 报错，凭据获取说明见 i18n） */
+type FormField = {
+  key: string;
+  labelKey: string;
+  type: 'text' | 'password';
+  placeholder?: string;
+  required?: boolean;
+};
+type ChannelFormSpec = {
+  kind: 'cli' | 'config';             // cli=生成 channels add 命令；config=生成 openclaw.json 片段
+  noteKey: string;
+  fields: FormField[];
+  cliFlags?: Record<string, string>;
+  configKeys?: Record<string, string>;
+};
+const CHANNEL_FORMS: Record<string, ChannelFormSpec> = {
+  qqbot: {
+    kind: 'cli', noteKey: 'channelsForm.qqNote',
+    fields: [
+      { key: 'appId', labelKey: 'channelsForm.appId', type: 'text', placeholder: '102xxxxxx', required: true },
+      { key: 'clientSecret', labelKey: 'channelsForm.clientSecret', type: 'password', required: true },
+      { key: 'account', labelKey: 'channelsForm.accountIdOpt', type: 'text', placeholder: 'default' },
+    ],
+    cliFlags: { account: '--account' },  // appId:clientSecret → --token 特判
+  },
+  telegram: {
+    kind: 'cli', noteKey: 'channelsForm.telegramNote',
+    fields: [{ key: 'token', labelKey: 'channelsForm.botToken', type: 'password', placeholder: '123456789:AAE...', required: true }],
+    cliFlags: { token: '--token' },
+  },
+  discord: {
+    kind: 'cli', noteKey: 'channelsForm.discordNote',
+    fields: [{ key: 'token', labelKey: 'channelsForm.botToken', type: 'password', placeholder: 'MTIz...xxx', required: true }],
+    cliFlags: { token: '--token' },
+  },
+  slack: {
+    kind: 'cli', noteKey: 'channelsForm.slackNote',
+    fields: [
+      { key: 'botToken', labelKey: 'channelsForm.slackBotToken', type: 'password', placeholder: 'xoxb-...', required: true },
+      { key: 'appToken', labelKey: 'channelsForm.slackAppToken', type: 'password', placeholder: 'xapp-1-...', required: true },
+    ],
+    cliFlags: { botToken: '--bot-token', appToken: '--app-token' },
+  },
+  signal: {
+    kind: 'cli', noteKey: 'channelsForm.signalNote',
+    fields: [{ key: 'number', labelKey: 'channelsForm.signalNumber', type: 'text', placeholder: '+8613800138000', required: true }],
+    cliFlags: { number: '--signal-number' },
+  },
+  matrix: {
+    kind: 'cli', noteKey: 'channelsForm.matrixNote',
+    fields: [
+      { key: 'homeserver', labelKey: 'channelsForm.homeserver', type: 'text', placeholder: 'https://matrix.org', required: true },
+      { key: 'token', labelKey: 'channelsForm.accessTokenOpt', type: 'password', placeholder: 'syt_...' },
+    ],
+    cliFlags: { homeserver: '--homeserver', token: '--token' },
+  },
+  feishu: {
+    kind: 'config', noteKey: 'channelsForm.feishuNote',
+    fields: [
+      { key: 'appId', labelKey: 'channelsForm.feishuAppId', type: 'text', placeholder: 'cli_a5xxxxx', required: true },
+      { key: 'appSecret', labelKey: 'channelsForm.feishuAppSecret', type: 'password', required: true },
+    ],
+    configKeys: { appId: 'appId', appSecret: 'appSecret' },
+  },
+  wecom: {
+    // Bot 模式（默认 WebSocket 连接）：只需 botId + secret；
+    // 自建应用（Agent）模式另需 corpId+corpSecret+agentId，见 note 说明
+    kind: 'cli', noteKey: 'channelsForm.wecomNote',
+    fields: [
+      { key: 'botId', labelKey: 'channelsForm.wecomBotId', type: 'text', placeholder: 'aibot_xxxxxxxx', required: true },
+      { key: 'secret', labelKey: 'channelsForm.wecomSecret', type: 'password', required: true },
+    ],
+    cliFlags: { botId: '', secret: '' },  // 特判：生成 config set 命令序列
+  },
+  msteams: {
+    kind: 'config', noteKey: 'channelsForm.msteamsNote',
+    fields: [
+      { key: 'tenantId', labelKey: 'channelsForm.tenantId', type: 'text', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', required: true },
+      { key: 'appId', labelKey: 'channelsForm.msAppId', type: 'text', required: true },
+      { key: 'appPassword', labelKey: 'channelsForm.msAppPassword', type: 'password', required: true },
+    ],
+    configKeys: { tenantId: 'tenantId', appId: 'appId', appPassword: 'appPassword' },
+  },
+};
 
 const CHANNELS = [
   { id: 'qq', name: L('channels.qqBot'), desc: L('channels.qqDesc'), icon: 'chat-bubble' },
@@ -15,7 +104,9 @@ const CHANNELS = [
   { id: 'telegram', name: L('channels.telegram'), desc: L('channels.telegramDesc'), icon: 'send' },
   { id: 'discord', name: L('channels.discord'), desc: L('channels.discordDesc'), icon: 'hash' },
   { id: 'slack', name: L('channels.slack'), desc: L('channels.slackDesc'), icon: 'hash' },
+  // 仅微信有完整的端内接入流程（扫码登录），保留徽章；其余渠道是「已装插件 + 生成接入命令」模式，不标徽章以免误读为已接入
   { id: 'wechat', name: L('channels.wechatIntegration'), desc: L('channels.wechatDesc'), icon: 'message-circle', supported: true },
+  { id: 'wecom', name: L('channels.wecom'), desc: L('channels.wecomDesc'), icon: 'briefcase' },
   { id: 'teams', name: L('channels.teams'), desc: L('channels.teamsDesc'), icon: 'users' },
   { id: 'signal', name: L('channels.signal'), desc: L('channels.signalDesc'), icon: 'shield' },
   { id: 'matrix', name: L('channels.matrix'), desc: L('channels.matrixDesc'), icon: 'globe' },
@@ -111,6 +202,36 @@ export class ChannelsPage extends LitElement {
     .channel-dialog .form-row button:hover { background: var(--bg-hover); color: var(--text); }
 
     .channel-dialog select.form-input { cursor: pointer; }
+
+    /* === 接入表单结果 === */
+    .channel-dialog .form-result { margin-top: 12px; font-size: 12px; }
+    .channel-dialog .form-result.err { color: var(--danger); }
+    .channel-dialog .form-result.ok { color: var(--text); }
+    .channel-dialog .form-result__cmd {
+      background: var(--bg-muted); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+      white-space: pre-wrap; word-break: break-all; color: var(--text); margin-bottom: 8px;
+    }
+    .channel-dialog .form-result__actions {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .channel-dialog .form-result__actions button {
+      padding: 4px 12px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 500;
+      border: 1px solid var(--border); cursor: pointer;
+      background: transparent; color: var(--text-soft); transition: all var(--duration-fast);
+      white-space: nowrap;
+    }
+    .channel-dialog .form-result__actions button:hover { background: var(--bg-hover); color: var(--text); }
+
+    /* === 删除接入按钮 === */
+    .btn-remove-danger {
+      padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+      border: 1px solid var(--danger); cursor: pointer; margin-right: auto;
+      background: var(--danger-subtle); color: var(--danger); transition: all var(--duration-fast);
+    }
+    .btn-remove-danger:hover { background: var(--danger); color: #fff; }
+    .btn-remove-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+    .remove-err { font-size: 12px; color: var(--danger); align-self: center; margin-right: 8px; word-break: break-all; }
 
     /* === collapsible steps === */
     .channel-dialog .steps-toggle {
@@ -375,8 +496,15 @@ export class ChannelsPage extends LitElement {
       const chMap = chRes?.channels || {};
       const accMap = chRes?.channelAccounts || {};
       this._liveChannels = chMap;
-      this._liveChannelOrder = Array.isArray(chRes?.channelOrder) ? chRes.channelOrder : Object.keys(chMap);
       this._liveLabels = chRes?.channelDetailLabels || chRes?.channelLabels || {};
+      // channels.status 会返回所有已安装插件（含未配置的）——
+      // 「已接入」只收 configured / running 的渠道，其余回「可接入平台」列表
+      // （accounts 字段对未配置渠道也有 default 脚手架，不能作为判据）
+      this._liveChannelOrder = (Array.isArray(chRes?.channelOrder) ? chRes.channelOrder : Object.keys(chMap))
+        .filter((id: string) => {
+          const c = chMap[id];
+          return !!(c && (c.configured || c.running));
+        });
       // 只列出已配置的渠道
       this._bindChannels = Object.keys(chMap).filter((k) => chMap[k] && (chMap[k].configured || chMap[k].running));
       // 每个渠道下的账号列表
@@ -542,6 +670,151 @@ export class ChannelsPage extends LitElement {
     this._dialogChannel = '';
   }
 
+  // ── 接入表单（QQ 同款对话框模式）──
+  @state() _formValues: Record<string, Record<string, string>> = {};
+  @state() _formResult: Record<string, { text: string; cls: 'ok' | 'err' }> = {};
+  @state() _formVisible: Record<string, boolean> = {};
+  @state() _formCopied: Record<string, boolean> = {};
+  _copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  _onFormField(channel: string, key: string, value: string) {
+    this._formValues = { ...this._formValues, [channel]: { ...(this._formValues[channel] || {}), [key]: value } };
+  }
+
+  _toggleFieldVisible(channel: string, key: string) {
+    const k = `${channel}:${key}`;
+    this._formVisible = { ...this._formVisible, [k]: !this._formVisible[k] };
+  }
+
+  /** 校验必填字段 */
+  _verifyForm(channel: string, spec: ChannelFormSpec) {
+    const vals = this._formValues[channel] || {};
+    const missing = spec.fields.filter(f => f.required && !(vals[f.key] || '').trim());
+    this._formResult = {
+      ...this._formResult,
+      [channel]: missing.length
+        ? { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join('、') }), cls: 'err' }
+        : { text: L('channelsForm.fieldsOk'), cls: 'ok' },
+    };
+  }
+
+  /** 生成接入命令 / 配置片段（不写任何配置，用户自行复制执行） */
+  _generateConnect(channel: string, spec: ChannelFormSpec) {
+    const vals = this._formValues[channel] || {};
+    const missing = spec.fields.filter(f => f.required && !(vals[f.key] || '').trim());
+    if (missing.length) {
+      this._formResult = {
+        ...this._formResult,
+        [channel]: { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join('、') }), cls: 'err' },
+      };
+      return;
+    }
+    let out: string;
+    if (channel === 'wecom') {
+      // 企业微信 Bot 模式官方快速配置（README 推荐流程）
+      out = [
+        `openclaw config set channels.wecom.botId "${vals.botId.trim()}"`,
+        `openclaw config set channels.wecom.secret "${vals.secret.trim()}"`,
+        'openclaw config set channels.wecom.enabled true',
+        'openclaw gateway restart',
+      ].join('\n');
+    } else if (spec.kind === 'cli') {
+      const parts: string[] = [];
+      if (channel === 'qqbot') {
+        parts.push(`--token "${vals.appId.trim()}:${vals.clientSecret.trim()}"`);
+        if ((vals.account || '').trim()) parts.push(`--account ${vals.account.trim()}`);
+      } else {
+        for (const f of spec.fields) {
+          const v = (vals[f.key] || '').trim();
+          if (v && spec.cliFlags?.[f.key]) parts.push(`${spec.cliFlags[f.key]} "${v}"`);
+        }
+      }
+      out = `openclaw channels add --channel ${channel} ${parts.join(' ')}`;
+    } else {
+      const obj: Record<string, string> = {};
+      for (const f of spec.fields) {
+        const v = (vals[f.key] || '').trim();
+        if (v && spec.configKeys?.[f.key]) obj[spec.configKeys[f.key]] = v;
+      }
+      out = `// openclaw.json → channels.${channel}\n${JSON.stringify(obj, null, 2)}`;
+    }
+    this._formCopied = { ...this._formCopied, [channel]: false };
+    this._formResult = { ...this._formResult, [channel]: { text: out, cls: 'ok' } };
+  }
+
+  async _copyFormResult(channel: string) {
+    const text = this._formResult[channel]?.text || '';
+    try { await navigator.clipboard.writeText(text); } catch { /* 剪贴板不可用时忽略 */ }
+    this._formCopied = { ...this._formCopied, [channel]: true };
+    if (this._copyTimer) clearTimeout(this._copyTimer);
+    this._copyTimer = setTimeout(() => {
+      this._formCopied = { ...this._formCopied, [channel]: false };
+    }, 2000);
+  }
+
+  // ── 删除已接入渠道配置（两步确认）──
+  @state() _confirmRemove: string | null = null;
+  @state() _removing = false;
+  @state() _removeMsg = '';
+  _removeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  async _removeChannel(realId: string) {
+    if (this._removing) return;
+    // 第一次点击：进入确认态（4 秒后自动复位）
+    if (this._confirmRemove !== realId) {
+      this._confirmRemove = realId;
+      if (this._removeTimer) clearTimeout(this._removeTimer);
+      this._removeTimer = setTimeout(() => { this._confirmRemove = null; }, 4000);
+      return;
+    }
+    // 第二次点击：执行删除
+    this._removing = true;
+    this._removeMsg = '';
+    try {
+      const r = await fetchTimeout(
+        `${this._sidecarBase}/api/gateway/channels/${encodeURIComponent(realId)}`,
+        { method: 'DELETE' },
+        120000,
+      );
+      const j = await r.json().catch(() => ({ ok: false, output: `HTTP ${r.status}` }));
+      if (j.ok) {
+        this._confirmRemove = null;
+        this._removeMsg = '';
+        // 等网关同步（热加载配置或 Sidecar 兜底重启），渠道从实时状态消失后再更新界面
+        for (let i = 0; i < 15; i++) {
+          await this._loadBindingData();
+          const gone = !this._liveChannels[realId] && !(this._bindChannels || []).includes(realId);
+          if (gone) break;
+          await new Promise(res => setTimeout(res, 1000));
+        }
+        this._closeDialog();
+      } else {
+        this._removeMsg = L('channels.removeFailed', { msg: String(j.output || '').slice(0, 120) });
+      }
+    } catch (e) {
+      this._removeMsg = L('channels.removeFailed', { msg: e instanceof Error ? e.message : String(e) });
+    } finally {
+      this._removing = false;
+    }
+  }
+
+  _renderRemoveButton(realId: string) {
+    return html`
+      <button class="btn-remove-danger" ?disabled=${this._removing}
+        @click=${() => this._removeChannel(realId)}>
+        ${this._removing ? L('channels.removing')
+          : this._confirmRemove === realId ? L('channels.removeConfirm')
+          : L('channels.removeChannel')}
+      </button>
+      ${this._removeMsg ? html`<span class="remove-err">${this._removeMsg}</span>` : ''}
+    `;
+  }
+
   _renderChannelCard(ch: any) {
     return html`
       <div class="channel-card" @click=${() => this._openDialog(ch.id)}>
@@ -583,6 +856,7 @@ export class ChannelsPage extends LitElement {
       'send': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="m22 2-11 11"/></svg>`,
       'message-circle': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
       'users': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      'briefcase': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
       'shield': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>`,
       'globe': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
     };
@@ -746,7 +1020,7 @@ export class ChannelsPage extends LitElement {
           </div>
         </div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.cancel')}</button>
+          ${this._renderRemoveButton('openclaw-weixin')}
           <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>
         </div>
       </oc-dialog>
@@ -754,18 +1028,89 @@ export class ChannelsPage extends LitElement {
   }
 
   _renderGenericDialog(channelId: string) {
-    const ch = CHANNELS.find(c => c.id === channelId);
-    if (!ch) return '';
+    const ch = CHANNELS.find(c => c.id === channelId) || { id: channelId, name: channelId, desc: '' };
+    const realId = CHANNEL_ALIASES[channelId] || channelId;
+    const spec = CHANNEL_FORMS[realId];
+    // 出现在 channels.status 里不等于已接入：未配置的插件也在列表中，
+    // 只有 configured/running 才算 live，否则展示接入表单
+    const c = this._liveChannels[realId];
+    const live = c && (c.configured || c.running) ? c : null;
+    const accounts = this._bindAccounts[realId] || [];
+    const vals = this._formValues[realId] || {};
+    const result = this._formResult[realId];
     return html`
       <oc-dialog .open=${this._dialogChannel === channelId} @close=${this._closeDialog}>
         <span slot="title">${L('channels.connecting')} ${ch.name}</span>
         <div class="channel-dialog">
-          <div style="font-size:13px;color:var(--text-soft);padding:20px 0;text-align:center;">
-            ${L('channels.genericComingSoon', { name: ch.name })}
-          </div>
+          ${live ? html`
+            <!-- 已接入渠道：展示实时状态 -->
+            <div class="info-box">
+              <div class="info-box__title">
+                ${live.running ? L('channels.liveRunning') : L('channels.liveStopped')}
+                · ${accounts.length || (live.accountId ? 1 : 0)} ${L('channels.accountsLabel')}
+              </div>
+              <div class="info-box__desc">
+                ${accounts.length
+                  ? accounts.map(a => `${a.accountId}${a.running ? ' ●' : ''}`).join(' · ')
+                  : (live.accountId || '—')}
+              </div>
+              ${live.lastError ? html`
+                <div class="info-box__desc" style="color:var(--danger);margin-top:6px;">
+                  ${L('channels.lastError')}: ${live.lastError}
+                </div>` : ''}
+            </div>
+            <div class="form-hint" style="margin-top:10px;">${L('channels.channelConfigNote')}</div>
+          ` : ''}
+
+          ${spec && !live ? html`
+            <!-- 接入表单（凭据说明 + 生成接入命令，不写任何配置） -->
+            ${spec.fields.map(f => html`
+              <div class="form-group">
+                <label class="form-label">${L(f.labelKey)} ${f.required ? html`<span class="required">*</span>` : ''}</label>
+                <div class="form-row">
+                  <input class="form-input"
+                    .type=${f.type === 'password' && !this._formVisible[`${realId}:${f.key}`] ? 'password' : 'text'}
+                    .value=${vals[f.key] || ''}
+                    placeholder=${f.placeholder || ''}
+                    @input=${(e: Event) => this._onFormField(realId, f.key, (e.target as HTMLInputElement).value)} />
+                  ${f.type === 'password' ? html`
+                    <button @click=${() => this._toggleFieldVisible(realId, f.key)}>
+                      ${this._formVisible[`${realId}:${f.key}`] ? L('channels.hide') : L('channels.show')}
+                    </button>` : ''}
+                </div>
+              </div>
+            `)}
+            <div class="form-hint">${L(spec.noteKey)}</div>
+            ${result ? html`
+              <div class="form-result ${result.cls}">
+                ${result.cls === 'ok' ? html`
+                  <div class="form-result__cmd">${result.text}</div>
+                  <div class="form-result__actions">
+                    <button @click=${() => this._copyFormResult(realId)}>
+                      ${this._formCopied[realId] ? L('channelsForm.copied') : L('channels.copyCmd')}
+                    </button>
+                    <span class="form-hint">${spec.kind === 'cli' ? L('channelsForm.cliHint') : L('channelsForm.configHint')}</span>
+                  </div>
+                ` : result.text}
+              </div>
+            ` : ''}
+          ` : ''}
+
+          ${!spec && !live ? html`
+            <div style="font-size:13px;color:var(--text-soft);padding:20px 0;text-align:center;">
+              ${L('channels.genericComingSoon', { name: ch.name })}
+            </div>
+          ` : ''}
         </div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>
+          ${spec && !live ? html`
+            <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.cancel')}</button>
+            <button class="btn-verify" @click=${() => this._verifyForm(realId, spec)}>${L('channels.verify')}</button>
+            <button class="btn-confirm" @click=${() => this._generateConnect(realId, spec)}>${L('channelsForm.generateCmd')}</button>
+          ` : html`
+            ${live ? this._renderRemoveButton(realId) : ''}
+            <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>
+          `}
         </div>
       </oc-dialog>
     `;
@@ -798,12 +1143,18 @@ export class ChannelsPage extends LitElement {
               </div>
             </div>
           ` : ''}
-          <div class="channels-section">
-            <div class="channels-section__title">${L('channels.availablePlatforms')}</div>
-            <div class="channel-grid">
-              ${CHANNELS.map(ch => this._renderChannelCard(ch))}
-            </div>
-          </div>
+          ${(() => {
+            // 已接入的渠道从「可接入平台」中隐去（在上方「已接入渠道」展示）
+            const liveIds = new Set(this._liveChannelOrder);
+            const catalog = CHANNELS.filter(ch => !liveIds.has(CHANNEL_ALIASES[ch.id] || ch.id));
+            return catalog.length ? html`
+              <div class="channels-section">
+                <div class="channels-section__title">${L('channels.availablePlatforms')}</div>
+                <div class="channel-grid">
+                  ${catalog.map(ch => this._renderChannelCard(ch))}
+                </div>
+              </div>` : '';
+          })()}
         ` : html`
           <!-- Agent binding（真实 config.bindings）-->
           <div style="margin-bottom:12px;">
@@ -874,7 +1225,9 @@ export class ChannelsPage extends LitElement {
                         </div>
                         ${removable
                           ? html`<button class="bind-remove" ?disabled=${this._bindSaving} @click=${() => this._removeBinding(row.channel, removeAcc)}>✕</button>`
-                          : html`<span style="width:24px;"></span>`}
+                          : html`<button class="bind-remove" ?disabled=${this._removing}
+                              title=${L('channels.removeChannel')}
+                              @click=${() => this._removeChannel(row.channel)}>✕</button>`}
                       </div>
                     `;
                   })}

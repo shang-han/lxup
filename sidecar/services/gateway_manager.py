@@ -12,9 +12,12 @@ stop 通过端口定位 PID（无论网关由谁启动都能结束），在 Wind
 """
 
 import asyncio
+import json
 import logging
 import os
+import shutil
 import subprocess
+from pathlib import Path
 
 import httpx
 
@@ -151,6 +154,86 @@ class GatewayManager:
         except Exception:
             logger.exception("查找端口 PID 失败")
         return None
+
+    async def remove_channel(self, channel: str, account: str | None = None) -> dict:
+        """删除渠道账号配置。
+
+        优先走 CLI（openclaw channels remove --delete，会通知网关登出会话）；
+        CLI 失败/超时（活跃会话登出卡住等）时兜底直接删 openclaw.json
+        配置项，重启网关后完全生效。
+        """
+        # 渠道名白名单校验，防止参数注入
+        if not channel or not all(c.isalnum() or c in "-_" for c in channel):
+            return {"ok": False, "output": f"非法渠道名: {channel}"}
+        cmd = [self._node_exe, self._oc_entry, "channels", "remove", "--channel", channel, "--delete"]
+        if account:
+            if not all(c.isalnum() or c in "-_." for c in account):
+                return {"ok": False, "output": f"非法账号名: {account}"}
+            cmd += ["--account", account]
+
+        def _run_cli() -> dict:
+            try:
+                r = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=30,
+                    cwd=PROJECT_ROOT,
+                    stdin=subprocess.DEVNULL,  # 交互提示直接失败，避免挂起
+                )
+                output = (r.stdout + "\n" + r.stderr).strip()
+                return {"ok": r.returncode == 0, "output": output[-500:]}
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "output": "CLI_TIMEOUT"}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "output": str(e)}
+
+        result = await asyncio.to_thread(_run_cli)
+        logger.info("删除渠道 %s (account=%s): CLI ok=%s", channel, account, result["ok"])
+        if result["ok"]:
+            return result
+        if account:
+            # 账号级结构因渠道而异，不做盲改，如实报错
+            return result
+
+        # 兜底：CLI 不可用时（如 openclaw-weixin 不支持 delete/logout）
+        # 直接清理 openclaw.json 配置项 + 插件状态目录（登录态等），再重启网关生效
+        def _fallback_cleanup() -> dict:
+            done = []
+            try:
+                home = os.environ.get("OPENCLAW_HOME") or str(Path.home() / ".openclaw")
+                cfg_path = Path(home) / "openclaw.json"
+                try:
+                    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                    channels = cfg.get("channels") or {}
+                    if channel in channels:
+                        del channels[channel]
+                        cfg["channels"] = channels
+                        cfg_path.write_text(
+                            json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+                        done.append("配置项")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("清理配置项失败: %s", e)
+                state_dir = Path(home) / channel
+                if state_dir.is_dir():
+                    shutil.rmtree(state_dir, ignore_errors=True)
+                    if not state_dir.exists():
+                        done.append("状态目录")
+                if not done:
+                    return result  # 没有可清理的，如实报原始错误
+                note = f"[CLI 不可用，已直接清理: {'、'.join(done)}，重启网关生效]"
+                return {"ok": True,
+                        "output": (result["output"] + "\n" + note)[-500:],
+                        "_fallback": True}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "output": f"{result['output']} | 兜底清理失败: {e}"[-500:]}
+
+        direct = await asyncio.to_thread(_fallback_cleanup)
+        if direct.get("ok") and direct.pop("_fallback", False):
+            # 网关内存里仍持有该渠道，重启后才会真正消失
+            restart = await self.restart()
+            note = ("（已自动重启网关使其生效）" if restart.get("restarted")
+                    else "（网关自动重启失败，请手动重启使其生效）")
+            logger.info("删除渠道 %s: 兜底清理成功，重启网关 %s", channel, restart.get("restarted"))
+            direct["output"] = (direct["output"] + "\n" + note)[-500:]
+        return direct
 
     async def _kill_pid(self, pid: int) -> None:
         await asyncio.to_thread(self._kill_pid_sync, pid)
