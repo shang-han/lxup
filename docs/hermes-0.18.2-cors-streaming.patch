@@ -1,0 +1,54 @@
+--- a/gateway/platforms/api_server.py
++++ b/gateway/platforms/api_server.py
+@@ -567,7 +567,10 @@
+             return web.Response(status=200, headers=cors_headers)
+ 
+         response = await handler(request)
+-        if cors_headers is not None:
++        # StreamResponse headers are flushed to the client at prepare() time and
++        # can't be amended afterwards; streaming endpoints add CORS headers up
++        # front themselves, so only update regular responses here.
++        if cors_headers is not None and not response.prepared:
+             response.headers.update(cors_headers)
+         return response
+ else:
+@@ -2032,6 +2035,12 @@
+             "X-Accel-Buffering": "no",
+             "X-Hermes-Session-Id": session_id,
+         }
++        # CORS middleware can't inject headers into StreamResponse after
++        # prepare() flushes them, so resolve CORS headers up front.
++        origin = request.headers.get("Origin", "")
++        cors = self._cors_headers_for_origin(origin) if origin else None
++        if cors:
++            headers.update(cors)
+         if gateway_session_key:
+             headers["X-Hermes-Session-Key"] = gateway_session_key
+         response = web.StreamResponse(status=200, headers=headers)
+@@ -4509,14 +4518,18 @@
+ 
+         q = self._run_streams[run_id]
+ 
+-        response = web.StreamResponse(
+-            status=200,
+-            headers={
+-                "Content-Type": "text/event-stream",
+-                "Cache-Control": "no-cache",
+-                "X-Accel-Buffering": "no",
+-            },
+-        )
++        sse_headers = {
++            "Content-Type": "text/event-stream",
++            "Cache-Control": "no-cache",
++            "X-Accel-Buffering": "no",
++        }
++        # CORS middleware can't inject headers into StreamResponse after
++        # prepare() flushes them, so resolve CORS headers up front.
++        origin = request.headers.get("Origin", "")
++        cors = self._cors_headers_for_origin(origin) if origin else None
++        if cors:
++            sse_headers.update(cors)
++        response = web.StreamResponse(status=200, headers=sse_headers)
+         await response.prepare(request)
+ 
+         try:

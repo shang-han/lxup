@@ -80,6 +80,7 @@ export class ChannelsPage extends LitElement {
       font-size: 10px; padding: 2px 6px; border-radius: var(--radius-sm);
       font-weight: 600; background: var(--success-subtle); color: var(--success);
     }
+    .channel-card__badge.offline { background: var(--bg-muted); color: var(--muted); }
 
     /* === dialog styles === */
     .channel-dialog .form-group { margin-bottom: 14px; }
@@ -311,8 +312,6 @@ export class ChannelsPage extends LitElement {
 
   // WeChat form state
   @state() _wechatStepsOpen = true;
-  @state() _wechatInstalled = true;
-  @state() _wechatVersion = '2.1.3';
   @state() _wechatCopied = false;
   _wechatCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -332,6 +331,10 @@ export class ChannelsPage extends LitElement {
   @state() _bindChannels: string[] = [];
   @state() _bindAccounts: Record<string, Array<{ accountId: string; running: boolean }>> = {};
   @state() _bindConnected = false;
+  // 已接入渠道的实时状态（channels.status）
+  @state() _liveChannels: Record<string, any> = {};
+  @state() _liveChannelOrder: string[] = [];
+  @state() _liveLabels: Record<string, string> = {};
   // 新增绑定表单
   @state() _newBindChannel = '';
   @state() _newBindAccount = '';   // '' = 整个渠道（全部账号）
@@ -371,6 +374,9 @@ export class ChannelsPage extends LitElement {
       this._bindings = Array.isArray(cfg.bindings) ? cfg.bindings : [];
       const chMap = chRes?.channels || {};
       const accMap = chRes?.channelAccounts || {};
+      this._liveChannels = chMap;
+      this._liveChannelOrder = Array.isArray(chRes?.channelOrder) ? chRes.channelOrder : Object.keys(chMap);
+      this._liveLabels = chRes?.channelDetailLabels || chRes?.channelLabels || {};
       // 只列出已配置的渠道
       this._bindChannels = Object.keys(chMap).filter((k) => chMap[k] && (chMap[k].configured || chMap[k].running));
       // 每个渠道下的账号列表
@@ -547,6 +553,29 @@ export class ChannelsPage extends LitElement {
     `;
   }
 
+  /** 已接入渠道卡片 —— 实时状态来自 channels.status */
+  _renderLiveChannelCard(id: string) {
+    const ch = this._liveChannels[id] || {};
+    const accounts = this._bindAccounts[id] || [];
+    const running = !!ch.running;
+    const dialogId = id === 'openclaw-weixin' ? 'wechat' : id;
+    const iconName = id === 'openclaw-weixin' ? 'message-circle' : 'hash';
+    return html`
+      <div class="channel-card" @click=${() => this._openDialog(dialogId)}>
+        <div class="channel-card__icon">${this._getChannelIcon(iconName)}</div>
+        <div class="channel-card__name">${this._liveLabels[id] || id}</div>
+        <div class="channel-card__desc">
+          ${accounts.length
+            ? accounts.map(a => `${a.accountId}${a.running ? ' ●' : ''}`).join(' · ')
+            : (ch.accountId || '—')}
+        </div>
+        <span class="channel-card__badge ${running ? '' : 'offline'}">
+          ${running ? L('channels.liveRunning') : L('channels.liveStopped')}
+        </span>
+      </div>
+    `;
+  }
+
   _getChannelIcon(iconName: string) {
     const iconMap: Record<string, any> = {
       'chat-bubble': html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
@@ -608,8 +637,9 @@ export class ChannelsPage extends LitElement {
             <select class="form-input" .value=${this._qqAgent}
               @change=${(e: Event) => { this._qqAgent = (e.target as HTMLSelectElement).value; }}
             >
-              <option value="main">main</option>
-              <option value="ops">ops</option>
+              ${this._bindAgents.length
+                ? this._bindAgents.map((a: any) => html`<option value=${a.id}>${a.id}${a.id === this._bindDefaultId ? ' (' + L('agents.default') + ')' : ''}</option>`)
+                : html`<option value="main">main</option>`}
             </select>
             <div class="form-hint">${L('channels.bindAgentHint')}</div>
           </div>
@@ -669,11 +699,16 @@ export class ChannelsPage extends LitElement {
             </div>
           ` : ''}
 
-          <!-- Install status -->
-          ${this._wechatInstalled ? html`
+          <!-- 接入状态（来自 channels.status 实时数据） -->
+          ${this._liveChannels['openclaw-weixin'] ? html`
             <div class="info-box">
-              <div class="info-box__title">${L('channels.wechatInstalled')} ${L('channels.wechatVersion')} ${this._wechatVersion}</div>
-              <div class="info-box__desc">${L('channels.wechatLatest')}</div>
+              <div class="info-box__title">
+                ${L('channels.wechatInstalled')} ·
+                ${this._liveChannels['openclaw-weixin'].running ? L('channels.liveRunning') : L('channels.liveStopped')}
+              </div>
+              <div class="info-box__desc">
+                ${(this._bindAccounts['openclaw-weixin'] || []).map(a => a.accountId).join(' · ') || '—'}
+              </div>
             </div>
           ` : ''}
 
@@ -755,6 +790,14 @@ export class ChannelsPage extends LitElement {
 
         <!-- Channels grid -->
         ${this._activeTab === 'channels' ? html`
+          ${this._liveChannelOrder.length ? html`
+            <div class="channels-section" style="margin-bottom:12px;">
+              <div class="channels-section__title">${L('channels.connectedChannels')}</div>
+              <div class="channel-grid">
+                ${this._liveChannelOrder.map(id => this._renderLiveChannelCard(id))}
+              </div>
+            </div>
+          ` : ''}
           <div class="channels-section">
             <div class="channels-section__title">${L('channels.availablePlatforms')}</div>
             <div class="channel-grid">

@@ -57,8 +57,9 @@ class GatewayManager:
 
     async def status(self) -> dict:
         """健康检查：网关是否可达 + 监听 PID"""
-        reachable = await self._is_reachable()
-        pid = self._find_pid_on_port(self.port)
+        reachable, pid = await asyncio.gather(
+            self._is_reachable(), self._find_pid_on_port(self.port)
+        )
         return {
             "running": reachable,
             "pid": pid,
@@ -77,14 +78,14 @@ class GatewayManager:
 
     async def stop(self) -> dict:
         """结束监听网关端口的进程"""
-        pid = self._find_pid_on_port(self.port)
+        pid = await self._find_pid_on_port(self.port)
         if pid is None:
             return {"stopped": False, "reason": "no_process", "message": "网关未在运行"}
-        self._kill_pid(pid)
+        await self._kill_pid(pid)
         # 等待端口释放
         for _ in range(20):
             await asyncio.sleep(0.5)
-            if self._find_pid_on_port(self.port) is None:
+            if await self._find_pid_on_port(self.port) is None:
                 logger.info("网关已停止 (pid=%d)", pid)
                 return {"stopped": True, "pid": pid, "message": f"已停止网关 (PID {pid})"}
         return {"stopped": False, "reason": "timeout", "message": "停止超时，进程可能仍在退出"}
@@ -113,7 +114,7 @@ class GatewayManager:
         for _ in range(30):
             await asyncio.sleep(1)
             if await self._is_reachable():
-                pid = self._find_pid_on_port(self.port)
+                pid = await self._find_pid_on_port(self.port)
                 logger.info("网关已启动 (pid=%s)", pid)
                 return {"started": True, "pid": pid, "message": "网关已启动"}
         return {"started": False, "message": "网关启动超时（30 秒内未就绪）"}
@@ -129,7 +130,13 @@ class GatewayManager:
 
     # ── 进程工具（Windows）────────────────────────────
 
-    def _find_pid_on_port(self, port: int) -> int | None:
+    # netstat / taskkill 是同步子进程，可能耗时数秒，必须放线程池执行，
+    # 否则会阻塞事件循环，导致期间 Sidecar 所有请求（含授权校验）卡死。
+
+    async def _find_pid_on_port(self, port: int) -> int | None:
+        return await asyncio.to_thread(self._find_pid_on_port_sync, port)
+
+    def _find_pid_on_port_sync(self, port: int) -> int | None:
         """通过 netstat 找到监听指定端口的 PID"""
         try:
             result = subprocess.run(
@@ -145,11 +152,14 @@ class GatewayManager:
             logger.exception("查找端口 PID 失败")
         return None
 
-    def _kill_pid(self, pid: int) -> None:
-        """结束指定 PID 的进程"""
+    async def _kill_pid(self, pid: int) -> None:
+        await asyncio.to_thread(self._kill_pid_sync, pid)
+
+    def _kill_pid_sync(self, pid: int) -> None:
+        """结束指定 PID 的进程树（/T 连带子进程，避免插件子进程残留）"""
         try:
             subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
                 capture_output=True, timeout=10,
             )
         except Exception:

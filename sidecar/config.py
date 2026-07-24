@@ -49,7 +49,9 @@ class GatewayConfig:
     log_level: str = "INFO"
 
     # License 授权服务器地址
-    license_server_url: str = "https://license.example.com"
+    # 默认指向本地 License Server（:9000，单独运行 license_server\start.bat），便于开发/测试；
+    # 生产部署时通过环境变量 LICENSE_SERVER_URL 注入公网地址
+    license_server_url: str = "http://127.0.0.1:9000"
 
     @classmethod
     def from_env_and_args(cls, **kwargs) -> "GatewayConfig":

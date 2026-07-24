@@ -8,9 +8,7 @@ import './components/page-header.js';
 import './pages/init-page.js';
 import './pages/dashboard-page.js';
 import './pages/chat-page.js';
-import './pages/sessions-page.js';
 import './pages/logs-page.js';
-import './pages/usage-page.js';
 import './pages/skills-page.js';
 import './pages/memory-page.js';
 import './pages/cron-page.js';
@@ -21,7 +19,6 @@ import './pages/channels-page.js';
 import './pages/services-page.js';
 import './pages/models-page.js';
 import './pages/gateway-page.js';
-import './pages/security-page.js';
 import './pages/diagnostics-page.js';
 import './pages/browser-page.js';
 import './pages/codex-page.js';
@@ -37,11 +34,11 @@ import './pages/hermes-installer-page.js';
 import './pages/ai-page.js';
 
 const TAB_ICONS: Record<string, string> = {
-  dashboard:'layout-dashboard', chat:'message-square', sessions:'history', logs:'scroll-text',
-  usage:'bar-chart-3', skills:'puzzle', memory:'database', cron:'clock',
+  dashboard:'layout-dashboard', chat:'message-square', logs:'scroll-text',
+  skills:'puzzle', memory:'database', cron:'clock',
   extensions:'palette', ai:'bot', settings:'settings',
   services:'server', models:'cpu', agents:'users', gateway:'antenna',
-  channels:'share-2', security:'shield', diagnostics:'stethoscope', browser:'globe',
+  channels:'share-2', diagnostics:'stethoscope', browser:'globe',
   codex:'terminal', sandbox:'shield',
   'hermes-service':'server',
   'hermes-env':'key',
@@ -60,7 +57,7 @@ function buildRoutes(): Record<string, { label: string; icon: string; subtitle: 
 function buildSections(engine: string): Array<{ heading: string | null; tabs: string[] }> {
   if (engine === 'hermes') {
     return [
-      { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','sessions','logs','usage'] },
+      { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
       { heading: L('sections.Extensions'), tabs: ['skills','memory','cron','extensions','settings'] },
     ];
   }
@@ -73,7 +70,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
   }
   return [
     { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','services','logs'] },
-    { heading: L('sections.Config'), tabs: ['models','agents','gateway','browser','channels','security'] },
+    { heading: L('sections.Config'), tabs: ['models','agents','gateway','browser','channels'] },
     { heading: L('sections.Extensions'), tabs: ['skills','settings','diagnostics'] },
   ];
 }
@@ -169,22 +166,6 @@ export class OpenClawApp extends LitElement {
   @state() _page = 'dashboard';
   @state() _connected = false;
   @state() _snapshot = { status:'Offline', uptime:'--', version:'1.0.0' };
-  @state() _instances: Array<{id:string;mode:string;connected:string}> = [];
-  @state() _sessions = [{ key:'main', agent:'Main Assistant', created:Date.now(), messages:0 }];
-  @state() _agents = [
-    { id:'main', name:'Main Assistant', model:'Default', status:'active' },
-    { id:'ops', name:'Ops Assistant', model:'Default', status:'active' },
-  ];
-  @state() _cronJobs = [
-    { id:'1', name:'Morning Brief', schedule:'0 7 * * *', enabled:true, desc:'Daily morning summary' },
-    { id:'2', name:'Health Check', schedule:'*/30 * * * *', enabled:true, desc:'Gateway status check' },
-  ];
-  @state() _skills = [
-    { name:'Browser', desc:'Web browsing', enabled:true },
-    { name:'File System', desc:'Read/write files', enabled:true },
-    { name:'Shell', desc:'Execute commands', enabled:true },
-    { name:'Memory', desc:'Persistent store', enabled:true },
-  ];
   @state() _theme = 'claw';
   @state() _themeMode = 'dark';
   @state() _engine = 'openclaw';
@@ -238,29 +219,26 @@ export class OpenClawApp extends LitElement {
         if (this._engine === 'hermes') {
           return html`<hermes-dashboard-page title=${title('dashboard')} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-dashboard-page>`;
         }
-        return html`<dashboard-page title=${title('dashboard')} subtitle=${L('dashboard.subtitle')} .connected=${this._connected} .instances=${this._instances} .sessions=${this._sessions} .cronJobs=${this._cronJobs} .skills=${this._skills} .models=${this._agents} .snapshot=${this._snapshot} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
+        return html`<dashboard-page title=${title('dashboard')} subtitle=${L('dashboard.subtitle')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
       case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected} .engine=${this._engine}></chat-page>`;
-      case 'sessions': return html`<sessions-page title=${title('sessions')} subtitle=${sub('sessions')} .sessions=${this._sessions}></sessions-page>`;
       case 'logs':
         if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
         return html`<logs-page title=${title('logs')} subtitle=${sub('logs')}></logs-page>`;
-      case 'usage': return html`<usage-page title=${title('usage')}></usage-page>`;
       case 'skills':
         if (this._engine === 'hermes') return html`<hermes-skills-page title=${title('skills')} subtitle=${sub('skills')}></hermes-skills-page>`;
-        return html`<skills-page title=${title('skills')} subtitle=${sub('skills')} .skills=${this._skills}></skills-page>`;
+        return html`<skills-page title=${title('skills')} subtitle=${sub('skills')}></skills-page>`;
       case 'memory':
         if (this._engine === 'hermes') return html`<hermes-memory-page title=${title('memory')} subtitle=${sub('memory')}></hermes-memory-page>`;
         return html`<memory-page title=${title('memory')} subtitle=${sub('memory')}></memory-page>`;
-      case 'cron': return html`<cron-page title=${title('cron')} .cronJobs=${this._cronJobs}></cron-page>`;
+      case 'cron': return html`<cron-page title=${title('cron')}></cron-page>`;
       case 'extensions': return html`<extensions-page title=${title('extensions')}></extensions-page>`;
       case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')}></ai-page>`;
-      case 'agents': return html`<agents-page title=${title('agents')} .agents=${this._agents} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
+      case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
       case 'settings': return html`<settings-page title=${title('settings')} subtitle=${sub('settings')} .theme=${this._theme} .themeMode=${this._themeMode} .snapshot=${this._snapshot} @set-theme=${(e:CustomEvent)=>this._setTheme(e.detail.value)} @set-mode=${(e:CustomEvent)=>this._setThemeMode(e.detail.value)}></settings-page>`;
       case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')}></channels-page>`;
       case 'services': return html`<services-page title=${title('services')} subtitle=${sub('services')}></services-page>`;
       case 'models': return html`<models-page title=${title('models')} subtitle=${sub('models')}></models-page>`;
       case 'gateway': return html`<gateway-page title=${title('gateway')} subtitle=${sub('gateway')}></gateway-page>`;
-      case 'security': return html`<security-page title=${title('security')} subtitle=${sub('security')}></security-page>`;
       case 'diagnostics': return html`<diagnostics-page title=${title('diagnostics')} subtitle=${sub('diagnostics')}></diagnostics-page>`;
       case 'browser': return html`<browser-page title=${title('browser')} subtitle=${sub('browser')}></browser-page>`;
       case 'codex': return html`<codex-page title=${title('codex')} subtitle=${sub('codex')}></codex-page>`;
@@ -270,7 +248,7 @@ export class OpenClawApp extends LitElement {
       case 'hermes-config': return html`<hermes-config-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-config-page>`;
       case 'hermes-logs': return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
       case 'hermes-installer': return html`<hermes-installer-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-installer-page>`;
-      default: return html`<dashboard-page title=${title('dashboard')} subtitle=${sub('dashboard')} .connected=${this._connected} .instances=${this._instances} .sessions=${this._sessions} .cronJobs=${this._cronJobs} .skills=${this._skills} .models=${this._agents} .snapshot=${this._snapshot} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
+      default: return html`<dashboard-page title=${title('dashboard')} subtitle=${sub('dashboard')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
     }
   }
 

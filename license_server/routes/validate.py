@@ -2,12 +2,19 @@
 校验端点 — POST /validate
 
 Gateway 定时/启动时调用，验证 JWT token 和 device_fp 是否仍然有效。
+
+状态码约定（客户端 sidecar/services/license.py 依此分支处理）：
+  200 {valid:true}  校验通过
+  401  JWT 签名无效 / claims 缺失
+  403  设备指纹不匹配（此码已绑其他设备）
+  404  激活码不存在
+  410  激活码已被吊销（客户端会清除本地授权记录）
 """
 
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +61,8 @@ async def validate(
     payload = _verify_jwt(config, body.activation_token)
     if payload is None:
         await _audit(db, "reject", detail="JWT 签名无效", client_ip=client_ip)
-        return ValidateResponse(valid=False, reason="授权令牌无效")
+        await db.commit()
+        raise HTTPException(status_code=401, detail="授权令牌无效")
 
     # 2. 提取 claims
     code_id = payload.get("sub", "").removeprefix("code_")
@@ -62,7 +70,8 @@ async def validate(
 
     if not code_id or not token_fp_hash:
         await _audit(db, "reject", detail="JWT claims 缺失", client_ip=client_ip)
-        return ValidateResponse(valid=False, reason="授权令牌格式无效")
+        await db.commit()
+        raise HTTPException(status_code=401, detail="授权令牌格式无效")
 
     # 3. 校验 device_fp_hash
     if token_fp_hash != body.device_fp_hash:
@@ -71,7 +80,7 @@ async def validate(
                     detail=f"设备指纹不匹配: token={token_fp_hash[:16]} incoming={body.device_fp_hash[:16]}",
                     client_ip=client_ip)
         await db.commit()
-        return ValidateResponse(valid=False, reason="设备指纹不匹配")
+        raise HTTPException(status_code=403, detail="设备指纹不匹配，此码已绑定其他设备")
 
     # 4. 检查激活码状态
     result = await db.execute(
@@ -82,12 +91,12 @@ async def validate(
     if code_record is None:
         await _audit(db, "reject", code_id=code_id, detail="激活码不存在", client_ip=client_ip)
         await db.commit()
-        return ValidateResponse(valid=False, reason="激活码无效")
+        raise HTTPException(status_code=404, detail="激活码无效")
 
     if code_record.status == "revoked":
         await _audit(db, "reject", code_id=code_id, detail="激活码已被吊销", client_ip=client_ip)
         await db.commit()
-        return ValidateResponse(valid=False, reason="此激活码已被吊销")
+        raise HTTPException(status_code=410, detail="此激活码已被吊销")
 
     # 5. 更新 last_validated_at
     bind_result = await db.execute(

@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, i18n } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/page-header.js';
 
@@ -83,6 +83,82 @@ export class SettingsPage extends LitElement {
   @state() _modelProxy = false;
   @state() _lang = 'zh-CN';
   @state() _autoStart = false;
+  @state() _msg = '';
+  @state() _msgCls = '';
+  _msgTimer: ReturnType<typeof setTimeout> | null = null;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._lang = i18n.locale;
+    this._loadPrefs();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._msgTimer) clearTimeout(this._msgTimer);
+  }
+
+  // 偏好持久化（浏览器本地；系统级自启动需桌面壳接入后生效）
+  static PREFS_KEY = 'openclaw.settings.prefs';
+
+  _loadPrefs() {
+    try {
+      const raw = localStorage.getItem(SettingsPage.PREFS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p.proxyUrl === 'string') this._proxyUrl = p.proxyUrl;
+        if (typeof p.modelProxy === 'boolean') this._modelProxy = p.modelProxy;
+        if (typeof p.autoStart === 'boolean') this._autoStart = p.autoStart;
+      }
+    } catch { /* 损坏则用默认值 */ }
+  }
+
+  _persistPrefs() {
+    try {
+      localStorage.setItem(SettingsPage.PREFS_KEY, JSON.stringify({
+        proxyUrl: this._proxyUrl,
+        modelProxy: this._modelProxy,
+        autoStart: this._autoStart,
+      }));
+    } catch { /* localStorage 不可用时静默 */ }
+  }
+
+  _flash(text: string, cls: 'ok' | 'err') {
+    this._msg = text;
+    this._msgCls = cls;
+    if (this._msgTimer) clearTimeout(this._msgTimer);
+    this._msgTimer = setTimeout(() => { this._msg = ''; }, 2500);
+  }
+
+  _saveProxy() {
+    this._persistPrefs();
+    this._flash(L('common.configSaved'), 'ok');
+  }
+
+  /** 代理连通性：端口可达即视为通（no-cors 探测，规避跨域） */
+  async _testProxy() {
+    const url = this._proxyUrl.trim();
+    if (!url) {
+      this._flash(L('settings.proxyEmpty'), 'err');
+      return;
+    }
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      await fetch(url, { mode: 'no-cors', signal: ctrl.signal });
+      clearTimeout(timer);
+      this._flash(L('settings.proxyReachable'), 'ok');
+    } catch {
+      this._flash(L('settings.proxyUnreachable'), 'err');
+    }
+  }
+
+  _closeProxy() {
+    this._proxyUrl = '';
+    this._modelProxy = false;
+    this._persistPrefs();
+    this._flash(L('common.configSaved'), 'ok');
+  }
 
   _emit(name: string, detail: any) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -101,13 +177,14 @@ export class SettingsPage extends LitElement {
               placeholder="http://127.0.0.1:7897"
               @input=${(e: Event) => { this._proxyUrl = (e.target as HTMLInputElement).value; }}
             />
-            <button class="settings-btn primary">${L('common.save')}</button>
-            <button class="settings-btn ghost">${L('settings.testConnection')}</button>
-            <button class="settings-btn ghost">${L('settings.closeProxy')}</button>
+            <button class="settings-btn primary" @click=${() => this._saveProxy()}>${L('common.save')}</button>
+            <button class="settings-btn ghost" @click=${() => this._testProxy()}>${L('settings.testConnection')}</button>
+            <button class="settings-btn ghost" @click=${() => this._closeProxy()}>${L('settings.closeProxy')}</button>
           </div>
           <div class="settings-hint">
             ${L('settings.proxyHint')}
           </div>
+          ${this._msg ? html`<div class="settings-hint" style="color:${this._msgCls === 'ok' ? 'var(--success)' : 'var(--danger)'};">${this._msg}</div>` : ''}
         </div>
 
         <!-- Model request proxy -->
@@ -115,10 +192,10 @@ export class SettingsPage extends LitElement {
           <div class="settings-section__title">${L('settings.modelRequestProxy')}</div>
           <div class="settings-checkbox-row">
             <input type="checkbox" id="modelProxy" .checked=${this._modelProxy}
-              @change=${(e: Event) => { this._modelProxy = (e.target as HTMLInputElement).checked; }}
+              @change=${(e: Event) => { this._modelProxy = (e.target as HTMLInputElement).checked; this._persistPrefs(); }}
             />
             <label for="modelProxy">${L('settings.modelProxyLabel')}</label>
-            <button class="settings-btn primary" style="margin-left:8px;">${L('common.save')}</button>
+            <button class="settings-btn primary" style="margin-left:8px;" @click=${() => this._saveProxy()}>${L('common.save')}</button>
           </div>
           <div class="settings-hint">
             ${L('settings.modelProxyHint')}
@@ -147,7 +224,7 @@ export class SettingsPage extends LitElement {
           <div class="settings-section__title">${L('settings.autoStart')}</div>
           <div class="settings-checkbox-row">
             <input type="checkbox" id="autoStart" .checked=${this._autoStart}
-              @change=${(e: Event) => { this._autoStart = (e.target as HTMLInputElement).checked; }}
+              @change=${(e: Event) => { this._autoStart = (e.target as HTMLInputElement).checked; this._persistPrefs(); }}
             />
             <label for="autoStart">${L('settings.autoStartLabel')}</label>
           </div>

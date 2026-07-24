@@ -74,6 +74,22 @@ export class ChatPage extends LitElement {
       font-family: var(--font-mono); font-size: 12px;
     }
     .session-item__time { flex-shrink: 0; font-size: 10px; color: var(--muted); }
+    .session-item__del {
+      flex-shrink: 0; width: 20px; height: 20px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent; border: none; border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer; opacity: 0;
+      transition: opacity var(--duration-fast), color var(--duration-fast);
+    }
+    .session-item:hover .session-item__del { opacity: 1; }
+    .session-item__del:hover { color: var(--danger); background: var(--danger-subtle); }
+    .session-item__confirm { flex-shrink: 0; display: inline-flex; gap: 4px; }
+    .session-item__confirm button {
+      padding: 1px 8px; font-size: 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); cursor: pointer;
+    }
+    .session-item__confirm .yes { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .session-item__confirm .no { background: transparent; color: var(--text-soft); }
 
     /* === chat main === */
     .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -501,6 +517,36 @@ export class ChatPage extends LitElement {
 
   _toggleSessionList() { this._showSessionList = !this._showSessionList; }
 
+  @state() _confirmDeleteId: string | null = null;
+  @state() _deleting = false;
+
+  async _deleteSession(id: string) {
+    if (this._deleting) return;
+    this._deleting = true;
+    const ok = await this._engineAdapter.deleteSession(id);
+    this._deleting = false;
+    this._confirmDeleteId = null;
+    if (!ok) {
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.deleteFailed')}` }];
+      this._scrollToBottom();
+      return;
+    }
+    const wasActive = this._sessionKey === id;
+    if (wasActive) {
+      this._chatCancel?.abort();
+      this._chatCancel = null;
+      this._streaming = false;
+    }
+    await this._loadSessions();
+    if (wasActive) {
+      const next = this._sessions.find(s => s.id !== id);
+      const fallback = next?.id || this._engineAdapter.defaultSessionId();
+      this._sessionKey = fallback || '';
+      this._messages = [];
+      if (this._sessionKey) await this._loadHistory();
+    }
+  }
+
   _selectSession(id: string) {
     if (id === this._sessionKey) {
       this._showSessionList = false;
@@ -608,6 +654,17 @@ export class ChatPage extends LitElement {
               <span class="session-item__dot ${this._sessionKey === s.id ? 'active' : 'idle'}"></span>
               <span class="session-item__name">${s.name}</span>
               ${s.updatedAt ? html`<span class="session-item__time">${formatRelTime(s.updatedAt)}</span>` : ''}
+              ${this._confirmDeleteId === s.id ? html`
+                <span class="session-item__confirm" @click=${(e: Event) => e.stopPropagation()}>
+                  <button class="yes" ?disabled=${this._deleting} @click=${() => this._deleteSession(s.id)}>${L('chat.deleteConfirmYes')}</button>
+                  <button class="no" ?disabled=${this._deleting} @click=${() => { this._confirmDeleteId = null; }}>${L('chat.deleteConfirmNo')}</button>
+                </span>
+              ` : html`
+                <button class="session-item__del" title=${L('chat.deleteSession')}
+                  @click=${(e: Event) => { e.stopPropagation(); this._confirmDeleteId = s.id; }}>
+                  ${icons['trash']}
+                </button>
+              `}
             </div>
           `)}
         </div>

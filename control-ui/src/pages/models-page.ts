@@ -2,18 +2,27 @@ import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
+import { getSharedStore } from '../store/shared.js';
 import '../components/oc-dialog.js';
 import '../components/page-header.js';
 
 /**
  * ModelsPage — 模型配置页
  *
+ * 数据源 = OpenClaw 网关配置（WS RPC config.get / config.patch）：
+ *   - 服务商/模型    → config.models.providers（字典：{ <id>: { baseUrl, apiKey, models[] } }）
+ *   - 主模型（★）   → config.agents.defaults.model（"provider/model" 引用）
+ * 保存采用读-改-写 + baseHash 乐观并发，replacePaths 限定 models/agents 两棵子树，
+ * 且回写完整子树（保留模型条目的 contextWindow/cost 等元数据与其他 agent 配置）。
+ *
+ * localStorage（openclaw.models.config）降级为镜像缓存：每次从网关加载/保存成功后
+ * 同步一份，供聊天页/AI 页等 localStorage 读取方使用；网关未连接时页面只读并展示本地缓存。
+ *
  * 功能：
  *  - 添加/编辑/删除服务商（Provider）
  *  - 每个服务商下可添加多个模型（输入模型名回车添加）
- *  - 标记主模型（★），其余作为备选自动切换
+ *  - 标记主模型（★），写入 agents.defaults.model
  *  - 搜索模型（按 ID 或服务商名过滤）
- *  - 配置自动保存到 localStorage，刷新不丢失
  *  - 「撤销」一键清空全部服务商
  */
 
@@ -23,7 +32,6 @@ type ProviderConfig = {
   name: string;
   baseUrl: string;
   apiKey: string;
-  apiType: string;
   models: ModelEntry[];
 };
 
@@ -33,6 +41,7 @@ type ConfirmState = {
   onConfirm: () => void;
 };
 
+/** localStorage 镜像 key（与 utils/model-config.ts 共用） */
 const STORAGE_KEY = 'openclaw.models.config';
 
 const PROVIDER_PRESETS = [
@@ -85,12 +94,24 @@ export class ModelsPage extends LitElement {
       display: inline-flex; align-items: center; gap: 4px;
     }
     .models-toolbar .btn-revoke:hover { background: var(--bg-hover); color: var(--text); }
+    .source-badge {
+      font-size: 11px; color: var(--muted); border: 1px solid var(--border);
+      padding: 2px 10px; border-radius: var(--radius-full);
+    }
     .save-flash {
       margin-left: auto; font-size: 12px; color: var(--success);
       display: inline-flex; align-items: center; gap: 4px;
       animation: save-in 0.25s ease;
     }
+    .saving-hint {
+      margin-left: auto; font-size: 12px; color: var(--muted);
+      display: inline-flex; align-items: center; gap: 4px;
+    }
     @keyframes save-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+    .models-error {
+      font-size: 12px; color: var(--danger); margin: -4px 0 12px;
+      word-break: break-all;
+    }
 
     /* === hint === */
     .models-hint {
@@ -219,6 +240,7 @@ export class ModelsPage extends LitElement {
       transition: border-color var(--duration-fast); box-sizing: border-box;
     }
     .provider-form .form-input:focus { border-color: var(--accent); }
+    .provider-form .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
     .provider-form .form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
     .provider-form select.form-input { cursor: pointer; }
 
@@ -272,13 +294,18 @@ export class ModelsPage extends LitElement {
   @state() _search = '';
   @state() _saveFlash = false;
 
+  // 网关连接 / 数据源状态
+  @state() _connected = false;
+  @state() _source: 'gateway' | 'local' = 'local';
+  @state() _saving = false;
+  @state() _saveError = '';
+
   // 添加/编辑对话框状态
   @state() _dialogOpen = false;
   @state() _editingId: string | null = null;
   @state() _formProviderName = '';
   @state() _formBaseUrl = '';
   @state() _formApiKey = '';
-  @state() _formApiType = 'openai';
   @state() _formSelectedPreset = '';
   @state() _formModels: string[] = [];
   @state() _formModelInput = '';
@@ -289,15 +316,93 @@ export class ModelsPage extends LitElement {
   // 行内添加模型的输入（按 provider id 索引）
   _inlineInputs: Record<string, string> = {};
   _saveTimer: ReturnType<typeof setTimeout> | null = null;
+  _storeUnsub: (() => void) | null = null;
+
+  /** 网关侧模型条目原始元数据（contextWindow/cost/compat…），保存时原样带回避免丢字段 */
+  _rawModels: Record<string, Record<string, any>> = {};
+  /** 网关侧服务商条目原始字段，保存时合并回写 */
+  _rawProviders: Record<string, any> = {};
+  /** 待删除的服务商 id（merge-patch 不会自动删键，保存时显式置 null + 精确路径） */
+  _pendingDeletes = new Set<string>();
+  /** 当前 agents.defaults.model 引用（"provider/model"） */
+  _defaultModelRef = '';
 
   connectedCallback() {
     super.connectedCallback();
-    this._load();
+    const store = getSharedStore();
+    this._storeUnsub = store.subscribe(snap => {
+      const was = this._connected;
+      this._connected = snap.connected;
+      // 网关（重新）连上 → 拉取权威配置
+      if (snap.connected && !was) this._loadFromGateway();
+    });
+    // subscribe 会同步回灌当前快照：已连接时上面已触发加载；未连接时走本地兜底
+    if (!store.connected) this._loadFromGateway();
   }
 
-  // ── 持久化 ──────────────────────────────────────────
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._storeUnsub?.();
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+  }
 
-  _load() {
+  // ── 加载 ──────────────────────────────────────────
+
+  /** 从网关 config.get 加载（权威数据源）；不可达时回退本地缓存 */
+  async _loadFromGateway() {
+    const store = getSharedStore();
+    if (!store.connected) {
+      this._loadFromLocal();
+      return;
+    }
+    try {
+      const g = await store.request<any>('config.get', {});
+      const cfg = g?.config || g?.parsed || {};
+      const provs = cfg?.models?.providers || {};
+      const m = cfg?.agents?.defaults?.model;
+      this._defaultModelRef = typeof m === 'string' ? m : (m?.model || '');
+
+      const rawProviders: Record<string, any> = {};
+      const rawModels: Record<string, Record<string, any>> = {};
+      const list: ProviderConfig[] = [];
+      for (const [id, rawAny] of Object.entries(provs)) {
+        const raw = (rawAny || {}) as any;
+        rawProviders[id] = raw;
+        const metas: Record<string, any> = {};
+        const models: ModelEntry[] = [];
+        for (const mm of (Array.isArray(raw.models) ? raw.models : [])) {
+          const mid = typeof mm === 'string' ? mm : String(mm?.id ?? '');
+          if (!mid) continue;
+          metas[mid] = mm;
+          models.push({ id: mid, isPrimary: this._defaultModelRef === `${id}/${mid}` });
+        }
+        rawModels[id] = metas;
+        list.push({
+          id,
+          name: id,
+          baseUrl: String(raw.baseUrl ?? ''),
+          apiKey: String(raw.apiKey ?? ''),
+          models,
+        });
+      }
+      this._providers = list;
+      this._rawProviders = rawProviders;
+      this._rawModels = rawModels;
+      this._source = 'gateway';
+      this._saveError = '';
+      this._mirrorToLS();
+    } catch (e) {
+      this._loadFromLocal();
+      this._saveError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /** 本地缓存兜底（网关不可达时只读展示） */
+  _loadFromLocal() {
+    this._source = 'local';
+    this._rawProviders = {};
+    this._rawModels = {};
+    this._defaultModelRef = '';
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -308,33 +413,132 @@ export class ModelsPage extends LitElement {
             name: String(p.name ?? ''),
             baseUrl: String(p.baseUrl ?? ''),
             apiKey: String(p.apiKey ?? ''),
-            apiType: String(p.apiType ?? 'openai'),
             models: Array.isArray(p.models)
               ? p.models.map((m: any) => ({ id: String(m.id ?? ''), isPrimary: !!m.isPrimary }))
               : [],
           }));
+          return;
         }
       }
-    } catch { /* 损坏的配置忽略，从空开始 */ }
+    } catch { /* 损坏的缓存忽略，从空开始 */ }
+    this._providers = [];
   }
 
-  _persist() {
+  /** 镜像到 localStorage，供 utils/model-config.ts 的读取方（聊天/AI 页）使用 */
+  _mirrorToLS() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ providers: this._providers }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        providers: this._providers.map(p => ({ ...p, apiType: 'openai' })),
+      }));
     } catch { /* localStorage 不可用时静默 */ }
-    this._saveFlash = true;
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
+  }
+
+  // ── 保存（写回网关配置）────────────────────────────
+
+  /** 网关不可达时禁止改动，给出提示 */
+  _requireConnected(): boolean {
+    if (this._connected) return true;
+    this._saveError = L('models.gwDisconnected');
+    return false;
+  }
+
+  /**
+   * 写回网关：config.patch（baseHash 乐观并发，merge-patch 语义）。
+   *
+   * 实测得到的网关契约：
+   *  - 合并语义：raw 中缺失的键保持原值 → 天然保留模型条目元数据与其他配置
+   *  - 删键：值置 null，且必须在 replacePaths 列出精确路径
+   *    （'models.providers.<id>' 与其数组 'models.providers.<id>.models'），
+   *    否则被「数组删除保护」拒绝
+   *  - 模型条目 name 为必填 → 新条目补 {id, name: id}
+   *  - agents.defaults.model 接受 "provider/model" 字符串；清除用 null + 精确路径
+   *  - 限速：config.patch 3 次/分钟 → 失败时展示错误并允许重试
+   */
+  async _saveToGateway() {
+    const store = getSharedStore();
+    if (!store.connected) {
+      this._saveError = L('models.gwDisconnected');
+      return;
+    }
+    this._saving = true;
+    this._saveError = '';
+    try {
+      const g = await store.request<any>('config.get', {});
+      const cfg = g?.config || g?.parsed || {};
+      const existing = (cfg?.models?.providers || {}) as Record<string, any>;
+      const replacePaths: string[] = ['agents.defaults.model'];
+      const providersPatch: Record<string, any> = {};
+
+      // 删除项：null + 精确路径
+      for (const id of this._pendingDeletes) {
+        if (existing[id] !== undefined) {
+          providersPatch[id] = null;
+          replacePaths.push(`models.providers.${id}`, `models.providers.${id}.models`);
+        }
+      }
+
+      // 新增/更新项：合并回原始条目字段；模型数组显式声明替换意图
+      for (const p of this._providers) {
+        const orig = this._rawProviders[p.id] || {};
+        const metas = this._rawModels[p.id] || {};
+        providersPatch[p.id] = {
+          ...orig,
+          ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
+          ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+          models: p.models.map(m => metas[m.id] || { id: m.id, name: m.id }),
+        };
+        replacePaths.push(`models.providers.${p.id}.models`);
+      }
+
+      // 主模型引用；无主模型则置 null 清除引用
+      let primaryRef = '';
+      for (const p of this._providers) {
+        const pm = p.models.find(x => x.isPrimary);
+        if (pm) { primaryRef = `${p.id}/${pm.id}`; break; }
+      }
+
+      await store.request('config.patch', {
+        raw: JSON.stringify({
+          models: { providers: providersPatch },
+          agents: { defaults: { model: primaryRef || null } },
+        }),
+        baseHash: g?.hash || '',
+        replacePaths,
+      });
+
+      this._defaultModelRef = primaryRef;
+      this._pendingDeletes.clear();
+      this._mirrorToLS();
+      this._saveFlash = true;
+      if (this._saveTimer) clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
+      // 以网关归一化后的配置为准（刷新 hash 与元数据缓存）
+      await this._loadFromGateway();
+    } catch (e) {
+      this._saveError = this._errMsg(e);
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  /** GatewayError 的 message 是 JSON 串，提取其中的可读信息 */
+  _errMsg(e: unknown): string {
+    const raw = e instanceof Error ? e.message : String(e);
+    try {
+      const j = JSON.parse(raw);
+      if (j?.message) return String(j.message);
+    } catch { /* 非 JSON，原样返回 */ }
+    return raw;
   }
 
   // ── 对话框：打开 / 关闭 ─────────────────────────────
 
   _openAddDialog() {
+    if (!this._requireConnected()) return;
     this._editingId = null;
     this._formProviderName = '';
     this._formBaseUrl = '';
     this._formApiKey = '';
-    this._formApiType = 'openai';
     this._formSelectedPreset = '';
     this._formModels = [];
     this._formModelInput = '';
@@ -342,13 +546,13 @@ export class ModelsPage extends LitElement {
   }
 
   _openEditDialog(id: string) {
+    if (!this._requireConnected()) return;
     const p = this._providers.find(x => x.id === id);
     if (!p) return;
     this._editingId = id;
     this._formProviderName = p.name;
     this._formBaseUrl = p.baseUrl;
     this._formApiKey = p.apiKey;
-    this._formApiType = p.apiType;
     this._formSelectedPreset = '';
     this._formModels = p.models.map(m => m.id);
     this._formModelInput = '';
@@ -364,10 +568,6 @@ export class ModelsPage extends LitElement {
     this._formProviderName = preset.name;
     this._formBaseUrl = preset.baseUrl;
     this._formModels = [...preset.models];
-    if (preset.name.includes('Ollama')) this._formApiType = 'ollama';
-    else if (preset.name.includes('Anthropic')) this._formApiType = 'anthropic';
-    else if (preset.name.includes('Gemini')) this._formApiType = 'google';
-    else this._formApiType = 'openai';
   }
 
   // ── 对话框：模型 chips ──────────────────────────────
@@ -398,9 +598,10 @@ export class ModelsPage extends LitElement {
   _confirmProvider() {
     const name = this._formProviderName.trim();
     if (!name) return;
+    if (!this._requireConnected()) return;
 
     if (this._editingId) {
-      // 编辑模式：更新字段，保留已有模型的主模型标记
+      // 编辑模式：服务商 id（网关配置键）不变，更新其余字段，保留主模型标记
       this._providers = this._providers.map(p => {
         if (p.id !== this._editingId) return p;
         const oldPrimary = p.models.find(m => m.isPrimary)?.id;
@@ -411,31 +612,28 @@ export class ModelsPage extends LitElement {
         if (models.length && !models.some(m => m.isPrimary)) models[0].isPrimary = true;
         return {
           ...p,
-          name,
           baseUrl: this._formBaseUrl.trim(),
           apiKey: this._formApiKey.trim(),
-          apiType: this._formApiType,
           models,
         };
       });
     } else {
-      // 新增模式：生成唯一 id
-      const baseId = name.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'provider';
+      // 新增模式：名称转成合法配置键作为 id
+      const baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'provider';
       let id = baseId, n = 2;
       while (this._providers.some(p => p.id === id)) id = `${baseId}_${n++}`;
       const models: ModelEntry[] = this._formModels.map((mid, i) => ({ id: mid, isPrimary: i === 0 }));
       this._providers = [...this._providers, {
-        id, name,
+        id, name: id,
         baseUrl: this._formBaseUrl.trim(),
         apiKey: this._formApiKey.trim(),
-        apiType: this._formApiType,
         models,
       }];
       this._expanded = { ...this._expanded, [id]: true };
     }
 
-    this._persist();
     this._dialogOpen = false;
+    this._saveToGateway();
   }
 
   // ── 服务商：删除 / 清空 ─────────────────────────────
@@ -447,8 +645,10 @@ export class ModelsPage extends LitElement {
       title: L('models.deleteProviderTitle'),
       message: L('models.deleteProviderConfirm', { name: p.name, count: p.models.length }),
       onConfirm: () => {
+        if (!this._requireConnected()) return;
         this._providers = this._providers.filter(x => x.id !== id);
-        this._persist();
+        this._pendingDeletes.add(id);
+        this._saveToGateway();
       },
     };
   }
@@ -459,9 +659,11 @@ export class ModelsPage extends LitElement {
       title: L('models.revokeAllTitle'),
       message: L('models.revokeAllConfirm'),
       onConfirm: () => {
+        if (!this._requireConnected()) return;
+        for (const p of this._providers) this._pendingDeletes.add(p.id);
         this._providers = [];
         this._expanded = {};
-        this._persist();
+        this._saveToGateway();
       },
     };
   }
@@ -478,6 +680,7 @@ export class ModelsPage extends LitElement {
   // ── 模型：主模型 / 删除 / 行内添加 ──────────────────
 
   _togglePrimary(providerId: string, modelId: string) {
+    if (!this._requireConnected()) return;
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
       return {
@@ -492,24 +695,24 @@ export class ModelsPage extends LitElement {
         ...x, models: x.models.map((m, i) => ({ ...m, isPrimary: i === 0 })),
       });
     }
-    this._persist();
+    this._saveToGateway();
   }
 
   _deleteModel(providerId: string, modelId: string) {
+    if (!this._requireConnected()) return;
+    // 删除的若是主模型，网关侧引用一并清除（_saveToGateway 按当前状态重算引用）
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
-      let models = p.models.filter(m => m.id !== modelId);
-      if (models.length && !models.some(m => m.isPrimary)) {
-        models = models.map((m, i) => ({ ...m, isPrimary: i === 0 }));
-      }
+      const models = p.models.filter(m => m.id !== modelId);
       return { ...p, models };
     });
-    this._persist();
+    this._saveToGateway();
   }
 
   _addInlineModel(providerId: string) {
     const input = this._inlineInputs[providerId]?.trim();
     if (!input) return;
+    if (!this._requireConnected()) return;
     const ids = input.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
@@ -519,14 +722,8 @@ export class ModelsPage extends LitElement {
       return { ...p, models };
     });
     this._inlineInputs[providerId] = '';
-    this.persist_inline(providerId);
-    this._persist();
-  }
-
-  persist_inline(providerId: string) {
-    // 触发重渲染（_inlineInputs 不是响应式状态，手动 requestUpdate）
     this.requestUpdate();
-    void providerId;
+    this._saveToGateway();
   }
 
   _onInlineKeydown(e: KeyboardEvent, providerId: string) {
@@ -573,9 +770,12 @@ export class ModelsPage extends LitElement {
           <div class="sys-row">
             <span class="sys-row__label">${L('models.systemPrimary')}</span>
             ${primary
-              ? html`<span class="sys-row__value">${primary.id}</span>
+              ? html`<span class="sys-row__value">${primary.provider}/${primary.id}</span>
                      <span class="sys-row__sub">${primary.provider}</span>`
-              : html`<span class="sys-row__value empty">${L('models.notSet')}</span>`}
+              : this._defaultModelRef
+                ? html`<span class="sys-row__value">${this._defaultModelRef}</span>
+                       <span class="sys-row__sub">${L('dashboard.fromGatewayConfig')}</span>`
+                : html`<span class="sys-row__value empty">${L('models.notSet')}</span>`}
           </div>
           <div class="sys-row">
             <span class="sys-row__label">${L('models.systemBackup')}</span>
@@ -677,14 +877,14 @@ export class ModelsPage extends LitElement {
             <div class="form-hint" style="margin-bottom:12px;">${L('models.quickSelectHint')}</div>
           ` : ''}
 
-          <!-- 服务商名称 -->
+          <!-- 服务商名称（即网关配置键，编辑时不可改） -->
           <div class="form-group">
             <label class="form-label">${L('models.providerName')}</label>
             <input class="form-input" type="text" .value=${this._formProviderName}
-              placeholder="如 deepseek"
+              placeholder="如 deepseek" ?disabled=${isEdit}
               @input=${(e: Event) => { this._formProviderName = (e.target as HTMLInputElement).value; this._formSelectedPreset = ''; }}
             />
-            <div class="form-hint">${L('models.providerNameHint')}</div>
+            <div class="form-hint">${isEdit ? L('models.providerIdLocked') : L('models.providerNameHint')}</div>
           </div>
 
           <!-- 接口地址 -->
@@ -705,20 +905,6 @@ export class ModelsPage extends LitElement {
               @input=${(e: Event) => { this._formApiKey = (e.target as HTMLInputElement).value; }}
             />
             <div class="form-hint">${L('models.apiKeyHint')}</div>
-          </div>
-
-          <!-- 接口类型 -->
-          <div class="form-group">
-            <label class="form-label">${L('models.apiType')}</label>
-            <select class="form-input" .value=${this._formApiType}
-              @change=${(e: Event) => { this._formApiType = (e.target as HTMLSelectElement).value; }}
-            >
-              <option value="openai">${L('models.apiTypeOpenAI')}</option>
-              <option value="anthropic">${L('models.apiTypeAnthropic')}</option>
-              <option value="google">${L('models.apiTypeGoogle')}</option>
-              <option value="ollama">${L('models.apiTypeOllama')}</option>
-            </select>
-            <div class="form-hint">${L('models.apiTypeHint')}</div>
           </div>
 
           <!-- 模型列表 -->
@@ -797,8 +983,18 @@ export class ModelsPage extends LitElement {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             ${L('models.revoke')}
           </button>
-          ${this._saveFlash ? html`<span class="save-flash">${icons['check']} ${L('models.saved')}</span>` : ''}
+          <button class="btn-revoke" title=${L('common.refresh')} @click=${() => this._loadFromGateway()}>${L('common.refresh')}</button>
+          <span class="source-badge">${this._source === 'gateway' ? L('models.sourceGateway') : L('models.sourceLocal')}</span>
+          ${this._saving
+            ? html`<span class="saving-hint">${L('models.saving')}</span>`
+            : this._saveFlash ? html`<span class="save-flash">${icons['check']} ${L('models.saved')}</span>` : ''}
         </div>
+        ${this._saveError ? html`
+          <div class="models-error">
+            ✗ ${this._saveError}
+            <button class="btn-revoke" style="margin-left:8px;padding:2px 10px;" @click=${() => this._saveToGateway()}>${L('models.retrySave')}</button>
+          </div>
+        ` : ''}
 
         <!-- 提示 -->
         <div class="models-hint">${L('models.hint')}</div>

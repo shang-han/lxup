@@ -162,6 +162,21 @@ export function chatStream(
           onEvent({ event: name, data });
         }
       }
+      // 冲刷残留块：流结束时最后一个事件块可能没有尾随空行
+      const tail = buffer.trim();
+      if (tail) {
+        let name = 'message';
+        const dataLines: string[] = [];
+        for (const line of tail.split('\n')) {
+          if (line.startsWith('event:')) name = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length) {
+          try {
+            onEvent({ event: name, data: JSON.parse(dataLines.join('\n')) as Record<string, unknown> });
+          } catch { /* 不完整则忽略 */ }
+        }
+      }
       onEvent({ event: 'done', data: {} });
     } catch (e: unknown) {
       if ((e as Error)?.name !== 'AbortError') {

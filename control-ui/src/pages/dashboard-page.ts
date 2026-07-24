@@ -1,10 +1,15 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
-import { icons } from '../components/icons.js';
 import { getActiveModel, listModels, loadProviders, type ResolvedModel } from '../utils/model-config.js';
 import { getSharedStore } from '../store/shared.js';
+import { fetchTimeout } from '../utils/net.js';
+import { hermesUrl } from '../services/hermes-client.js';
+import { getLicenseStatus, type LicenseResponse } from '../services/license.js';
+import { getDeviceFingerprint } from '../utils/device.js';
 import '../components/page-header.js';
+
+const SERVICES_TOTAL = 4; // Sidecar · Gateway · Hermes · AI Assistant
 
 export class DashboardPage extends LitElement {
   static styles = css`
@@ -49,6 +54,8 @@ export class DashboardPage extends LitElement {
       transition: border-color var(--duration-fast);
     }
     .dashboard-info-card:hover { border-color: var(--accent); }
+    .dashboard-info-card.static { cursor: default; }
+    .dashboard-info-card.static:hover { border-color: var(--border); }
     .dashboard-info-card__header {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 10px;
@@ -75,8 +82,10 @@ export class DashboardPage extends LitElement {
     .dashboard-info-card__value {
       font-size: 15px; font-weight: 600; color: var(--text-strong); margin-bottom: 2px;
     }
+    .dashboard-info-card__value.ok { color: var(--success); }
+    .dashboard-info-card__value.warn { color: var(--warn); }
     .dashboard-info-card__sub {
-      font-size: 11px; color: var(--muted);
+      font-size: 11px; color: var(--muted); word-break: break-all;
     }
     .dashboard-info-card__status {
       font-size: 14px; font-weight: 600; margin-bottom: 2px;
@@ -126,24 +135,37 @@ export class DashboardPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
   @property({ type: Boolean }) connected = false;
-  @property({ type: Array }) instances = [];
-  @property({ type: Array }) sessions = [];
-  @property({ type: Array }) cronJobs = [];
-  @property({ type: Object }) snapshot = {};
-  @property({ type: Array }) skills = [];
-  @property({ type: Array }) models = [];
   @property({ type: Function }) onNavigate = () => {};
 
+  // 本地模型配置（localStorage，真实用户数据）
   @state() _activeModel: ResolvedModel | null = null;
   @state() _modelCount = 0;
   @state() _providerCount = 0;
   @state() _recentLogs: string[] = [];
+
+  // 网关侧实际生效的模型（openclaw.json → agents.defaults.model），本地未配置时兜底展示
+  @state() _gwModel = '';
+  @state() _gwModelProvider = '';
 
   // 网关进程管理（经 Sidecar :7889）
   @state() _gwRunning = false;
   @state() _gwPid: number | null = null;
   @state() _gwBusy = false;
   @state() _gwMessage = '';
+
+  // 网关 WS 侧真实数据（hello / agents.list / sessions.list / skills.status）
+  @state() _gwVersion = '';
+  @state() _agentCount: number | null = null;
+  @state() _defaultAgent = '';
+  @state() _agentIds: string[] = [];
+  @state() _sessionCount: number | null = null;
+  @state() _skillCount: number | null = null;
+
+  // 基础服务存活（Sidecar / Gateway / Hermes / AI Assistant）
+  @state() _servicesUp = 0;
+
+  // 授权状态（Sidecar /api/license/status）
+  @state() _license: LicenseResponse | null = null;
 
   _storeUnsub: (() => void) | null = null;
 
@@ -156,43 +178,17 @@ export class DashboardPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._refreshModelInfo();
-    this._refreshGatewayStatus();
+    this._refreshGatewayStatus().then(() => this._refreshServiceHealth());
+    this._refreshLicense();
+    this._refreshWsInfo();
     const store = getSharedStore();
     this._storeUnsub = store.subscribe((snap) => {
-      if (snap.connected) this._fetchRecentLogs();
+      if (snap.hello?.server?.version) this._gwVersion = snap.hello.server.version;
+      if (snap.connected) {
+        this._fetchRecentLogs();
+        this._refreshWsInfo();
+      }
     });
-  }
-
-  /** 刷新网关进程状态 */
-  async _refreshGatewayStatus() {
-    try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/status`);
-      const s = await r.json();
-      this._gwRunning = !!s.running;
-      this._gwPid = s.pid ?? null;
-    } catch {
-      this._gwRunning = false;
-      this._gwPid = null;
-    }
-  }
-
-  /** 调用 Sidecar 的网关管理端点（stop/start/restart） */
-  async _callGateway(action: 'stop' | 'start' | 'restart') {
-    if (this._gwBusy) return;
-    this._gwBusy = true;
-    this._gwMessage = action === 'stop' ? '正在停止网关…' : action === 'start' ? '正在启动网关…' : '正在重启网关…';
-    try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/${action}`, { method: 'POST' });
-      const res = await r.json();
-      this._gwMessage = res.message || (res.started || res.restarted ? '操作成功' : '操作完成');
-      await this._refreshGatewayStatus();
-    } catch (e) {
-      this._gwMessage = `操作失败：${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      this._gwBusy = false;
-      // 网关状态变化后，共享连接的 store 会自动重连/断开
-      setTimeout(() => this._refreshGatewayStatus(), 2000);
-    }
   }
 
   disconnectedCallback() {
@@ -204,6 +200,116 @@ export class DashboardPage extends LitElement {
     this._activeModel = getActiveModel();
     this._modelCount = listModels().length;
     this._providerCount = loadProviders().length;
+  }
+
+  /** 刷新网关进程状态（Sidecar /api/gateway/status） */
+  async _refreshGatewayStatus() {
+    try {
+      const r = await fetchTimeout(`${this._sidecarBase}/api/gateway/status`, {}, 8000);
+      const s = await r.json();
+      this._gwRunning = !!s.running;
+      this._gwPid = s.pid ?? null;
+    } catch {
+      // Sidecar 不可达时保持现状（不误报停止），仅标记未知
+      this._gwRunning = false;
+      this._gwPid = null;
+    }
+  }
+
+  _gwMsgTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 设置网关操作消息，6 秒后自动清除（避免陈旧消息顶替端口/PID 显示） */
+  _setGwMessage(msg: string, sticky = false) {
+    this._gwMessage = msg;
+    if (this._gwMsgTimer) clearTimeout(this._gwMsgTimer);
+    if (!sticky) {
+      this._gwMsgTimer = setTimeout(() => { this._gwMessage = ''; }, 6000);
+    }
+  }
+
+  /** 基础服务存活统计：Sidecar / Gateway / Hermes / AI Assistant */
+  async _refreshServiceHealth() {
+    const host = window.location.hostname || '127.0.0.1';
+    const [sidecar, hermes, assistant] = await Promise.all([
+      fetchTimeout(`${this._sidecarBase}/health`, {}, 3000).then(r => r.ok).catch(() => false),
+      // no-cors：任何 HTTP 响应（含 401）都说明引擎在跑，规避 CORS 误判
+      fetchTimeout(`${hermesUrl()}/health`, { mode: 'no-cors' }, 3000).then(() => true).catch(() => false),
+      fetchTimeout(`http://${host}:8080/api/status`, {}, 3000).then(r => r.ok).catch(() => false),
+    ]);
+    this._servicesUp = [sidecar, this._gwRunning, hermes, assistant].filter(Boolean).length;
+  }
+
+  /** 经共享 WS 连接拉取：网关版本 / Agent 编队 / 会话数 / 技能数 */
+  async _refreshWsInfo() {
+    const store = getSharedStore();
+    if (store.snapshot.hello?.server?.version) {
+      this._gwVersion = store.snapshot.hello.server.version;
+    }
+    if (!store.connected) return;
+    try {
+      const res = await store.request<any>('agents.list', {});
+      const agents: any[] = res?.agents || [];
+      this._agentCount = agents.length;
+      this._defaultAgent = res?.defaultId || '';
+      this._agentIds = agents.map(a => String(a.id ?? a.name ?? '')).filter(Boolean);
+    } catch { /* 瞬时错误忽略 */ }
+    try {
+      const res = await store.request<any>('sessions.list', {});
+      this._sessionCount = (res?.sessions || []).length;
+    } catch { /* ignore */ }
+    try {
+      const res = await store.request<any>('skills.status', {});
+      this._skillCount = (res?.skills || []).length;
+    } catch { /* ignore */ }
+
+    // 本地「模型配置」页（localStorage）未配置时，展示网关配置里实际生效的模型，
+    // 避免网关已配 deepseek/xxx 而仪表盘却显示「未设置」的假阴性
+    if (!this._activeModel) {
+      try {
+        const g = await store.request<any>('config.get', {});
+        const cfg = g?.config || g?.parsed || {};
+        const m = cfg?.agents?.defaults?.model;
+        const modelStr = typeof m === 'string' ? m : (m?.model || '');
+        if (modelStr) {
+          const slash = modelStr.indexOf('/');
+          this._gwModelProvider = slash > 0 ? modelStr.slice(0, slash) : '';
+          this._gwModel = slash > 0 ? modelStr.slice(slash + 1) : modelStr;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  /** 授权状态（本地校验，不触发联网） */
+  async _refreshLicense() {
+    try {
+      const fp = await getDeviceFingerprint();
+      this._license = await getLicenseStatus(fp);
+    } catch {
+      this._license = null;
+    }
+  }
+
+  /** 调用 Sidecar 的网关管理端点（stop/start/restart） */
+  async _callGateway(action: 'stop' | 'start' | 'restart') {
+    if (this._gwBusy) return;
+    this._gwBusy = true;
+    this._setGwMessage(action === 'stop' ? '正在停止网关…' : action === 'start' ? '正在启动网关…' : '正在重启网关…', true);
+    // 超时留足余量：Sidecar 侧 stop 最长 ~12s、start ~32s、restart 两者之和
+    const timeout = action === 'stop' ? 20000 : action === 'start' ? 45000 : 60000;
+    try {
+      const r = await fetchTimeout(`${this._sidecarBase}/api/gateway/${action}`, { method: 'POST' }, timeout);
+      const res = await r.json();
+      this._setGwMessage(res.message || (res.started || res.restarted ? '操作成功' : '操作完成'));
+      await this._refreshGatewayStatus();
+      await this._refreshServiceHealth();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this._setGwMessage(msg.includes('aborted') ? `操作超时（${action}）` : `操作失败：${msg}`);
+    } finally {
+      this._gwBusy = false;
+      // 网关状态变化后，共享连接的 store 会自动重连/断开
+      setTimeout(() => this._refreshGatewayStatus(), 2000);
+    }
   }
 
   async _fetchRecentLogs() {
@@ -230,7 +336,17 @@ export class DashboardPage extends LitElement {
     } catch { /* 网关暂不可用时保留旧内容 */ }
   }
 
+  _licenseValue(): { text: string; cls: string } {
+    const lic = this._license;
+    if (!lic) return { text: '—', cls: '' };
+    if (lic.status === 'ok') return { text: L('dashboard.licenseOk'), cls: 'ok' };
+    if (lic.status === 'not_activated') return { text: L('dashboard.licenseNotActivated'), cls: 'warn' };
+    return { text: L('dashboard.licenseIssue'), cls: 'warn' };
+  }
+
   render() {
+    const survivalPct = Math.round((this._servicesUp / SERVICES_TOTAL) * 100);
+    const lic = this._licenseValue();
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
       <div class="dashboard-page">
@@ -247,13 +363,13 @@ export class DashboardPage extends LitElement {
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.versionSinicized')}</div>
-            <div class="dashboard-stat__value">2026.3.24</div>
-            <div class="dashboard-stat__hint">${L('dashboard.latestUpstream')} 2026.7.1-zh.2<br/>${L('dashboard.standaloneInstall')}</div>
+            <div class="dashboard-stat__value">${this._gwVersion || '—'}</div>
+            <div class="dashboard-stat__hint">${L('dashboard.port')} 18789${this._gwPid ? ' · PID ' + this._gwPid : ''}</div>
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.agentFleet')}</div>
-            <div class="dashboard-stat__value">1 个</div>
-            <div class="dashboard-stat__hint">${L('dashboard.defaultAgent')}: main</div>
+            <div class="dashboard-stat__value">${this._agentCount === null ? '—' : this._agentCount + ' 个'}</div>
+            <div class="dashboard-stat__hint">${L('dashboard.defaultAgentLabel')}: ${this._defaultAgent || '—'}</div>
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.modelPool')}</div>
@@ -262,8 +378,8 @@ export class DashboardPage extends LitElement {
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.basicServices')}</div>
-            <div class="dashboard-stat__value">1/1</div>
-            <div class="dashboard-stat__hint">${L('dashboard.survivalRate')} 100%</div>
+            <div class="dashboard-stat__value">${this._servicesUp}/${SERVICES_TOTAL}</div>
+            <div class="dashboard-stat__hint">${L('dashboard.survivalRate')} ${survivalPct}%</div>
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">
@@ -304,10 +420,14 @@ export class DashboardPage extends LitElement {
                 ${L('dashboard.mainModel')}
               </div>
             </div>
-            <div class="dashboard-info-card__value">${this._activeModel ? this._activeModel.model : L('dashboard.notSet')}</div>
+            <div class="dashboard-info-card__value">${this._activeModel
+              ? this._activeModel.model
+              : (this._gwModel || L('dashboard.notSet'))}</div>
             <div class="dashboard-info-card__sub">${this._activeModel
               ? `${this._activeModel.providerName} · ${this._activeModel.apiType}`
-              : L('dashboard.concurrencyLimit') + ' 4'}</div>
+              : this._gwModel
+                ? `${this._gwModelProvider ? this._gwModelProvider + ' · ' : ''}${L('dashboard.fromGatewayConfig')}`
+                : L('dashboard.concurrencyLimit') + ' 4'}</div>
           </div>
           <div class="dashboard-info-card" @click=${() => this.onNavigate('skills')}>
             <div class="dashboard-info-card__header">
@@ -316,22 +436,22 @@ export class DashboardPage extends LitElement {
                 ${L('dashboard.mcpTools')}
               </div>
             </div>
-            <div class="dashboard-info-card__value">0</div>
-            <div class="dashboard-info-card__sub">${L('dashboard.mountedExtensions')}</div>
+            <div class="dashboard-info-card__value">${this._skillCount === null ? '—' : this._skillCount}</div>
+            <div class="dashboard-info-card__sub">${L('dashboard.builtinSkills')}</div>
           </div>
         </div>
 
         <!-- Info cards row 2 -->
         <div class="dashboard-info-grid">
-          <div class="dashboard-info-card" @click=${() => this.onNavigate('services')}>
+          <div class="dashboard-info-card static">
             <div class="dashboard-info-card__header">
               <div class="dashboard-info-card__title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                ${L('dashboard.recentBackup')}
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+                ${L('dashboard.licenseCard')}
               </div>
             </div>
-            <div class="dashboard-info-card__value">${L('dashboard.noBackup')}</div>
-            <div class="dashboard-info-card__sub">0 ${L('dashboard.backupFiles')}</div>
+            <div class="dashboard-info-card__value ${lic.cls}">${lic.text}</div>
+            <div class="dashboard-info-card__sub">${this._license?.device_name || this._license?.message || ''}</div>
           </div>
           <div class="dashboard-info-card" @click=${() => this.onNavigate('agents')}>
             <div class="dashboard-info-card__header">
@@ -340,18 +460,18 @@ export class DashboardPage extends LitElement {
                 AGENT ${L('dashboard.agentFleet')}
               </div>
             </div>
-            <div class="dashboard-info-card__value">1</div>
-            <div class="dashboard-info-card__sub">1 个独立工作区</div>
+            <div class="dashboard-info-card__value">${this._agentCount === null ? '—' : this._agentCount}</div>
+            <div class="dashboard-info-card__sub">${this._agentIds.length ? this._agentIds.join(' · ') : '—'}</div>
           </div>
-          <div class="dashboard-info-card">
+          <div class="dashboard-info-card" @click=${() => this.onNavigate('chat')}>
             <div class="dashboard-info-card__header">
               <div class="dashboard-info-card__title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                ${L('dashboard.runtimeVersion')}
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                ${L('dashboard.activeSessions')}
               </div>
             </div>
-            <div class="dashboard-info-card__value">2026.1.1</div>
-            <div class="dashboard-info-card__sub">openclaw.json / ${L('dashboard.localInstall')}</div>
+            <div class="dashboard-info-card__value">${this._sessionCount === null ? '—' : this._sessionCount}</div>
+            <div class="dashboard-info-card__sub">${L('dashboard.sessionSource')}</div>
           </div>
         </div>
 
@@ -359,13 +479,13 @@ export class DashboardPage extends LitElement {
         <div class="dashboard-ws">
           <span class="dashboard-ws__dot ${this.connected ? 'connected' : 'disconnected'}"></span>
           WebSocket ${this.connected ? L('dashboard.wsConnected') : L('dashboard.wsDisconnected')}
+          ${this._gwVersion ? html`<span style="margin-left:auto;font-size:11px;color:var(--muted);">v${this._gwVersion}</span>` : ''}
         </div>
 
         <!-- Action buttons -->
         <div class="dashboard-actions">
           <button ?disabled=${this._gwBusy} @click=${() => this._callGateway('restart')}>${this._gwBusy && this._gwMessage ? this._gwMessage : L('dashboard.restartGw')}</button>
           <button @click=${() => this.dispatchEvent(new CustomEvent('check-updates'))}>${L('dashboard.checkUpdates')}</button>
-          <button>${L('dashboard.createBackup')}</button>
         </div>
 
         <!-- Recent logs -->

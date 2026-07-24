@@ -93,9 +93,11 @@ class LicenseService:
 
         token = resp.get("activation_token", "")
         if not token:
+            # 校验服务器拒绝时返回 200 + {success:false, detail:...}，透传具体原因
+            detail = resp.get("detail", "")
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message="服务器未返回有效令牌",
+                message=detail or "服务器未返回有效令牌",
             )
 
         # 解密 token 提取信息用于本地存储
@@ -455,6 +457,9 @@ def _decode_jwt_payload(token: str) -> dict:
 
 def _days_since(dt: datetime) -> int:
     """计算从指定时间到现在的天数（整数）"""
+    # SQLite 不存时区，SQLAlchemy 读回 naive datetime，统一按 UTC 补齐
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
     delta = _utcnow() - dt
     return max(0, delta.days)
 

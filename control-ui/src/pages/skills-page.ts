@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
+import { getSharedStore } from '../store/shared.js';
 import '../components/page-header.js';
 import '../components/skillpack-panel.js';
 
@@ -98,6 +99,27 @@ export class SkillsPage extends LitElement {
       background: transparent; color: var(--text-soft);
     }
     .skill-item__actions .btn-detail:hover { background: var(--bg-hover); color: var(--text); }
+    /* === hub message / detail dialog === */
+    .hub-msg { font-size: 12px; margin: 0 0 10px; }
+    .hub-msg.ok { color: var(--success); }
+    .hub-msg.err { color: var(--danger); word-break: break-all; }
+    .detail-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .detail-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 22px 24px; width: min(640px, calc(100vw - 40px));
+      max-height: 80vh; display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+    .detail-box__title { font-size: 15px; font-weight: 700; color: var(--text-strong); margin-bottom: 10px; }
+    .detail-box__body {
+      font-size: 12px; color: var(--text-soft); line-height: 1.7;
+      white-space: pre-wrap; word-break: break-word;
+      overflow-y: auto; font-family: var(--font-mono);
+    }
+
     .skill-item__actions .btn-uninstall {
       background: transparent; color: var(--danger); border-color: var(--danger);
     }
@@ -126,6 +148,20 @@ export class SkillsPage extends LitElement {
   @state() _search = '';
   @state() _skills: any[] = [];
   @state() _loading = true;
+
+  // 搜索安装（ClawHub，经网关 WS RPC）
+  @state() _hubQuery = '';
+  @state() _hubResults: any[] = [];
+  @state() _hubSearching = false;
+  @state() _hubSearched = false;
+  @state() _installingSlug = '';
+  @state() _hubMsg = '';
+  @state() _hubMsgCls = '';
+  // 技能详情（skills.detail）
+  @state() _detailOpen = false;
+  @state() _detailTitle = '';
+  @state() _detailBody = '';
+  @state() _detailLoading = false;
 
   get _sidecarBase(): string {
     const host = window.location.hostname || '127.0.0.1';
@@ -165,6 +201,83 @@ export class SkillsPage extends LitElement {
       s.desc.toLowerCase().includes(q) ||
       s.source.toLowerCase().includes(q)
     );
+  }
+
+  // ── ClawHub 搜索 / 安装（WS RPC）────────────────────
+
+  async _searchHub() {
+    const store = getSharedStore();
+    const q = this._hubQuery.trim();
+    if (!q || !store.connected) return;
+    this._hubSearching = true;
+    this._hubMsg = '';
+    this._hubMsgCls = '';
+    try {
+      const res = await store.request<any>('skills.search', { query: q });
+      this._hubResults = res?.results || [];
+      this._hubSearched = true;
+    } catch (e) {
+      this._hubMsg = e instanceof Error ? e.message : String(e);
+      this._hubMsgCls = 'err';
+    } finally {
+      this._hubSearching = false;
+    }
+  }
+
+  async _installSkill(r: any) {
+    const store = getSharedStore();
+    if (!store.connected || this._installingSlug) return;
+    this._installingSlug = r.slug;
+    this._hubMsg = '';
+    this._hubMsgCls = '';
+    try {
+      // ClawHub 安装变体：{source:'clawhub', slug, acknowledgeClawHubRisk}
+      await store.request('skills.install', {
+        source: 'clawhub',
+        slug: r.slug,
+        acknowledgeClawHubRisk: true,
+      });
+      this._hubMsg = `${L('skills.hubInstalled')}: ${r.displayName || r.slug}`;
+      this._hubMsgCls = 'ok';
+      await this._loadSkills();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      try { const j = JSON.parse(raw); this._hubMsg = j?.message || raw; }
+      catch { this._hubMsg = raw; }
+      this._hubMsgCls = 'err';
+    } finally {
+      this._installingSlug = '';
+    }
+  }
+
+  /** 详情：skills.detail 返回 SKILL.md 全文（含 frontmatter），截取正文展示 */
+  async _openDetail(slug: string) {
+    const store = getSharedStore();
+    this._detailOpen = true;
+    this._detailTitle = slug;
+    this._detailBody = '';
+    this._detailLoading = true;
+    try {
+      if (store.connected) {
+        const res = await store.request<any>('skills.detail', { slug });
+        const skill = res?.skill || {};
+        let body = String(skill.description || skill.summary || '');
+        // 去掉 frontmatter（--- ... ---）
+        body = body.replace(/^---[\s\S]*?---\s*/, '');
+        this._detailBody = body || skill.summary || '—';
+      } else {
+        const local = this._skills.find(s => s.name === slug);
+        this._detailBody = local?.desc || L('dashboard.wsDisconnected');
+      }
+    } catch (e) {
+      this._detailBody = e instanceof Error ? e.message : String(e);
+    } finally {
+      this._detailLoading = false;
+    }
+  }
+
+  _closeDetail() {
+    this._detailOpen = false;
   }
 
   render() {
@@ -252,28 +365,77 @@ export class SkillsPage extends LitElement {
           <!-- 岗位技能包 -->
           <skillpack-panel></skillpack-panel>
         ` : html`
-          <!-- Search & Install -->
+          <!-- Search & Install（ClawHub 真实搜索/安装） -->
           <div class="skills-toolbar">
             <input class="search-input" type="text"
+              .value=${this._hubQuery}
               placeholder=${L('skills.searchPlaceholder')}
+              @input=${(e: Event) => { this._hubQuery = (e.target as HTMLInputElement).value; }}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._searchHub(); }}
             />
-            <button>${L('skills.search')}</button>
+            <button ?disabled=${this._hubSearching || !this._hubQuery.trim()} @click=${() => this._searchHub()}>
+              ${this._hubSearching ? L('common.loading') : L('skills.search')}
+            </button>
           </div>
           <div class="skills-section">
             <div class="skills-section__header">
               ${L('skills.searchHubTitle')}
             </div>
-            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
-              <div style="margin-bottom:12px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--border-strong);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            ${this._hubMsg ? html`
+              <div class="hub-msg ${this._hubMsgCls}">${this._hubMsg}</div>
+            ` : ''}
+            ${!this._hubSearched ? html`
+              <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
+                <div style="margin-bottom:12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--border-strong);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <div>${L('skills.searchHubDesc')}</div>
               </div>
-              <div>${L('skills.searchHubDesc')}</div>
-              <div style="font-size:12px;margin-top:4px;">${L('skills.comingSoon')}</div>
-            </div>
+            ` : !this._hubResults.length ? html`
+              <div class="skills-empty">${L('skills.hubNoResults')}</div>
+            ` : html`
+              <div class="skills-section__body">
+                ${this._hubResults.map((r: any) => html`
+                  <div class="skill-item">
+                    <div class="skill-item__icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+                    </div>
+                    <div class="skill-item__content">
+                      <div class="skill-item__name">${r.displayName || r.slug}</div>
+                      <div class="skill-item__source">${r.ownerHandle ? '@' + r.ownerHandle : ''}${typeof r.downloads === 'number' ? ' · ' + r.downloads + ' ' + L('skills.hubDownloads') : ''}</div>
+                      <div class="skill-item__desc">${r.summary || ''}</div>
+                    </div>
+                    <div class="skill-item__actions">
+                      <button class="btn-detail" @click=${() => this._openDetail(r.slug)}>${L('skills.detail')}</button>
+                      <button class="btn-uninstall" style="color:var(--accent);border-color:var(--accent);"
+                        ?disabled=${this._installingSlug === r.slug}
+                        @click=${() => this._installSkill(r)}>
+                        ${this._installingSlug === r.slug ? L('skills.hubInstalling') : L('skills.hubInstall')}
+                      </button>
+                    </div>
+                  </div>
+                `)}
+              </div>
+            `}
           </div>
         `}
 
       </div>
+
+      <!-- 技能详情 -->
+      ${this._detailOpen ? html`
+        <div class="detail-backdrop" @click=${this._closeDetail}>
+          <div class="detail-box" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="detail-box__title">${this._detailTitle}</div>
+            <div class="detail-box__body">
+              ${this._detailLoading ? L('common.loading') : this._detailBody}
+            </div>
+            <div style="text-align:right;margin-top:12px;">
+              <button class="btn-detail" @click=${this._closeDetail}>${L('channels.close')}</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
     `;
   }
 
@@ -292,8 +454,7 @@ export class SkillsPage extends LitElement {
           <div class="skill-item__desc">${s.desc}</div>
         </div>
         <div class="skill-item__actions">
-          <button class="btn-detail">${L('skills.detail')}</button>
-          <button class="btn-uninstall">${L('skills.uninstall')}</button>
+          <button class="btn-detail" @click=${() => this._openDetail(s.name)}>${L('skills.detail')}</button>
           <span class="skill-item__badge ${badgeClass}">${badgeText}</span>
         </div>
       </div>

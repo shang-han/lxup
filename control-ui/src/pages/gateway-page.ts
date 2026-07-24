@@ -2,7 +2,22 @@ import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
+import { getSharedStore } from '../store/shared.js';
+import { fetchTimeout } from '../utils/net.js';
 import '../components/page-header.js';
+
+/**
+ * GatewayPage — 网关路由配置页
+ *
+ * 接网关真实配置（WS config.get / config.patch，合并语义 + baseHash 乐观并发）：
+ *   - gateway.bind                      访问范围（loopback 仅本机 / lan 局域网）
+ *   - gateway.auth.mode                 认证方式（token / password）
+ *   - gateway.auth.token                访问令牌（网关回显为 __OPENCLAW_REDACTED__；
+ *                                       输入新值保存即更换，并同步本地连接凭证）
+ *   - gateway.controlUi.allowedOrigins  允许的 Control UI 来源
+ *   - gateway.controlUi.dangerouslyDisableDeviceAuth  只读展示（远程改动风险高）
+ * 端口不在配置内（由启动命令 --port 决定），只读展示 Sidecar 报告的实际监听值。
+ */
 
 export class GatewayPage extends LitElement {
   static styles = css`
@@ -36,9 +51,21 @@ export class GatewayPage extends LitElement {
       transition: border-color var(--duration-fast);
     }
     .gw-input:focus { border-color: var(--accent); }
+    .gw-input:disabled { opacity: 0.6; cursor: not-allowed; }
+    textarea.gw-input { width: 100%; box-sizing: border-box; resize: vertical; min-height: 72px; font-family: var(--font-mono); }
     .gw-hint {
       font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4;
     }
+    .gw-hint.warn { color: var(--warn); }
+
+    /* === read-only value === */
+    .gw-readonly {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-mono); font-size: 13px; color: var(--text-strong);
+    }
+    .gw-readonly .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .gw-readonly .dot.on { background: var(--success); }
+    .gw-readonly .dot.off { background: var(--muted); }
 
     /* === select cards (radio-style) === */
     .gw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
@@ -77,7 +104,7 @@ export class GatewayPage extends LitElement {
     .gw-token-row {
       display: flex; align-items: center; gap: 8px; margin-top: 12px;
     }
-    .gw-token-row .gw-input { flex: 1; font-family: var(--font-mono); }
+    .gw-token-row .gw-input { flex: 1; width: auto; font-family: var(--font-mono); }
     .gw-token-row button {
       padding: 6px 12px; border-radius: var(--radius-sm); font-size: 12px;
       font-weight: 500; border: 1px solid var(--border); cursor: pointer;
@@ -86,28 +113,18 @@ export class GatewayPage extends LitElement {
     }
     .gw-token-row button:hover { background: var(--bg-hover); color: var(--text); }
 
-    /* === dropdown === */
-    .gw-select {
-      padding: 8px 12px; background: var(--input); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--text); font-size: 13px;
-      outline: none; cursor: pointer; transition: border-color var(--duration-fast);
+    /* === badge === */
+    .gw-badge {
+      display: inline-block; padding: 3px 10px; border-radius: var(--radius-full);
+      font-size: 11px; font-weight: 600;
     }
-    .gw-select:focus { border-color: var(--accent); }
-
-    /* === advanced section toggle === */
-    .gw-advanced-toggle {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 500; color: var(--text-soft);
-      cursor: pointer; padding: 8px 0; margin-bottom: 12px; user-select: none;
-    }
-    .gw-advanced-toggle:hover { color: var(--text); }
-    .gw-advanced-toggle .chevron { transition: transform var(--duration-fast); }
-    .gw-advanced-toggle.open .chevron { transform: rotate(90deg); }
+    .gw-badge.danger { background: var(--danger-subtle); color: var(--danger); }
+    .gw-badge.ok { background: var(--success-subtle); color: var(--success); }
 
     /* === save bar === */
     .gw-save-bar {
       display: flex; align-items: center; gap: 10px;
-      padding-top: 8px;
+      padding-top: 8px; flex-wrap: wrap;
     }
     .gw-save-btn {
       padding: 8px 20px; border-radius: var(--radius-sm); font-size: 13px;
@@ -116,27 +133,41 @@ export class GatewayPage extends LitElement {
       transition: background var(--duration-fast); display: inline-flex; align-items: center; gap: 6px;
     }
     .gw-save-btn:hover { background: var(--accent-hover); }
-    .gw-save-hint {
-      font-size: 12px; color: var(--muted);
-    }
+    .gw-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .gw-save-hint { font-size: 12px; color: var(--muted); }
+    .gw-msg { font-size: 12px; }
+    .gw-msg.ok { color: var(--success); }
+    .gw-msg.err { color: var(--danger); word-break: break-all; }
   `;
 
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
 
-  @state() _port = 18789;
-  @state() _accessMode = 'local'; // 'local' | 'lan'
-  @state() _authMode = 'token'; // 'token' | 'password'
-  @state() _token = 'sk-gw-xxxxxxxxxxxxxxxxxxxx';
+  // 网关配置（真实来自 config.gateway）
+  @state() _bind = 'lan';             // loopback | lan
+  @state() _authMode = 'token';       // token | password
+  @state() _tokenRedacted = '';       // 网关回显的掩码值
+  @state() _tokenInput = '';          // 用户输入的新 token（空 = 不修改）
   @state() _showToken = false;
-  @state() _toolPermission = 'full'; // 'full' | 'restricted' | 'disabled'
-  @state() _sessionVisibility = 'all'; // 'all' | 'own'
-  @state() _tailscaleAddr = '';
-  @state() _advancedOpen = false;
+  @state() _originsText = '';
+  @state() _deviceAuthDisabled: boolean | null = null;
+  @state() _loaded = false;
+
+  // Sidecar 报告的实际监听状态
+  @state() _port: number | null = null;
+  @state() _pid: number | null = null;
+  @state() _gwRunning = false;
+
+  @state() _offline = false;
+  @state() _saving = false;
+  @state() _msg = '';
+  @state() _msgCls = '';
+
+  _storeUnsub: (() => void) | null = null;
 
   get _accessOptions() {
     return [
-      { key: 'local', icon: icons['monitor'], name: L('gateway.localOnly'), desc: L('gateway.localOnlyDesc') },
+      { key: 'loopback', icon: icons['monitor'], name: L('gateway.localOnly'), desc: L('gateway.localOnlyDesc') },
       { key: 'lan', icon: icons['share-2'], name: L('gateway.lanShare'), desc: L('gateway.lanShareDesc') },
     ];
   }
@@ -148,20 +179,139 @@ export class GatewayPage extends LitElement {
     ];
   }
 
-  get _toolOptions() {
-    return [
-      { key: 'full', icon: icons['check-circle'], name: L('gateway.fullPermission'), desc: L('gateway.fullPermissionDesc') },
-      { key: 'restricted', icon: icons['shield'], name: L('gateway.restrictedMode'), desc: L('gateway.restrictedModeDesc') },
-      { key: 'disabled', icon: icons['ban'], name: L('gateway.disableTools'), desc: L('gateway.disableToolsDesc') },
-    ];
+  connectedCallback() {
+    super.connectedCallback();
+    const store = getSharedStore();
+    this._storeUnsub = store.subscribe(snap => {
+      this._offline = !snap.connected;
+      if (snap.connected && !this._loaded) this._load();
+    });
+    if (store.connected) this._load();
+    this._refreshPortStatus();
   }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._storeUnsub?.();
+  }
+
+  // ── 数据加载 ──────────────────────────────────────
+
+  async _load() {
+    const store = getSharedStore();
+    if (!store.connected) { this._offline = true; return; }
+    try {
+      const g = await store.request<any>('config.get', {});
+      const gw = (g?.config || g?.parsed || {})?.gateway || {};
+      this._bind = typeof gw.bind === 'string' ? gw.bind : 'lan';
+      this._authMode = gw.auth?.mode || 'token';
+      this._tokenRedacted = String(gw.auth?.token || '');
+      this._originsText = Array.isArray(gw.controlUi?.allowedOrigins)
+        ? gw.controlUi.allowedOrigins.join('\n')
+        : '';
+      this._deviceAuthDisabled = !!gw.controlUi?.dangerouslyDisableDeviceAuth;
+      this._loaded = true;
+      this._offline = false;
+    } catch (e) {
+      this._msg = this._errMsg(e);
+      this._msgCls = 'err';
+    }
+  }
+
+  /** 端口/PID 来自 Sidecar 的网关进程管理端点 */
+  async _refreshPortStatus() {
+    const host = window.location.hostname || '127.0.0.1';
+    try {
+      const r = await fetchTimeout(`http://${host}:7889/api/gateway/status`, {}, 4000);
+      const s = await r.json();
+      this._gwRunning = !!s.running;
+      this._port = s.port ?? null;
+      this._pid = s.pid ?? null;
+    } catch {
+      this._gwRunning = false;
+    }
+  }
+
+  // ── 保存 ──────────────────────────────────────────
+
+  async _save() {
+    const store = getSharedStore();
+    if (!store.connected || this._saving) return;
+    this._saving = true;
+    this._msg = '';
+    this._msgCls = '';
+    try {
+      const g = await store.request<any>('config.get', {});
+      const cfg = g?.config || g?.parsed || {};
+
+      const origins = this._originsText
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      // 合并语义：只写变更的键；token 为空表示不修改
+      const authPatch: Record<string, unknown> = { mode: this._authMode };
+      const newToken = this._tokenInput.trim();
+      if (newToken) authPatch.token = newToken;
+
+      await store.request('config.patch', {
+        raw: JSON.stringify({
+          gateway: {
+            ...(cfg.gateway || {}),
+            bind: this._bind,
+            auth: { ...(cfg.gateway?.auth || {}), ...authPatch },
+            controlUi: {
+              ...(cfg.gateway?.controlUi || {}),
+              allowedOrigins: origins,
+            },
+          },
+        }),
+        baseHash: g?.hash || '',
+        replacePaths: ['gateway'],
+      });
+
+      // 更换 token 时同步本地连接凭证（下次重连/刷新生效）
+      if (newToken) {
+        try { localStorage.setItem('openclaw.gateway.token', newToken); } catch { /* ignore */ }
+        this._tokenRedacted = '__OPENCLAW_REDACTED__';
+        this._tokenInput = '';
+        this._msg = L('gateway.tokenChangedNote');
+      } else {
+        this._msg = L('common.configSaved');
+      }
+      this._msgCls = 'ok';
+      await this._load();
+    } catch (e) {
+      this._msg = L('common.configSaveFailed') + this._errMsg(e);
+      this._msgCls = 'err';
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  _errMsg(e: unknown): string {
+    const raw = e instanceof Error ? e.message : String(e);
+    try {
+      const j = JSON.parse(raw);
+      if (j?.message) return String(j.message);
+    } catch { /* 非 JSON */ }
+    return raw;
+  }
+
+  // ── 渲染 ──────────────────────────────────────────
 
   render() {
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
       <div class="gateway-page">
 
-        <!-- 服务端口 -->
+        ${this._offline ? html`
+          <div class="gw-section">
+            <div class="gw-hint warn">${L('dashboard.wsDisconnected')} — ${L('models.gwDisconnected')}</div>
+          </div>
+        ` : ''}
+
+        <!-- 服务端口（只读：由启动命令决定，Sidecar 报告实际值） -->
         <div class="gw-section">
           <div class="gw-section__title">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.343 6.343 2.829 2.829"/><path d="M2 12h4"/><path d="m6.343 17.657 2.829-2.829"/><path d="M12 18v4"/><path d="m17.657 17.657-2.829-2.829"/><path d="M18 12h4"/><path d="m17.657 6.343-2.829 2.829"/><circle cx="12" cy="12" r="3"/></svg>
@@ -169,9 +319,13 @@ export class GatewayPage extends LitElement {
           </div>
           <div class="gw-field">
             <label class="gw-label">${L('gateway.portNumber')}</label>
-            <input class="gw-input" type="number" .value=${String(this._port)}
-              @input=${(e: Event) => { this._port = Number((e.target as HTMLInputElement).value); }}
-            />
+            <div class="gw-readonly">
+              <span class="dot ${this._gwRunning ? 'on' : 'off'}"></span>
+              <span>${this._port ?? '—'}</span>
+              <span style="color:var(--muted);font-size:12px;">
+                ${this._gwRunning ? (L('dashboard.running') + (this._pid ? ' · PID ' + this._pid : '')) : L('dashboard.stopped')}
+              </span>
+            </div>
             <div class="gw-hint">${L('gateway.portHint')}</div>
           </div>
         </div>
@@ -184,8 +338,8 @@ export class GatewayPage extends LitElement {
           </div>
           <div class="gw-cards">
             ${this._accessOptions.map(o => html`
-              <div class="gw-card ${this._accessMode === o.key ? 'selected' : ''}"
-                   @click=${() => { this._accessMode = o.key; }}>
+              <div class="gw-card ${this._bind === o.key ? 'selected' : ''}"
+                   @click=${() => { this._bind = o.key; }}>
                 <div class="gw-card__icon">${o.icon}</div>
                 <div class="gw-card__text">
                   <div class="gw-card__name">${o.name}</div>
@@ -219,85 +373,55 @@ export class GatewayPage extends LitElement {
             <div class="gw-token-row">
               <div style="flex:1;">
                 <label class="gw-label">${L('gateway.accessToken')}</label>
-                <input class="gw-input" style="width:100%;"
+                <input class="gw-input"
                   .type=${this._showToken ? 'text' : 'password'}
-                  .value=${this._token}
-                  @input=${(e: Event) => { this._token = (e.target as HTMLInputElement).value; }}
+                  placeholder=${this._tokenRedacted || 'sk-...'}
+                  .value=${this._tokenInput}
+                  @input=${(e: Event) => { this._tokenInput = (e.target as HTMLInputElement).value; }}
                 />
               </div>
               <button @click=${() => { this._showToken = !this._showToken; }}>
                 ${this._showToken ? L('gateway.hide') : L('gateway.show')}
               </button>
             </div>
-            <div class="gw-hint" style="margin-top:6px;">
-              ${L('gateway.tokenHint')}
-            </div>
+            <div class="gw-hint">${L('gateway.tokenHint')}</div>
+            ${this._tokenInput.trim() ? html`
+              <div class="gw-hint warn">⚠ ${L('gateway.tokenChangeWarning')}</div>
+            ` : ''}
           ` : ''}
         </div>
 
-        <!-- Agent 工具权限 -->
+        <!-- Control UI 访问来源 -->
         <div class="gw-section">
           <div class="gw-section__title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            ${L('gateway.agentToolPermission')}
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            ${L('gateway.controlUiTitle')}
           </div>
-          <div style="font-size:12px;color:var(--text-soft);margin-bottom:10px;">${L('gateway.toolAccessLevel')}</div>
-          <div class="gw-cards">
-            ${this._toolOptions.map(o => html`
-              <div class="gw-card ${this._toolPermission === o.key ? 'selected' : ''}"
-                   @click=${() => { this._toolPermission = o.key; }}>
-                <div class="gw-card__icon">${o.icon}</div>
-                <div class="gw-card__text">
-                  <div class="gw-card__name">${o.name}</div>
-                  <div class="gw-card__desc">${o.desc}</div>
-                </div>
-              </div>
-            `)}
+          <div class="gw-field">
+            <label class="gw-label">${L('gateway.allowedOrigins')}</label>
+            <textarea class="gw-input"
+              .value=${this._originsText}
+              @input=${(e: Event) => { this._originsText = (e.target as HTMLTextAreaElement).value; }}
+            ></textarea>
+            <div class="gw-hint">${L('gateway.allowedOriginsHint')}</div>
           </div>
-
-          <div class="gw-field" style="margin-top:16px;">
-            <label class="gw-label">${L('gateway.sessionVisibility')}</label>
-            <select class="gw-select" .value=${this._sessionVisibility}
-              @change=${(e: Event) => { this._sessionVisibility = (e.target as HTMLSelectElement).value; }}
-            >
-              <option value="all">${L('gateway.allSessions')}</option>
-              <option value="own">${L('gateway.ownSession')}</option>
-            </select>
-            <div class="gw-hint">${L('gateway.sessionVisibilityHint')}</div>
+          <div class="gw-field">
+            <label class="gw-label">${L('gateway.deviceAuth')}</label>
+            ${this._deviceAuthDisabled === null ? '' : this._deviceAuthDisabled
+              ? html`<span class="gw-badge danger">${L('gateway.deviceAuthOff')}</span>
+                     <div class="gw-hint warn">⚠ ${L('gateway.deviceAuthOffHint')}</div>`
+              : html`<span class="gw-badge ok">${L('gateway.deviceAuthOn')}</span>`}
           </div>
         </div>
-
-        <!-- Advanced options -->
-        <div class="gw-advanced-toggle ${this._advancedOpen ? 'open' : ''}"
-             @click=${() => { this._advancedOpen = !this._advancedOpen; }}>
-          <span class="chevron">${icons['chevron-right']}</span>
-          ${L('gateway.advancedOptions')}
-        </div>
-        ${this._advancedOpen ? html`
-          <div class="gw-section">
-            <div class="gw-section__title">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.343 6.343 2.829 2.829"/><path d="M2 12h4"/><path d="m6.343 17.657 2.829-2.829"/><path d="M12 18v4"/><path d="m17.657 17.657-2.829-2.829"/><path d="M18 12h4"/><path d="m17.657 6.343-2.829 2.829"/><circle cx="12" cy="12" r="3"/></svg>
-              ${L('gateway.tailscaleNetwork')}
-            </div>
-            <div class="gw-field">
-              <label class="gw-label">${L('gateway.tailscaleAddr')}</label>
-              <input class="gw-input" style="width:100%;" type="text"
-                .value=${this._tailscaleAddr}
-                placeholder=${L('gateway.tailscalePlaceholder')}
-                @input=${(e: Event) => { this._tailscaleAddr = (e.target as HTMLInputElement).value; }}
-              />
-              <div class="gw-hint">${L('gateway.tailscaleHint')}</div>
-            </div>
-          </div>
-        ` : ''}
 
         <!-- Save bar -->
         <div class="gw-save-bar">
-          <button class="gw-save-btn" @click=${() => { /* save logic */ }}>
+          <button class="gw-save-btn" ?disabled=${this._saving || this._offline} @click=${() => this._save()}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            ${L('gateway.saveAndApply')}
+            ${this._saving ? L('models.saving') : L('gateway.saveAndApply')}
           </button>
           <span class="gw-save-hint">${L('gateway.saveHint')}</span>
+          ${this._msg ? html`<span class="gw-msg ${this._msgCls}">${this._msg}</span>` : ''}
         </div>
 
       </div>

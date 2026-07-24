@@ -50,6 +50,8 @@ export interface ChatEngine {
   listSessions(): Promise<ChatSession[]>;
   getHistory(sessionId: string): Promise<ChatHistoryMessage[]>;
   createSession(): Promise<ChatSession | null>;
+  /** 删除会话；成功返回 true */
+  deleteSession(sessionId: string): Promise<boolean>;
   send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable;
 }
 
@@ -130,6 +132,18 @@ export class OpenClawChatEngine implements ChatEngine {
   async createSession(): Promise<ChatSession | null> {
     // OpenClaw 用固定会话键，不支持从前端新建
     return null;
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const res = await this.store.request<{ ok?: boolean; deleted?: boolean }>(
+        'sessions.delete',
+        { key: sessionId },
+      );
+      return !!(res?.ok || res?.deleted);
+    } catch {
+      return false;
+    }
   }
 
   send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
@@ -220,6 +234,15 @@ export class HermesChatEngine implements ChatEngine {
     return { id: s.id, name: s.title || s.id, updatedAt: normalizeTs(s.last_active) };
   }
 
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      await hermes.deleteSession(sessionId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
     let cancelled = false;
     let inner: AbortController | null = null;
@@ -236,11 +259,23 @@ export class HermesChatEngine implements ChatEngine {
         return;
       }
       if (cancelled) return;
+      let streamed = '';        // 已流出的增量文本，用于与 assistant.completed 全文对账
+      let thinkingChip = false; // 思考状态指示（reasoning 阶段只建一次）
       inner = hermes.chatStream(sid, text, (ev) => {
         const d = ev.data;
         switch (ev.event) {
-          case 'assistant.delta':
-            onEvent({ type: 'delta', text: String(d.delta ?? '') });
+          case 'assistant.delta': {
+            const t = String(d.delta ?? '');
+            streamed += t;
+            onEvent({ type: 'delta', text: t });
+            break;
+          }
+          case 'tool.progress':
+            // 推理/思考阶段（_thinking）：显示一次运行中状态片，避免长时间无反馈
+            if (!thinkingChip) {
+              thinkingChip = true;
+              onEvent({ type: 'tool', tool: { name: 'thinking', running: true } });
+            }
             break;
           case 'tool.started':
             onEvent({
@@ -260,6 +295,17 @@ export class HermesChatEngine implements ChatEngine {
               tool: { name: String(d.tool_name ?? 'tool'), result: d.preview != null ? String(d.preview) : '失败', ok: false, running: false },
             });
             break;
+          case 'assistant.completed': {
+            // 兜底：后端未走增量（或增量不全）时，用完整答案替换上屏，保证回复不丢
+            const content = d.content != null ? String(d.content) : '';
+            if (content && content !== streamed) {
+              onEvent({ type: 'delta', replace: true, text: content });
+            }
+            if (thinkingChip) {
+              onEvent({ type: 'tool', tool: { name: 'thinking', result: '', ok: true, running: false } });
+            }
+            break;
+          }
           case 'error':
             onEvent({ type: 'error', message: String(d.message ?? 'Hermes 错误') });
             break;
@@ -267,7 +313,7 @@ export class HermesChatEngine implements ChatEngine {
             onEvent({ type: 'final' });
             break;
           default:
-            break; // run.started / message.started / tool.progress / assistant.completed / run.completed
+            break; // run.started / message.started / run.completed
         }
       });
     })();
@@ -329,6 +375,15 @@ export class CodexChatEngine implements ChatEngine {
     return { id: s.id, name: s.title || s.id, updatedAt: normalizeTs(s.updatedAt) };
   }
 
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      await codex.deleteSession(sessionId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
     let cancelled = false;
     let inner: AbortController | null = null;
@@ -345,12 +400,23 @@ export class CodexChatEngine implements ChatEngine {
         return;
       }
       if (cancelled) return;
+      let streamed = '';        // 已流出的增量文本，用于与 assistant.completed 全文对账
+      let thinkingChip = false; // 思考状态指示
       // SSE 事件词表与 Hermes 一致（sidecar 已归一化 codex exec --json）
       inner = codex.chatStream(sid, text, (ev) => {
         const d = ev.data;
         switch (ev.event) {
-          case 'assistant.delta':
-            onEvent({ type: 'delta', text: String(d.delta ?? '') });
+          case 'assistant.delta': {
+            const t = String(d.delta ?? '');
+            streamed += t;
+            onEvent({ type: 'delta', text: t });
+            break;
+          }
+          case 'tool.progress':
+            if (!thinkingChip) {
+              thinkingChip = true;
+              onEvent({ type: 'tool', tool: { name: 'thinking', running: true } });
+            }
             break;
           case 'tool.started':
             onEvent({
@@ -370,6 +436,16 @@ export class CodexChatEngine implements ChatEngine {
               tool: { name: String(d.tool_name ?? 'tool'), result: d.preview != null ? String(d.preview) : '失败', ok: false, running: false },
             });
             break;
+          case 'assistant.completed': {
+            const content = d.content != null ? String(d.content) : '';
+            if (content && content !== streamed) {
+              onEvent({ type: 'delta', replace: true, text: content });
+            }
+            if (thinkingChip) {
+              onEvent({ type: 'tool', tool: { name: 'thinking', result: '', ok: true, running: false } });
+            }
+            break;
+          }
           case 'error':
             onEvent({ type: 'error', message: String(d.message ?? 'Codex 错误') });
             break;
