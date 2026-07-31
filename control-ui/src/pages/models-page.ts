@@ -46,7 +46,6 @@ const STORAGE_KEY = 'openclaw.models.config';
 
 const PROVIDER_PRESETS = [
   { name: 'GPT+Claude推荐中转', baseUrl: '', models: ['gpt-4o', 'claude-sonnet-4-5'] },
-  { name: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct'] },
   { name: '火山引擎', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-1-5-pro-32k', 'deepseek-v3-250324'] },
   { name: '火山引擎 Coding', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-seed-code-preview-251028'] },
   { name: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },

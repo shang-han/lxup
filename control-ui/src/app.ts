@@ -29,7 +29,6 @@ import './pages/hermes-service-page.js';
 import './pages/hermes-env-page.js';
 import './pages/hermes-config-page.js';
 import './pages/hermes-logs-page.js';
-import './pages/hermes-installer-page.js';
 import './pages/ai-page.js';
 
 const TAB_ICONS: Record<string, string> = {
@@ -43,7 +42,6 @@ const TAB_ICONS: Record<string, string> = {
   'hermes-env':'key',
   'hermes-config':'settings',
   'hermes-logs':'scroll-text',
-  'hermes-installer':'terminal',
 };
 
 function buildRoutes(): Record<string, { label: string; icon: string; subtitle: string }> {
@@ -252,7 +250,6 @@ export class OpenClawApp extends LitElement {
       case 'hermes-env': return html`<hermes-env-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-env-page>`;
       case 'hermes-config': return html`<hermes-config-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-config-page>`;
       case 'hermes-logs': return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
-      case 'hermes-installer': return html`<hermes-installer-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-installer-page>`;
       default: return html`<dashboard-page title=${title('dashboard')} subtitle=${sub('dashboard')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
     }
   }

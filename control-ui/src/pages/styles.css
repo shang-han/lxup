@@ -154,10 +154,6 @@
   transition: all var(--duration-fast); line-height: 1;
 }
 .ai-toolbar__actions button svg { width: 14px; height: 14px; flex-shrink: 0; }
-.ai-toolbar__actions .btn-mode { background: var(--bg-hover); color: var(--text-soft); border-color: var(--border); }
-.ai-toolbar__actions .btn-mode:hover { background: var(--bg-active); color: var(--text); }
-.ai-toolbar__actions .btn-mode.active { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); }
-.ai-toolbar__actions .btn-mode.active:hover { background: var(--accent-hover); }
 .ai-toolbar__actions .btn-settings { background: var(--bg-hover); color: var(--text-soft); }
 .ai-toolbar__actions .btn-settings:hover { background: var(--bg-active); color: var(--text); }
 .ai-toolbar__actions .btn-settings.active { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); }

@@ -56,10 +56,10 @@ export class OcSidebar extends LitElement {
       <div class="sidebar-shell">
         <div class="sidebar-shell__header">
           <div class="sidebar-brand">
-            <img class="sidebar-brand__logo" src="/favicon.svg" alt="OpenClaw" />
+            <img class="sidebar-brand__logo" src="/favicon.svg" alt=${L('brand.title')} />
             <div class="sidebar-brand__copy">
-              <span class="sidebar-brand__eyebrow">Control</span>
-              <span class="sidebar-brand__title">OpenClaw</span>
+              <span class="sidebar-brand__eyebrow">${L('brand.eyebrow')}</span>
+              <span class="sidebar-brand__title">${L('brand.title')}</span>
             </div>
           </div>
         </div>

@@ -67,7 +67,6 @@ export class AiPage extends LitElement {
   @property({ type: String }) subtitle = '';
 
   @state() _view: 'home' | 'chat' = 'home';
-  @state() _mode: 'chat' | 'plan' | 'execute' | 'infinite' = 'infinite';
   @query('oc-toast') _toast!: HTMLElement & { show: (msg: string) => void };
   @state() _showConvList = false;
   @state() _settingsOpen = false;
@@ -312,11 +311,6 @@ export class AiPage extends LitElement {
 
   // ── 其他 ──
 
-  _setMode(mode: 'chat' | 'plan' | 'execute' | 'infinite') {
-    this._mode = mode;
-    this._toast?.show(`${L(`ai.mode${mode.charAt(0).toUpperCase() + mode.slice(1)}`)}${L('ai.modeSwitched')}`);
-  }
-
   _triggerFileInput() { if (this._fileInput) this._fileInput.click(); }
 
   _handleFileSelect(e: Event) {
@@ -345,10 +339,6 @@ export class AiPage extends LitElement {
             : !this._configured ? html`<span class="ai-toolbar__badge">${L('ai.notConfigured')}</span>` : ''}
         </div>
         <div class="ai-toolbar__actions">
-          <button class="btn-mode ${this._mode === 'chat' ? 'active' : ''}" title=${L('ai.modeChatHint')} @click=${() => this._setMode('chat')}>${icons['message-square']} ${L('ai.modeChat')}</button>
-          <button class="btn-mode ${this._mode === 'plan' ? 'active' : ''}" title=${L('ai.modePlanHint')} @click=${() => this._setMode('plan')}>${icons['list']} ${L('ai.modePlan')}</button>
-          <button class="btn-mode ${this._mode === 'execute' ? 'active' : ''}" title=${L('ai.modeExecuteHint')} @click=${() => this._setMode('execute')}>${icons['zap']} ${L('ai.modeExecute')}</button>
-          <button class="btn-mode ${this._mode === 'infinite' ? 'active' : ''}" title=${L('ai.modeInfiniteHint')} @click=${() => this._setMode('infinite')}>${icons['sparkles']} ${L('ai.modeInfinite')}</button>
           <button class="btn-settings ${this._settingsOpen ? 'active' : ''}" @click=${this._openSettings}>${icons['settings']} ${L('ai.settings')}</button>
         </div>
       </div>
