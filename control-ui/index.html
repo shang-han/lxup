@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenClaw Control</title>
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      (function () {
+        var MODES = { system: 1, light: 1, dark: 1 };
+        var THEMES = { claw: 1, knot: 1, dash: 1 };
+        try {
+          var raw = localStorage.getItem('openclaw-control-theme');
+          if (raw) {
+            var s = JSON.parse(raw);
+            var theme = THEMES[s.theme] ? s.theme : 'claw';
+            var mode = MODES[s.mode] ? s.mode : 'system';
+            if (mode === 'system') {
+              mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.setAttribute('data-theme-mode', mode);
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <openclaw-app></openclaw-app>
+  </body>
+</html>

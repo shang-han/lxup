@@ -1,0 +1,18 @@
+{
+  "id": "72",
+  "name": "AI应用工程师",
+  "industry": "互联网/新经济",
+  "category": "互联网/新经济",
+  "priority": "P1",
+  "icon": "🤖",
+  "version": "1.0.0",
+  "description": "面向AI应用工程师的岗位技能包：Prompt工程优化、RAG系统方案、Agent编排方案、模型微调方案、AI落地方案，覆盖AI应用开发从需求转化、方案设计、搭建实施到评估调优的全流程。",
+  "skills": [
+    { "file": "01-Prompt工程优化.SKILL.md", "name": "Prompt工程优化", "triggers": ["Prompt优化", "系统提示词", "Prompt工程", "角色设定", "few-shot"] },
+    { "file": "02-RAG系统方案.SKILL.md", "name": "RAG系统方案", "triggers": ["RAG", "知识库问答", "向量数据库", "分块策略", "混合检索"] },
+    { "file": "03-Agent编排方案.SKILL.md", "name": "Agent编排方案", "triggers": ["Agent编排", "多智能体", "工作流", "function calling", "Coze/Dify"] },
+    { "file": "04-模型微调方案.SKILL.md", "name": "模型微调方案", "triggers": ["模型微调", "LoRA/QLoRA", "SFT数据", "训练数据", "模型评估"] },
+    { "file": "05-AI落地方案.SKILL.md", "name": "AI落地方案", "triggers": ["AI落地方案", "需求转化", "可行性评估", "模型选型", "成本估算"] }
+  ],
+  "knowledge": ["行业基础.md"]
+}

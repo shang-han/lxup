@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LXUP AI 助手</title>
+  <style>
+    :root{
+      --bg:#0e1319; --panel:#151c24; --panel-2:#1a222c; --panel-3:#1f2935;
+      --border:#232e3a; --border-hi:#31404f;
+      --text:#e9edf1; --muted:#8fa0b0; --faint:#5c6b7a;
+      --accent:#ff6b3d; --accent-hi:#ff8a5c; --accent-dim:rgba(255,107,61,.12);
+      --teal:#3ddc97; --amber:#ffb454; --red:#ff5d5d;
+      --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+      --sans:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--text); font-family:var(--sans); font-size:14px;
+      background:
+        radial-gradient(1000px 700px at -8% 108%, rgba(255,107,61,.09), transparent 55%),
+        radial-gradient(900px 620px at 106% -8%, rgba(61,220,151,.06), transparent 60%),
+        var(--bg);
+      display:flex; overflow:hidden;
+    }
+    /* 细网格底纹，强化工具感 */
+    body::before{
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+      background-image:
+        linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+      background-size:34px 34px;
+    }
+
+    /* ───────── 侧边栏 ───────── */
+    aside{
+      width:264px; flex:none; display:flex; flex-direction:column;
+      background:var(--panel); border-right:1px solid var(--border); z-index:2;
+    }
+    .brand{ display:flex; gap:11px; align-items:center; padding:18px 16px 14px; }
+    .brand-mark{ font-size:26px; filter:drop-shadow(0 2px 8px rgba(255,107,61,.35)); }
+    .brand-name{ font-family:var(--mono); font-weight:700; font-size:15px; letter-spacing:.5px; line-height:1.2; }
+    .brand-name b{ color:var(--accent); }
+    .brand-name span{ color:var(--muted); font-weight:600; font-size:12px; margin-left:5px; }
+    .brand-tag{ font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:3px; }
+
+    .btn-new{
+      margin:4px 14px 12px; padding:9px 12px; border:none; border-radius:7px; cursor:pointer;
+      background:var(--accent); color:#1a0e08; font-weight:700; font-size:13.5px; font-family:var(--sans);
+      box-shadow:0 4px 14px rgba(255,107,61,.28); transition:transform .12s ease, box-shadow .12s ease, background .12s;
+    }
+    .btn-new:hover{ background:var(--accent-hi); transform:translateY(-1px); box-shadow:0 6px 18px rgba(255,107,61,.36); }
+    .btn-new:active{ transform:translateY(0); }
+
+    .conv-label{ font-family:var(--mono); font-size:10px; letter-spacing:1.5px; color:var(--faint); padding:2px 18px 6px; text-transform:uppercase; }
+    .conv-list{ flex:1; overflow-y:auto; padding:0 10px 10px; }
+    .conv{
+      position:relative; display:flex; align-items:center; gap:6px;
+      padding:9px 10px 9px 12px; margin-bottom:4px; border-radius:7px; cursor:pointer;
+      border:1px solid transparent; border-left:2px solid var(--border);
+      transition:background .13s, border-color .13s, transform .13s;
+    }
+    .conv:hover{ background:var(--panel-2); border-left-color:var(--accent); transform:translateX(2px); }
+    .conv.active{ background:var(--panel-2); border-color:var(--border-hi); border-left-color:var(--accent); }
+    .conv-body{ flex:1; min-width:0; }
+    .conv-title{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .conv-meta{ font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:2px; }
+    .conv-del{
+      flex:none; width:22px; height:22px; border:none; border-radius:5px; cursor:pointer;
+      background:transparent; color:var(--faint); font-size:12px; opacity:0; transition:opacity .13s, background .13s, color .13s;
+    }
+    .conv:hover .conv-del{ opacity:1; }
+    .conv-del:hover{ background:var(--accent-dim); color:var(--red); }
+    .conv-empty{ font-size:12px; color:var(--faint); text-align:center; padding:22px 8px; }
+
+    .btn-settings{
+      margin:10px 14px 16px; padding:9px 12px; display:flex; align-items:center; gap:8px; cursor:pointer;
+      background:var(--panel-2); border:1px solid var(--border); border-radius:7px;
+      color:var(--muted); font-size:12.5px; font-family:var(--sans); transition:border-color .13s, color .13s;
+    }
+    .btn-settings:hover{ border-color:var(--border-hi); color:var(--text); }
+    .btn-settings .gear{ display:inline-block; transition:transform .35s ease; }
+    .btn-settings:hover .gear{ transform:rotate(70deg); }
+    .btn-settings .dot{ margin-left:auto; width:7px; height:7px; border-radius:50%; }
+    .dot.on{ background:var(--teal); box-shadow:0 0 8px rgba(61,220,151,.7); }
+    .dot.off{ background:var(--red); box-shadow:0 0 8px rgba(255,93,93,.7); }
+
+    /* ───────── 主区 ───────── */
+    main{ flex:1; display:flex; flex-direction:column; min-width:0; z-index:1; }
+    header{
+      display:flex; align-items:center; gap:12px; padding:13px 22px;
+      border-bottom:1px solid var(--border); background:rgba(21,28,36,.6);
+    }
+    .tb-title{ font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tb-right{ margin-left:auto; display:flex; align-items:center; gap:9px; flex:none; }
+    .badge{
+      font-family:var(--mono); font-size:11px; padding:4px 9px; border-radius:5px;
+      border:1px solid var(--border); color:var(--muted); background:var(--panel-2);
+    }
+    .badge.model{ color:var(--accent-hi); border-color:rgba(255,107,61,.3); background:var(--accent-dim); }
+    .badge.status i{ display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; vertical-align:1px; }
+    .badge.status.ok i{ background:var(--teal); }
+    .badge.status.no i{ background:var(--red); }
+
+    #chat{ flex:1; overflow-y:auto; padding:26px 8% 18px; }
+
+    /* 消息 */
+    .msg{ max-width:76%; padding:10px 14px; line-height:1.65; white-space:pre-wrap; word-break:break-word; }
+    .msg.user{
+      margin:14px 0 4px auto; background:var(--accent-dim); border:1px solid rgba(255,107,61,.28);
+      border-radius:10px 10px 2px 10px; color:#ffd9c9;
+    }
+    .msg.assistant{
+      background:var(--panel-2); border:1px solid var(--border); border-radius:10px 10px 10px 2px;
+    }
+    .msg.error{ color:var(--red); border-color:rgba(255,93,93,.4); }
+    .turn{ margin-bottom:6px; }
+    .caret{ color:var(--accent); animation:blink 1s steps(1) infinite; }
+    .faint{ color:var(--faint); font-size:13px; }
+
+    /* 工具卡片（终端风） */
+    .tools{ display:flex; flex-direction:column; gap:8px; }
+    .tool{
+      max-width:76%; margin-top:12px; background:#0b0f14; border:1px solid var(--border);
+      border-left:3px solid var(--amber); border-radius:7px; padding:9px 12px;
+      font-family:var(--mono); font-size:12px;
+    }
+    .tool.ok{ border-left-color:var(--teal); }
+    .tool.err{ border-left-color:var(--red); }
+    .tool-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+    .t-name{ color:var(--accent-hi); font-weight:700; }
+    .t-cmd{ color:#c7d3de; background:rgba(255,255,255,.04); border-radius:4px; padding:2px 7px; word-break:break-all; }
+    .tool-out{
+      margin:8px 0 0; padding:8px 9px; background:rgba(255,255,255,.03); border-radius:5px;
+      color:#a9b7c4; white-space:pre-wrap; word-break:break-word; max-height:210px; overflow-y:auto;
+      font-size:11.5px; line-height:1.55;
+    }
+    .tool.ok .tool-out{ color:#9fd8bd; }
+    .tool.err .tool-out{ color:#f0a3a3; }
+    .spin{
+      display:inline-block; width:10px; height:10px; margin-right:7px; vertical-align:-1px;
+      border:2px solid var(--amber); border-top-color:transparent; border-radius:50%;
+      animation:rot .7s linear infinite;
+    }
+
+    /* 欢迎屏 */
+    .welcome{ text-align:left; max-width:560px; margin:9vh auto 0; }
+    .w-emoji{ font-size:46px; filter:drop-shadow(0 4px 16px rgba(255,107,61,.4)); animation:bob 3.2s ease-in-out infinite; }
+    .w-title{ font-family:var(--mono); font-size:24px; font-weight:700; margin:16px 0 6px; letter-spacing:.5px; }
+    .w-title b{ color:var(--accent); }
+    .w-sub{ font-family:var(--mono); color:var(--faint); font-size:12.5px; margin-bottom:26px; }
+    .chips{ display:flex; flex-wrap:wrap; gap:9px; }
+    .chip{
+      padding:8px 13px; border-radius:7px; cursor:pointer; font-size:13px; font-family:var(--sans);
+      background:var(--panel-2); border:1px solid var(--border); color:var(--muted);
+      transition:border-color .13s, color .13s, transform .13s, background .13s;
+    }
+    .chip:hover{ border-color:var(--accent); color:var(--accent-hi); transform:translateY(-2px); background:var(--accent-dim); }
+
+    /* 输入区 */
+    .composer{ padding:14px 8% 18px; border-top:1px solid var(--border); background:rgba(21,28,36,.6); }
+    .composer-row{ display:flex; gap:10px; align-items:flex-end; }
+    #input{
+      flex:1; resize:none; height:46px; max-height:150px; padding:12px 14px;
+      background:var(--panel-2); border:1px solid var(--border); border-radius:9px;
+      color:var(--text); font-size:14px; font-family:var(--sans); line-height:1.5;
+      transition:border-color .13s, box-shadow .13s;
+    }
+    #input:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(255,107,61,.14); }
+    .btn-send{
+      height:46px; padding:0 20px; border:none; border-radius:9px; cursor:pointer; flex:none;
+      background:var(--accent); color:#1a0e08; font-size:14px; font-weight:700;
+      transition:background .13s, transform .1s, opacity .13s;
+    }
+    .btn-send:hover:not(:disabled){ background:var(--accent-hi); }
+    .btn-send:active:not(:disabled){ transform:scale(.96); }
+    .btn-send:disabled{ opacity:.45; cursor:not-allowed; }
+    .composer-hint{ font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:8px; }
+    .composer-hint b{ color:var(--muted); font-weight:600; }
+
+    /* ───────── 设置弹窗 ───────── */
+    .overlay{
+      position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+      background:rgba(7,10,14,.62); opacity:0; pointer-events:none; transition:opacity .18s ease;
+    }
+    .overlay.show{ opacity:1; pointer-events:auto; }
+    .modal{
+      width:460px; max-width:92vw; max-height:88vh; overflow-y:auto;
+      background:var(--panel); border:1px solid var(--border-hi); border-radius:11px;
+      box-shadow:0 24px 64px rgba(0,0,0,.55);
+      transform:translateY(12px) scale(.97); transition:transform .2s ease;
+    }
+    .overlay.show .modal{ transform:none; }
+    .modal-head{ display:flex; align-items:center; padding:17px 20px 4px; }
+    .modal-title{ font-family:var(--mono); font-weight:700; font-size:15px; }
+    .modal-x{
+      margin-left:auto; width:28px; height:28px; border:none; border-radius:6px; cursor:pointer;
+      background:transparent; color:var(--muted); font-size:14px; transition:background .13s, color .13s;
+    }
+    .modal-x:hover{ background:var(--panel-3); color:var(--text); }
+    .field{ padding:12px 20px 0; }
+    .field label{ display:block; font-family:var(--mono); font-size:11px; letter-spacing:.8px; color:var(--muted); margin-bottom:7px; text-transform:uppercase; }
+    .field input{
+      width:100%; padding:10px 12px; background:var(--panel-2); border:1px solid var(--border);
+      border-radius:7px; color:var(--text); font-size:13.5px; font-family:var(--mono);
+      transition:border-color .13s;
+    }
+    .field input:focus{ outline:none; border-color:var(--accent); }
+    .keyrow{ display:flex; gap:8px; }
+    .keyrow input{ flex:1; }
+    .keyrow button{
+      flex:none; width:42px; border:1px solid var(--border); border-radius:7px; cursor:pointer;
+      background:var(--panel-2); color:var(--muted); transition:border-color .13s;
+    }
+    .keyrow button:hover{ border-color:var(--border-hi); }
+    .hint{ font-size:11px; color:var(--faint); margin-top:6px; }
+    .chips.sm{ gap:7px; margin-top:8px; }
+    .chips.sm .chip{ padding:5px 10px; font-size:11.5px; font-family:var(--mono); border-radius:6px; }
+    .modal-foot{ display:flex; align-items:center; gap:10px; padding:20px; margin-top:8px; }
+    #setMsg{ font-size:12.5px; font-family:var(--mono); }
+    #setMsg.ok{ color:var(--teal); }
+    #setMsg.err{ color:var(--red); }
+    .btn{ padding:9px 16px; border-radius:7px; cursor:pointer; font-size:13px; font-weight:600; transition:background .13s, border-color .13s, transform .1s; }
+    .btn:active{ transform:scale(.97); }
+    .btn.ghost{ margin-left:auto; background:transparent; border:1px solid var(--border); color:var(--muted); }
+    .btn.ghost:hover{ border-color:var(--border-hi); color:var(--text); }
+    .btn.primary{ background:var(--accent); border:1px solid var(--accent); color:#1a0e08; }
+    .btn.primary:hover{ background:var(--accent-hi); border-color:var(--accent-hi); }
+
+    /* 滚动条 */
+    ::-webkit-scrollbar{ width:9px; }
+    ::-webkit-scrollbar-thumb{ background:var(--panel-3); border-radius:5px; border:2px solid var(--bg); }
+    ::-webkit-scrollbar-track{ background:transparent; }
+
+    /* 动画 */
+    .anim{ animation:fadeUp .25s ease both; }
+    @keyframes fadeUp{ from{opacity:0; transform:translateY(9px);} to{opacity:1; transform:none;} }
+    @keyframes blink{ 50%{opacity:0;} }
+    @keyframes rot{ to{transform:rotate(360deg);} }
+    @keyframes bob{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-7px);} }
+
+    @media (max-width:760px){
+      aside{ width:72px; }
+      .brand-name,.brand-tag,.conv-title,.conv-meta,.btn-new span,.btn-settings span,.conv-label{ display:none; }
+      #chat,.composer{ padding-left:16px; padding-right:16px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 侧边栏 -->
+  <aside>
+    <div class="brand">
+      <span class="brand-mark">🦞</span>
+      <div>
+        <div class="brand-name"><b>LXUP</b><span>AI 助手</span></div>
+        <div class="brand-tag">// command-line · local</div>
+      </div>
+    </div>
+    <button class="btn-new" id="btnNew">＋<span> 新对话</span></button>
+    <div class="conv-label">最近对话</div>
+    <div class="conv-list" id="convList"><div class="conv-empty">还没有对话</div></div>
+    <button class="btn-settings" id="btnSettings">
+      <span class="gear">⚙</span><span>模型设置</span><i class="dot off" id="setDot"></i>
+    </button>
+  </aside>
+
+  <!-- 主区 -->
+  <main>
+    <header>
+      <div class="tb-title" id="tbTitle">龙虾助手，随时待命</div>
+      <div class="tb-right">
+        <span class="badge model" id="badgeModel">—</span>
+        <span class="badge status no" id="badgeStatus"><i></i><span id="statusText">未配置</span></span>
+      </div>
+    </header>
+
+    <div id="chat"></div>
+
+    <div class="composer">
+      <div class="composer-row">
+        <textarea id="input" placeholder="跟龙虾助手说点什么，比如「看看当前目录有哪些文件」"></textarea>
+        <button class="btn-send" id="btnSend">发送 ➤</button>
+      </div>
+      <div class="composer-hint"><b>Enter</b> 发送 · <b>Shift+Enter</b> 换行 · 助手可执行本地命令行</div>
+    </div>
+  </main>
+
+  <!-- 设置弹窗 -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">⚙ 模型设置</div>
+        <button class="modal-x" id="btnCloseSettings">✕</button>
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <div class="keyrow">
+          <input type="password" id="fKey" placeholder="sk-…" autocomplete="off" />
+          <button id="btnToggleKey" title="显示/隐藏">👁</button>
+        </div>
+        <div class="hint">Key 仅保存在本机 <code>data/config.json</code>，不会上传。留空表示不修改原 Key。</div>
+      </div>
+      <div class="field">
+        <label>接口地址 Base URL</label>
+        <input id="fBase" placeholder="https://api.deepseek.com" autocomplete="off" />
+        <div class="chips sm">
+          <button class="chip" data-base="https://api.deepseek.com">DeepSeek</button>
+          <button class="chip" data-base="https://api.openai.com/v1">OpenAI</button>
+          <button class="chip" data-base="https://dashscope.aliyuncs.com/compatible-mode/v1">阿里百炼</button>
+          <button class="chip" data-base="http://localhost:11434/v1">Ollama</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>模型 Model</label>
+        <input id="fModel" placeholder="deepseek-chat" autocomplete="off" />
+        <div class="chips sm">
+          <button class="chip" data-model="deepseek-chat">deepseek-chat</button>
+          <button class="chip" data-model="gpt-4o-mini">gpt-4o-mini</button>
+          <button class="chip" data-model="qwen-plus">qwen-plus</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>命令行工具最大轮次</label>
+        <input type="number" id="fRounds" min="1" max="50" value="10" />
+      </div>
+      <div class="modal-foot">
+        <span id="setMsg"></span>
+        <button class="btn ghost" id="btnTest">测试连接</button>
+        <button class="btn primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const CT = { 'Content-Type': 'application/json' };
+    const chatEl = $('chat'), convList = $('convList'), input = $('input'),
+          btnSend = $('btnSend'), tbTitle = $('tbTitle'), overlay = $('overlay');
+
+    let convs = [];          // 会话列表元数据
+    let current = null;      // 当前会话完整对象 {id,title,messages}
+    let busy = false;
+    let hasKey = false;
+
+    // ── 工具函数 ──
+    function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtTime(ts){
+      if(!ts) return '';
+      const d = new Date(ts), now = new Date(), pad = n => String(n).padStart(2,'0');
+      if(d.toDateString() === now.toDateString()) return pad(d.getHours())+':'+pad(d.getMinutes());
+      return (d.getMonth()+1)+'/'+d.getDate();
+    }
+    const scrollBottom = () => { chatEl.scrollTop = chatEl.scrollHeight; };
+    function setBusy(v){ busy = v; btnSend.disabled = v; input.placeholder = v ? '龙虾正在处理…' : '跟龙虾助手说点什么，比如「看看当前目录有哪些文件」'; }
+
+    // ── 状态 ──
+    async function refreshStatus(){
+      try{
+        const s = await (await fetch('/api/status')).json();
+        hasKey = s.hasKey;
+        $('badgeModel').textContent = s.model;
+        $('setDot').className = 'dot ' + (s.hasKey ? 'on' : 'off');
+        $('badgeStatus').className = 'badge status ' + (s.hasKey ? 'ok' : 'no');
+        $('statusText').textContent = s.hasKey ? '就绪' : '未配置 Key';
+      }catch(e){ $('statusText').textContent = '服务离线'; }
+    }
+
+    // ── 会话列表 ──
+    async function loadConvs(){
+      const d = await (await fetch('/api/conversations')).json();
+      convs = d.conversations || [];
+      renderConvList();
+    }
+    function renderConvList(){
+      if(!convs.length){ convList.innerHTML = '<div class="conv-empty">还没有对话</div>'; return; }
+      convList.innerHTML = convs.map(c => `
+        <div class="conv ${current && current.id === c.id ? 'active' : ''}" data-id="${c.id}">
+          <div class="conv-body" data-open="${c.id}">
+            <div class="conv-title">${escapeHtml(c.title)}</div>
+            <div class="conv-meta">${c.messageCount} 条 · ${fmtTime(c.updatedAt)}</div>
+          </div>
+          <button class="conv-del" data-del="${c.id}" title="删除该对话">✕</button>
+        </div>`).join('');
+    }
+    convList.addEventListener('click', e => {
+      const del = e.target.closest('[data-del]');
+      if(del){ deleteConv(del.dataset.del); return; }
+      const open = e.target.closest('[data-open]');
+      if(open && !busy) openConv(open.dataset.open);
+    });
+
+    async function openConv(id){
+      const r = await fetch('/api/conversations/' + id);
+      if(!r.ok) return;
+      current = await r.json();
+      renderConvList();
+      tbTitle.textContent = current.title;
+      renderMessages();
+    }
+    async function newConv(){
+      const meta = await (await fetch('/api/conversations', { method:'POST', headers:CT, body:'{}' })).json();
+      current = { id: meta.id, title: meta.title, createdAt: meta.createdAt, updatedAt: meta.updatedAt, messages: [] };
+      await loadConvs();
+      tbTitle.textContent = current.title;
+      chatEl.innerHTML = ''; showWelcome();
+      input.focus();
+    }
+    async function deleteConv(id){
+      if(!confirm('删除这个对话？此操作不可恢复。')) return;
+      await fetch('/api/conversations/' + id, { method:'DELETE' });
+      if(current && current.id === id){ current = null; chatEl.innerHTML=''; showWelcome(); tbTitle.textContent = '龙虾助手，随时待命'; }
+      await loadConvs();
+    }
+
+    // ── 消息渲染 ──
+    function toolCard(name, args, ok, result){
+      const c = document.createElement('div');
+      c.className = 'tool ' + (ok === undefined ? 'run' : (ok ? 'ok' : 'err'));
+      const cmd = args && args.command ? args.command : JSON.stringify(args || {});
+      const out = ok === undefined
+        ? '<span class="spin"></span>正在执行命令…'
+        : escapeHtml((ok ? '' : '✗ ') + (result || '(无输出)'));
+      c.innerHTML = `<div class="tool-head"><span class="t-name">⚙ ${escapeHtml(name)}</span><code class="t-cmd">$ ${escapeHtml(cmd)}</code></div><pre class="tool-out">${out}</pre>`;
+      return c;
+    }
+    function addUserMsg(text, animate){
+      const div = document.createElement('div');
+      div.className = 'msg user' + (animate ? ' anim' : '');
+      div.textContent = text;
+      chatEl.appendChild(div);
+      return div;
+    }
+    function addAssistantMsg(m, animate){
+      const turn = document.createElement('div');
+      turn.className = 'turn' + (animate ? ' anim' : '');
+      const tools = document.createElement('div'); tools.className = 'tools';
+      (m.toolCalls || []).forEach(tc => tools.appendChild(toolCard(tc.name, tc.args, tc.ok, tc.result)));
+      turn.appendChild(tools);
+      const bubble = document.createElement('div'); bubble.className = 'msg assistant';
+      bubble.textContent = m.content || '';
+      turn.appendChild(bubble);
+      chatEl.appendChild(turn);
+      return turn;
+    }
+    function renderMessages(){
+      chatEl.innerHTML = '';
+      if(!current || !current.messages.length){ showWelcome(); return; }
+      current.messages.forEach(m => {
+        if(m.role === 'user') addUserMsg(m.content, false);
+        else if(m.role === 'assistant') addAssistantMsg(m, false);
+      });
+      scrollBottom();
+    }
+
+    // ── 欢迎屏 ──
+    function showWelcome(){
+      const w = document.createElement('div');
+      w.className = 'welcome anim';
+      w.innerHTML = `
+        <div class="w-emoji">🦞</div>
+        <div class="w-title">龙虾助手，<b>随时待命</b>。</div>
+        <div class="w-sub">// 已接入本地命令行 —— 说说你想干什么，或直接点一个：</div>
+        <div class="chips">
+          <button class="chip" data-q="看看当前目录有哪些文件">📂 看看当前目录有哪些文件</button>
+          <button class="chip" data-q="查一下我的操作系统信息">💻 查一下操作系统信息</button>
+          <button class="chip" data-q="显示当前日期和时间">🕒 显示当前日期时间</button>
+          <button class="chip" data-q="帮我找出占用内存最多的前 5 个进程">🔍 占用内存最多的进程</button>
+        </div>`;
+      chatEl.appendChild(w);
+    }
+    function clearWelcome(){ const w = chatEl.querySelector('.welcome'); if(w) w.remove(); }
+    chatEl.addEventListener('click', e => {
+      const chip = e.target.closest('.chip[data-q]');
+      if(chip && !busy) send(chip.dataset.q);
+    });
+
+    // ── 发送 / 流式接收 ──
+    async function send(text){
+      text = (text !== undefined ? text : input.value).trim();
+      if(!text || busy) return;
+
+      // 还没有会话则先建一个
+      if(!current){
+        const meta = await (await fetch('/api/conversations', { method:'POST', headers:CT, body:'{}' })).json();
+        current = { id: meta.id, title: meta.title, createdAt: meta.createdAt, updatedAt: meta.updatedAt, messages: [] };
+      }
+
+      setBusy(true);
+      input.value = '';
+      clearWelcome();
+      addUserMsg(text, true);
+
+      // 助手回合容器（工具卡片区 + 文本气泡）
+      const turn = document.createElement('div'); turn.className = 'turn anim';
+      const tools = document.createElement('div'); tools.className = 'tools';
+      const bubble = document.createElement('div'); bubble.className = 'msg assistant';
+      const txt = document.createElement('span'); txt.className = 'faint'; txt.textContent = '思考中…';
+      const caret = document.createElement('span'); caret.className = 'caret'; caret.textContent = '▋';
+      bubble.appendChild(txt); bubble.appendChild(caret);
+      turn.appendChild(tools); turn.appendChild(bubble);
+      chatEl.appendChild(turn); scrollBottom();
+
+      let answer = '';
+      const turnTools = [];   // 本回合工具记录
+      const pending = {};     // key -> 运行中的工具卡片
+
+      try{
+        const res = await fetch('/api/chat', {
+          method:'POST', headers:CT,
+          body: JSON.stringify({ conversationId: current.id, content: text }),
+        });
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while(true){
+          const { done, value } = await reader.read();
+          if(done) break;
+          buf += dec.decode(value, { stream:true });
+          const lines = buf.split('\n'); buf = lines.pop() || '';
+          for(const line of lines){
+            const t = line.trim();
+            if(!t.startsWith('data:')) continue;
+            const data = t.slice(5).trim();
+            if(data === '[DONE]') continue;
+            let ev; try{ ev = JSON.parse(data); }catch(e){ continue; }
+
+            if(ev.error){
+              bubble.classList.add('error');
+              txt.classList.remove('faint');
+              txt.textContent = '⚠ ' + ev.error;
+            }
+            else if(ev.meta){
+              current.id = ev.meta.conversationId;
+              if(ev.meta.title){ current.title = ev.meta.title; tbTitle.textContent = ev.meta.title; }
+              if(ev.meta.updatedAt) current.updatedAt = ev.meta.updatedAt;
+            }
+            else if(ev.tool && ev.args){
+              const card = toolCard(ev.tool, ev.args, undefined);
+              tools.appendChild(card); scrollBottom();
+              pending[ev.tool + JSON.stringify(ev.args)] = card;
+              turnTools.push({ name: ev.tool, args: ev.args });
+            }
+            else if(ev.tool && ev.result !== undefined){
+              const key = ev.tool + JSON.stringify(ev.args || {});
+              const card = pending[key];
+              if(card){
+                card.classList.remove('run'); card.classList.add(ev.ok ? 'ok' : 'err');
+                card.querySelector('.tool-out').textContent = (ev.ok ? '' : '✗ ') + (ev.result || '(无输出)');
+              }
+              const entry = turnTools.find(x => x.name === ev.tool && JSON.stringify(x.args) === JSON.stringify(ev.args || {}) && x.ok === undefined);
+              if(entry){ entry.ok = ev.ok; entry.result = ev.result; }
+            }
+            else if(ev.content){
+              if(txt.classList.contains('faint')){ txt.classList.remove('faint'); txt.textContent = ''; }
+              answer += ev.content;
+              txt.textContent = answer;
+              scrollBottom();
+            }
+          }
+        }
+      }catch(e){
+        bubble.classList.add('error');
+        txt.classList.remove('faint');
+        txt.textContent = '⚠ 请求失败：' + e.message;
+      }
+
+      caret.remove();
+      // 同步本地会话数据（与后端持久化一致）
+      current.messages.push({ role:'user', content:text });
+      current.messages.push({ role:'assistant', content:answer, toolCalls: turnTools });
+      await loadConvs();
+      setBusy(false);
+      input.focus();
+    }
+
+    btnSend.addEventListener('click', () => send());
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+    });
+
+    // ── 设置 ──
+    $('btnNew').addEventListener('click', () => { if(!busy) newConv(); });
+    $('btnSettings').addEventListener('click', openSettings);
+    $('btnCloseSettings').addEventListener('click', () => overlay.classList.remove('show'));
+    overlay.addEventListener('click', e => { if(e.target === overlay) overlay.classList.remove('show'); });
+    document.addEventListener('keydown', e => { if(e.key === 'Escape') overlay.classList.remove('show'); });
+
+    $('btnToggleKey').addEventListener('click', () => {
+      $('fKey').type = $('fKey').type === 'password' ? 'text' : 'password';
+    });
+    document.querySelectorAll('[data-base]').forEach(b => b.addEventListener('click', () => { $('fBase').value = b.dataset.base; }));
+    document.querySelectorAll('[data-model]').forEach(b => b.addEventListener('click', () => { $('fModel').value = b.dataset.model; }));
+
+    async function openSettings(){
+      const c = await (await fetch('/api/config')).json();
+      $('fKey').value = c.apiKey || '';
+      $('fBase').value = c.baseUrl || '';
+      $('fModel').value = c.model || '';
+      $('fRounds').value = c.maxToolRounds || 10;
+      $('setMsg').textContent = '';
+      overlay.classList.add('show');
+      setTimeout(() => $('fKey').focus(), 150);
+    }
+    function settingsBody(){
+      return {
+        apiKey: $('fKey').value.trim(),
+        baseUrl: $('fBase').value.trim(),
+        model: $('fModel').value.trim(),
+        maxToolRounds: parseInt($('fRounds').value, 10) || 10,
+      };
+    }
+    async function saveSettings(){
+      const d = await (await fetch('/api/config', { method:'POST', headers:CT, body: JSON.stringify(settingsBody()) })).json();
+      if(d.ok){
+        $('setMsg').className = 'ok'; $('setMsg').textContent = '✓ 已保存';
+        await refreshStatus();
+        setTimeout(() => overlay.classList.remove('show'), 450);
+      } else {
+        $('setMsg').className = 'err'; $('setMsg').textContent = '✗ 保存失败';
+      }
+    }
+    async function testConn(){
+      $('setMsg').className = ''; $('setMsg').textContent = '测试中…';
+      // 先保存表单值（Key 打码/留空时后端自动保留原值），再用当前生效配置测试
+      await fetch('/api/config', { method:'POST', headers:CT, body: JSON.stringify(settingsBody()) });
+      const d = await (await fetch('/api/config/test', { method:'POST' })).json();
+      $('setMsg').className = d.ok ? 'ok' : 'err';
+      $('setMsg').textContent = d.ok ? '✓ 连接正常' : '✗ ' + (d.error || '连接失败');
+      await refreshStatus();
+    }
+    $('btnSave').addEventListener('click', saveSettings);
+    $('btnTest').addEventListener('click', testConn);
+
+    // ── 启动 ──
+    (async function boot(){
+      await refreshStatus();
+      await loadConvs();
+      if(convs.length) await openConv(convs[0].id);
+      else showWelcome();
+      input.focus();
+    })();
+  </script>
+</body>
+</html>
