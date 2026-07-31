@@ -24,7 +24,6 @@ import './pages/codex-page.js';
 import './pages/sandbox-page.js';
 import './pages/hermes-dashboard-page.js';
 import './pages/hermes-memory-page.js';
-import './pages/hermes-skills-page.js';
 import './pages/hermes-service-page.js';
 import './pages/hermes-env-page.js';
 import './pages/hermes-config-page.js';
@@ -228,9 +227,7 @@ export class OpenClawApp extends LitElement {
       case 'logs':
         if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
         return html`<logs-page title=${title('logs')} subtitle=${sub('logs')}></logs-page>`;
-      case 'skills':
-        if (this._engine === 'hermes') return html`<hermes-skills-page title=${title('skills')} subtitle=${sub('skills')}></hermes-skills-page>`;
-        return html`<skills-page title=${title('skills')} subtitle=${sub('skills')}></skills-page>`;
+      case 'skills': return html`<skills-page title=${title('skills')} subtitle=${sub('skills')}></skills-page>`;
       case 'memory':
         if (this._engine === 'hermes') return html`<hermes-memory-page title=${title('memory')} subtitle=${sub('memory')}></hermes-memory-page>`;
         return html`<memory-page title=${title('memory')} subtitle=${sub('memory')}></memory-page>`;

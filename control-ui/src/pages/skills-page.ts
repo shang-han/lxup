@@ -103,6 +103,51 @@ export class SkillsPage extends LitElement {
     .hub-msg { font-size: 12px; margin: 0 0 10px; }
     .hub-msg.ok { color: var(--success); }
     .hub-msg.err { color: var(--danger); word-break: break-all; }
+    .hub-msg.warn { color: var(--warn); }
+
+    /* === clawhub 风险提示 / 空状态引导 === */
+    .hub-warn {
+      display: flex; align-items: flex-start; gap: 8px;
+      margin: 10px 14px 0; padding: 8px 12px;
+      background: rgba(245,158,11,0.09);
+      border: 1px solid rgba(245,158,11,0.28);
+      border-radius: var(--radius-md);
+      font-size: 12px; line-height: 1.5; color: var(--text-soft);
+      transition: border-color var(--duration-fast) ease;
+    }
+    .hub-warn:hover { border-color: rgba(245,158,11,0.5); }
+    .hub-warn svg { flex-shrink: 0; width: 14px; height: 14px; color: var(--warn); margin-top: 1px; }
+
+    .hub-empty { padding: 22px 18px 24px; }
+    .hub-intro { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px; padding: 0 2px; }
+    .hub-intro__icon {
+      flex-shrink: 0; width: 38px; height: 38px; display: grid; place-items: center;
+      border-radius: var(--radius-md); color: var(--accent);
+      background: var(--accent-subtle); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .hub-intro__icon svg { width: 18px; height: 18px; }
+    .hub-intro__desc { font-size: 13px; line-height: 1.7; color: var(--text-soft); padding-top: 2px; }
+
+    .hub-hints { display: flex; flex-direction: column; gap: 4px; border-top: 1px dashed var(--border); padding-top: 12px; }
+    .hub-hint {
+      display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+      border-radius: var(--radius-md); border: 1px solid transparent;
+      transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
+      animation: hub-hint-in 0.3s ease both;
+    }
+    .hub-hint:nth-child(2) { animation-delay: 60ms; }
+    .hub-hint:nth-child(3) { animation-delay: 120ms; }
+    .hub-hint:hover { background: var(--bg-hover); border-color: var(--border); transform: translateX(3px); }
+    .hub-hint__icon {
+      flex-shrink: 0; width: 26px; height: 26px; display: grid; place-items: center;
+      border-radius: var(--radius-sm); background: var(--bg-muted); color: var(--text-soft);
+      transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
+    }
+    .hub-hint:hover .hub-hint__icon { color: var(--accent); background: var(--accent-subtle); }
+    .hub-hint__icon svg { width: 14px; height: 14px; }
+    .hub-hint__label { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; min-width: 84px; }
+    .hub-hint__desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    @keyframes hub-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     .detail-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.4);
       display: flex; align-items: center; justify-content: center; z-index: 100;
@@ -208,7 +253,12 @@ export class SkillsPage extends LitElement {
   async _searchHub() {
     const store = getSharedStore();
     const q = this._hubQuery.trim();
-    if (!q || !store.connected) return;
+    if (!q) return;
+    if (!store.connected) {
+      this._hubMsg = L('skills.hubGatewayRequired');
+      this._hubMsgCls = 'warn';
+      return;
+    }
     this._hubSearching = true;
     this._hubMsg = '';
     this._hubMsgCls = '';
@@ -381,15 +431,33 @@ export class SkillsPage extends LitElement {
             <div class="skills-section__header">
               ${L('skills.searchHubTitle')}
             </div>
+            <div class="hub-warn">${icons['alert-triangle']}<span>${L('skills.hubWarn')}</span></div>
             ${this._hubMsg ? html`
               <div class="hub-msg ${this._hubMsgCls}">${this._hubMsg}</div>
             ` : ''}
             ${!this._hubSearched ? html`
-              <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">
-                <div style="margin-bottom:12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--border-strong);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <div class="hub-empty">
+                <div class="hub-intro">
+                  <div class="hub-intro__icon">${icons['search']}</div>
+                  <div class="hub-intro__desc">${L('skills.hubIntro')}</div>
                 </div>
-                <div>${L('skills.searchHubDesc')}</div>
+                <div class="hub-hints">
+                  <div class="hub-hint">
+                    <div class="hub-hint__icon">${icons['zap']}</div>
+                    <div class="hub-hint__label">${L('skills.hubInstallNoteT')}</div>
+                    <div class="hub-hint__desc">${L('skills.hubInstallNoteD')}</div>
+                  </div>
+                  <div class="hub-hint">
+                    <div class="hub-hint__icon">${icons['globe']}</div>
+                    <div class="hub-hint__label">${L('skills.hubSearchTipT')}</div>
+                    <div class="hub-hint__desc">${L('skills.hubSearchTipD')}</div>
+                  </div>
+                  <div class="hub-hint">
+                    <div class="hub-hint__icon">${icons['wifi']}</div>
+                    <div class="hub-hint__label">${L('skills.hubNetworkNoteT')}</div>
+                    <div class="hub-hint__desc">${L('skills.hubNetworkNoteD')}</div>
+                  </div>
+                </div>
               </div>
             ` : !this._hubResults.length ? html`
               <div class="skills-empty">${L('skills.hubNoResults')}</div>
