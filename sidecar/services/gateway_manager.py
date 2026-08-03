@@ -56,6 +56,19 @@ class GatewayManager:
             return f'"{self._node_exe}" "{self._oc_entry}" gateway --port {self.port} --force'
         return f'{self.cmd} gateway --port {self.port} --force'
 
+    def cli_command(self, *args: str) -> list[str]:
+        """构造 openclaw CLI 子进程命令（argv 形式，无 shell）。
+
+        与 _build_command 同一套发现逻辑：优先便携 node + 项目内打包的 openclaw，
+        未打包才回退全局 openclaw 命令。所有需要调 openclaw CLI 的地方
+        （微信登录、渠道删除等）都应走这里，避免在便携部署里调用不存在的全局命令。
+        """
+        if os.path.exists(self._node_exe) and os.path.exists(self._oc_entry):
+            return [self._node_exe, self._oc_entry, *args]
+        # 回退全局命令：Windows 上 npm 装的是 openclaw.cmd shim，
+        # create_subprocess_exec 不走 shell 解析不了 .cmd，需 which 出真实路径
+        return [shutil.which(self.cmd) or self.cmd, *args]
+
     # ── 状态 ──────────────────────────────────────────
 
     async def status(self) -> dict:
