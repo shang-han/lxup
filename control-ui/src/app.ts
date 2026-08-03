@@ -51,7 +51,8 @@ function buildRoutes(): Record<string, { label: string; icon: string; subtitle: 
 }
 
 // 侧边栏隐藏的入口:页面组件与路由都保留,仅菜单不展示(恢复时从集合中删掉对应项即可)
-const HIDDEN_TABS = new Set(['logs', 'services', 'gateway', 'settings', 'extensions']);
+// 注意: gateway(网关配置)必须在侧边栏可见——模型配置等页面离线时需要它做入口
+const HIDDEN_TABS = new Set(['logs', 'services', 'settings', 'extensions']);
 
 function buildSections(engine: string): Array<{ heading: string | null; tabs: string[] }> {
   let sections: Array<{ heading: string | null; tabs: string[] }>;
@@ -223,7 +224,7 @@ export class OpenClawApp extends LitElement {
           return html`<hermes-dashboard-page title=${title('dashboard')} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-dashboard-page>`;
         }
         return html`<dashboard-page title=${title('dashboard')} subtitle=${L('dashboard.subtitle')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
-      case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected} .engine=${this._engine}></chat-page>`;
+      case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected} .engine=${this._engine} .onNavigate=${(p:string)=>this._navigate(p)}></chat-page>`;
       case 'logs':
         if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
         return html`<logs-page title=${title('logs')} subtitle=${sub('logs')}></logs-page>`;

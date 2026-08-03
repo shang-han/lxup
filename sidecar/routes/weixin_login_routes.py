@@ -26,6 +26,11 @@ router = APIRouter(tags=["weixin-login"])
 async def weixin_login_ws(ws: WebSocket) -> None:
     await ws.accept()
     session = get_session()
+    # 登录子进程经 GatewayManager 构造命令（便携 node + 打包 openclaw，
+    # 未打包才回退全局命令），不在此写死裸 openclaw —— 便携部署的 PATH 上没有它
+    argv = ws.app.state.gateway_manager.cli_command(
+        "channels", "login", "--channel", "openclaw-weixin"
+    )
 
     async def push(snapshot: dict) -> None:
         try:
@@ -46,7 +51,7 @@ async def weixin_login_ws(ws: WebSocket) -> None:
                 continue
             action = msg.get("action")
             if action == "start":
-                await session.start()
+                await session.start(argv)
             elif action == "stop":
                 await session.stop()
     except WebSocketDisconnect:

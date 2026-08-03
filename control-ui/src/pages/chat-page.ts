@@ -280,6 +280,8 @@ export class ChatPage extends LitElement {
   @property({ type: Boolean }) connected = false;
   /** 当前引擎（由 app.ts 传入）：决定实时聊天连哪个引擎自己的网关 */
   @property({ type: String }) engine: EngineId = 'openclaw';
+  /** 页面跳转（由 app.ts 传入），供「网关设置」等入口使用 */
+  @property({ type: Function }) onNavigate = (_p: string) => {};
 
   @state() _input = '';
   @state() _messages: ViewMessage[] = [];
@@ -628,7 +630,7 @@ export class ChatPage extends LitElement {
         <div class="gw-sub">${L('chat.connecting')}</div>
         <div class="gw-actions">
           <button class="gw-btn primary" @click=${this._refresh}>${L('chat.repairReconnect')}</button>
-          <button class="gw-btn secondary">${L('chat.gatewaySettings')}</button>
+          <button class="gw-btn secondary" @click=${() => this.onNavigate('gateway')}>${L('chat.gatewaySettings')}</button>
         </div>
         <div class="gw-hint">${L('chat.firstUseHint')}</div>
       </div>
