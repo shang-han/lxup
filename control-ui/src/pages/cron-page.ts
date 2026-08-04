@@ -306,11 +306,19 @@ export class CronPage extends LitElement {
 
   _errMsg(e: unknown): string {
     const raw = e instanceof Error ? e.message : String(e);
+    let text = raw;
     try {
       const j = JSON.parse(raw);
-      if (j?.message) return String(j.message);
+      if (j?.message) text = String(j.message);
     } catch { /* 非 JSON */ }
-    return raw;
+    // 网关错误为英文；已知模式映射为本地化文案
+    if (/CronPattern|invalid configuration format|space separated parts/i.test(text)) {
+      return L('cron.errInvalidExpr');
+    }
+    if (/name.{0,20}(required|missing)|required.{0,20}name/i.test(text)) {
+      return L('cron.errNameRequired');
+    }
+    return text;
   }
 
   // ── 渲染 ──────────────────────────────────────────

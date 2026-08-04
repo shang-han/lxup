@@ -8,6 +8,7 @@
 
 import { fetchTimeout } from '../utils/net.js';
 import { getDeviceName } from '../utils/device.js';
+import { sidecarHeaders } from '../i18n/index.js';
 
 /** 授权状态（与 sidecar LicenseStatus 枚举一致） */
 export type LicenseStatus =
@@ -47,7 +48,8 @@ export async function checkSidecarHealth(): Promise<boolean> {
 const LICENSE_TIMEOUT = 25000;
 
 async function licenseRequest(path: string, init: RequestInit): Promise<LicenseResponse> {
-  const res = await fetchTimeout(`${sidecarBaseUrl()}${path}`, init, LICENSE_TIMEOUT);
+  const headers = sidecarHeaders((init.headers as Record<string, string>) || undefined);
+  const res = await fetchTimeout(`${sidecarBaseUrl()}${path}`, { ...init, headers }, LICENSE_TIMEOUT);
   // 业务失败（激活码无效、已绑其他设备、被吊销…）也是带 LicenseResponse 正文的；
   // 但 FastAPI 参数校验错误（422）返回 {detail: [...]}，需归一化
   const body = await res.json().catch(() => null);
