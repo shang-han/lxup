@@ -46,6 +46,11 @@ class CodexConfigRequest(BaseModel):
     )
     apiKey: str = Field(default="", description="OPENAI_API_KEY；留空或为打码值时保留原 Key")
     workspace: str = Field(default="", description="默认工作目录（exec --cd）")
+    baseUrl: str | None = Field(
+        default=None,
+        description="三方 OpenAI 兼容 Base URL。三态：None=不改动（字段缺席）；"
+        "空字符串=恢复官方接口；非空=写入自定义 provider",
+    )
 
 
 class ChatRequest(BaseModel):

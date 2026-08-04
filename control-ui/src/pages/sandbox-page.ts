@@ -24,6 +24,7 @@ type CodexConfig = {
   sandboxMode: string;
   apiKey: string;
   workspace: string;
+  baseUrl: string;
 };
 
 export class SandboxPage extends LitElement {
@@ -33,7 +34,7 @@ export class SandboxPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
 
-  @state() _config: CodexConfig = { model: '', approvalPolicy: '', sandboxMode: '', apiKey: '', workspace: '' };
+  @state() _config: CodexConfig = { model: '', approvalPolicy: '', sandboxMode: '', apiKey: '', workspace: '', baseUrl: '' };
   @state() _loaded = false;
   @state() _offline = false;
   @state() _saving = false;
@@ -78,6 +79,7 @@ export class SandboxPage extends LitElement {
         sandboxMode: String(j.sandboxMode ?? ''),
         apiKey: String(j.apiKey ?? ''),
         workspace: String(j.workspace ?? ''),
+        baseUrl: String(j.baseUrl ?? ''),
       };
       this._loaded = true;
       this._offline = false;
@@ -190,6 +192,10 @@ export class SandboxPage extends LitElement {
               <div class="stat-row">
                 <span class="stat-row-label">${L('sandbox.apiKey')}</span>
                 <span style="font-family:var(--font-mono);">${this._config.apiKey || '—'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-row-label">${L('common.baseUrl')}</span>
+                <span style="font-family:var(--font-mono);word-break:break-all;">${this._config.baseUrl || L('sandbox.officialApi')}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-row-label">${L('common.status')}</span>
