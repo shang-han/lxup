@@ -36,6 +36,14 @@ export type ChatStreamEvent =
 
 export type Cancellable = { abort(): void };
 
+/** 聊天图片附件（OpenClaw chat.send attachments 格式：content 为纯 base64） */
+export type ChatAttachment = {
+  type: 'image';
+  mimeType: string;
+  fileName: string;
+  content: string;
+};
+
 export interface ChatEngine {
   readonly id: EngineId;
   /** 当前是否就绪（OpenClaw=WS 已连；Hermes=最近一次 /health 成功） */
@@ -53,7 +61,7 @@ export interface ChatEngine {
   createSession(): Promise<ChatSession | null>;
   /** 删除会话；成功返回 true */
   deleteSession(sessionId: string): Promise<boolean>;
-  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable;
+  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void, attachments?: ChatAttachment[]): Cancellable;
 }
 
 // ── 工具函数 ──
@@ -147,7 +155,7 @@ export class OpenClawChatEngine implements ChatEngine {
     }
   }
 
-  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
+  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void, attachments?: ChatAttachment[]): Cancellable {
     const runId = newRunId();
     let currentRun = runId;
     const unsub = this.store.onEvent('chat', (p) => {
@@ -160,7 +168,7 @@ export class OpenClawChatEngine implements ChatEngine {
         onEvent({ type: 'final' });
         unsub();
       } else if (state === 'aborted' || state === 'error') {
-        onEvent({ type: 'error', message: String(p.errorMessage ?? '请求失败') });
+        onEvent({ type: 'error', message: String(p.errorMessage ?? L('common.requestFailed')) });
         unsub();
       }
     });
@@ -170,6 +178,7 @@ export class OpenClawChatEngine implements ChatEngine {
         message: text,
         idempotencyKey: runId,
         deliver: false,
+        ...(attachments && attachments.length ? { attachments } : {}),
       })
       .then((ack) => {
         if (ack?.runId) currentRun = ack.runId;
@@ -244,7 +253,7 @@ export class HermesChatEngine implements ChatEngine {
     }
   }
 
-  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
+  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void, _attachments?: ChatAttachment[]): Cancellable {
     let cancelled = false;
     let inner: AbortController | null = null;
     void (async () => {
@@ -385,7 +394,7 @@ export class CodexChatEngine implements ChatEngine {
     }
   }
 
-  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void): Cancellable {
+  send(sessionId: string, text: string, onEvent: (ev: ChatStreamEvent) => void, _attachments?: ChatAttachment[]): Cancellable {
     let cancelled = false;
     let inner: AbortController | null = null;
     void (async () => {

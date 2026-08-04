@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/oc-markdown.js';
 import { getSharedStore } from '../store/shared.js';
@@ -29,7 +29,7 @@ function formatRelTime(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-type ViewMessage = { role: 'user' | 'assistant'; text: string; tools?: ToolEvent[] };
+type ViewMessage = { role: 'user' | 'assistant'; text: string; tools?: ToolEvent[]; images?: string[] };
 
 export class ChatPage extends LitElement {
   static styles = css`
@@ -129,6 +129,9 @@ export class ChatPage extends LitElement {
       display: flex; align-items: center; gap: 4px;
       background: var(--bg-hover);
     }
+    .chat-header__right .ws-btn.spinning svg { animation: chat-spin 0.8s linear infinite; }
+    .chat-header__right .ws-btn:disabled { opacity: 0.6; cursor: wait; }
+    @keyframes chat-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .workspace-pill {
       display: flex; align-items: center; gap: 4px;
       padding: 4px 10px; border-radius: var(--radius-full);
@@ -186,6 +189,22 @@ export class ChatPage extends LitElement {
       background: var(--accent); color: var(--accent-foreground);
     }
     .msg-text { white-space: pre-wrap; word-break: break-word; }
+    .msg-images { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .msg-images img {
+      width: 72px; height: 72px; object-fit: cover; display: block;
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+    }
+    .chat-pending-imgs { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 8px; }
+    .chat-pending-imgs .pi { position: relative; }
+    .chat-pending-imgs .pi img {
+      width: 56px; height: 56px; object-fit: cover; display: block;
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+    }
+    .chat-pending-imgs .pi button {
+      position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+      border-radius: 50%; border: none; background: var(--danger); color: #fff;
+      cursor: pointer; font-size: 11px; line-height: 1;
+    }
     .msg-md { min-width: 0; }
 
     /* === tool cards (命令/工具执行，内联) === */
@@ -260,19 +279,6 @@ export class ChatPage extends LitElement {
     }
     .chat-input-bar__send:hover { background: var(--accent-hover); }
     .chat-input-bar__send:disabled { opacity: 0.4; cursor: not-allowed; }
-    .chat-input-bar__managed {
-      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-      padding: 0 8px; height: 38px; border-radius: var(--radius-md);
-      background: var(--bg-hover); border: 1px solid var(--border);
-      font-size: 12px; color: var(--text-soft); cursor: pointer;
-      transition: all var(--duration-fast);
-    }
-    .chat-input-bar__managed:hover { border-color: var(--text-muted); color: var(--text); }
-    .chat-input-bar__managed .m-dot {
-      width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
-    }
-    .chat-input-bar__managed.active .m-dot { background: var(--success); }
-    .chat-input-bar__managed.active { border-color: var(--success); }
   `;
 
   @property({ type: String }) title = '';
@@ -285,14 +291,16 @@ export class ChatPage extends LitElement {
 
   @state() _input = '';
   @state() _messages: ViewMessage[] = [];
+  @state() _pendingImages: Array<{ name: string; mime: string; dataUrl: string }> = [];
+  @state() _imgGenMode = false;
   @state() _showSessionList = false;
   @state() _showBanner = true;
   @state() _sessionKey = '';
   @state() _sessions: ChatSession[] = [];
   @state() _loadingHistory = false;
   @state() _engineReady = false;
-  @state() _thinkingEnabled = false;
-  @state() _managed = false;
+  @state() _refreshing = false;
+  _pollTimer: number | null = null;
   @state() _streaming = false;
   @state() _models: ResolvedModel[] = [];
   @state() _activeModel: ResolvedModel | null = null;
@@ -310,6 +318,12 @@ export class ChatPage extends LitElement {
     this._refreshModels();
     this._setupEngine();
     this._inited = true;
+    // 驻留期间主动轮询：Hermes/Codex 无长连接需主动探健康；
+    // 模型列表定期重拉，配置页改完无需手动刷新即可同步
+    this._pollTimer = window.setInterval(() => {
+      if (this.engine !== 'openclaw') void this._engineAdapter?.refresh();
+      this._refreshModels();
+    }, 5000);
     // 技能页「试一下」预填：读取后立即清除（约定键，见 skills-v2-page CHAT_PREFILL_KEY）
     const prefill = sessionStorage.getItem('lxup.chat.prefill');
     if (prefill) {
@@ -319,12 +333,19 @@ export class ChatPage extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    // 引擎切换 → 换用对应引擎的网关
-    if (this._inited && changed.has('engine')) this._setupEngine();
+    // 引擎切换 → 换用对应引擎的网关 + 重拉该引擎的模型列表
+    if (this._inited && changed.has('engine')) {
+      this._setupEngine();
+      this._refreshModels();
+    }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    if (this._pollTimer !== null) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
     this._teardownEngine();
   }
 
@@ -424,7 +445,38 @@ export class ChatPage extends LitElement {
     return this._sessionKey;
   }
 
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
   _refreshModels() {
+    // Hermes / Codex：下拉展示各自已配置的模型（只读展示，配置在对应配置页修改）
+    if (this.engine === 'hermes') {
+      fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() })
+        .then(r => (r.ok ? r.json() : null))
+        .then((c: any) => {
+          const name = c?.name ? String(c.name) : '';
+          this._models = name
+            ? [{ providerId: 'hermes', providerName: 'Hermes', baseUrl: '', apiKey: '', apiType: 'openai', model: name, isPrimary: true }]
+            : [];
+          this._activeModel = this._models[0] || null;
+        })
+        .catch(() => { this._models = []; this._activeModel = null; });
+      return;
+    }
+    if (this.engine === 'codex') {
+      codex.getConfig()
+        .then((cfg: any) => {
+          const name = cfg?.model ? String(cfg.model) : '';
+          this._models = name
+            ? [{ providerId: 'codex', providerName: 'Codex', baseUrl: '', apiKey: '', apiType: 'openai', model: name, isPrimary: true }]
+            : [];
+          this._activeModel = this._models[0] || null;
+        })
+        .catch(() => { this._models = []; this._activeModel = null; });
+      return;
+    }
     this._models = listModels();
     this._activeModel = getActiveModel();
     // 合并网关配置里的模型（与模型页同源），避免「配置了模型、下拉却没有」
@@ -453,15 +505,27 @@ export class ChatPage extends LitElement {
 
   async _send() {
     const text = this._input.trim();
-    if (!text || this._streaming) return;
+    const imgs = this._pendingImages;
+    if ((!text && imgs.length === 0) || this._streaming) return;
     if (!this._engineAdapter.ready()) {
       this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
       this._scrollToBottom();
       return;
     }
 
-    this._messages = [...this._messages, { role: 'user', text }];
+    // OpenClaw chat.send 支持 attachments（base64）；Hermes/Codex 仅文本
+    const attachments = imgs.map(p => ({
+      type: 'image' as const, mimeType: p.mime, fileName: p.name,
+      content: p.dataUrl.split(',')[1] || '',
+    }));
+    const supportsImg = this.engine === 'openclaw';
+
+    this._messages = [...this._messages, {
+      role: 'user', text,
+      images: imgs.length ? imgs.map(p => p.dataUrl) : undefined,
+    }];
     this._input = '';
+    this._pendingImages = [];
     this._streaming = true;
     this._scrollToBottom();
 
@@ -472,7 +536,32 @@ export class ChatPage extends LitElement {
       this._scrollToBottom();
       return;
     }
-    this._chatCancel = this._engineAdapter.send(sid, text, (ev) => this._onEngineEvent(ev));
+    this._chatCancel = this._engineAdapter.send(
+      sid, text, (ev) => this._onEngineEvent(ev),
+      supportsImg && attachments.length ? attachments : undefined);
+    if (!supportsImg && attachments.length) {
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgUnsupported')}` }];
+      this._scrollToBottom();
+    }
+  }
+
+  /** 附件按钮 → 选择本地图片（单张 ≤10MB） */
+  _onPickImages(e: Event) {
+    const input = e.target as HTMLInputElement;
+    for (const f of Array.from(input.files || [])) {
+      if (!f.type.startsWith('image/')) continue;
+      if (f.size > 10 * 1024 * 1024) {
+        this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgTooLarge', { name: f.name })}` }];
+        this._scrollToBottom();
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        this._pendingImages = [...this._pendingImages, { name: f.name, mime: f.type, dataUrl: String(reader.result) }];
+      };
+      reader.readAsDataURL(f);
+    }
+    input.value = '';
   }
 
   _onEngineEvent(ev: ChatStreamEvent) {
@@ -598,10 +687,37 @@ export class ChatPage extends LitElement {
     this._showSessionList = false;
   }
 
-  _refresh() {
-    void this._engineAdapter.refresh();
-    void this._loadSessions();
-    if (this._sessionKey) void this._loadHistory();
+  /** 轮询等待引擎就绪（重连后 WS 就绪前拉历史会空转） */
+  async _waitReady(timeoutMs = 6000): Promise<boolean> {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      if (this._engineAdapter.ready()) return true;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return this._engineAdapter.ready();
+  }
+
+  async _refresh() {
+    if (this._refreshing) return;
+    this._refreshing = true;
+    try {
+      if (this.engine === 'openclaw') {
+        // 强制重连网关拿最新状态（自动重连有退避延迟，手动刷新立即探测）
+        getSharedStore().connect();
+      } else {
+        void this._engineAdapter.refresh();
+      }
+      // 等就绪后再拉会话/历史——与整页刷新的加载顺序一致
+      const ready = await this._waitReady();
+      if (ready) {
+        await this._loadSessions();
+        if (this._sessionKey) await this._loadHistory();
+      }
+      this._refreshModels();
+    } finally {
+      this._refreshing = false;
+      this.requestUpdate();
+    }
   }
 
   // ── 渲染 ──
@@ -636,6 +752,9 @@ export class ChatPage extends LitElement {
             ${m.text ? (m.role === 'assistant'
               ? html`<div class="msg-md"><oc-markdown .text=${m.text}></oc-markdown></div>`
               : html`<div class="msg-text">${m.text}</div>`) : ''}
+            ${m.images && m.images.length ? html`
+              <div class="msg-images">${m.images.map(src => html`<img src=${src} />`)}</div>
+            ` : ''}
           </div>
         </div>
       `)}
@@ -720,32 +839,31 @@ export class ChatPage extends LitElement {
               </div>
             </div>
             <div class="chat-header__right">
-              ${isHermes
-                ? html`<div class="workspace-pill"><span class="ws-name">${L('chat.hermesModel')}</span></div>`
-                : isCodex
-                ? html`<div class="workspace-pill"><span class="ws-name">${L('chat.codexModel')}</span></div>`
-                : html`
-                  <select title="model" @change=${this._onSelectModel}>
-                    ${this._models.length === 0
-                      ? html`<option value="">${L('chat.noModelOption')}</option>`
-                      : this._models.map(m => html`
-                          <option value="${m.providerId}::${m.model}"
-                            ?selected=${this._activeModel && this._activeModel.providerId === m.providerId && this._activeModel.model === m.model}>
-                            ${m.model} · ${m.providerName}
-                          </option>`)}
-                  </select>`}
-              <button class="ws-btn" title="${L('common.refresh')}" @click=${this._refresh}>
+              <select title="model" ?disabled=${isHermes || isCodex} @change=${this._onSelectModel}>
+                ${this._models.length === 0
+                  ? html`<option value="">${L('chat.noModelOption')}</option>`
+                  : this._models.map(m => html`
+                      <option value="${m.providerId}::${m.model}"
+                        ?selected=${this._activeModel && this._activeModel.providerId === m.providerId && this._activeModel.model === m.model}>
+                        ${m.model}${isHermes || isCodex ? '' : ' · ' + m.providerName}
+                      </option>`)}
+              </select>
+              <button class="ws-btn ${this._refreshing ? 'spinning' : ''}" title="${L('common.refresh')}"
+                ?disabled=${this._refreshing} @click=${this._refresh}>
                 ${icons['refresh-cw']}
               </button>
-              ${isHermes || isCodex ? '' : html`
-                <div class="workspace-pill">
-                  ${icons['folder-open']}
-                  <span class="ws-label">${L('chat.workspace')}</span>
-                  <span class="ws-name">main</span>
-                </div>`}
-              <button class="ws-btn" title="tools">
-                ${icons['layout-panel-left']}
-              </button>
+              <!-- 暂隐藏：工作区与工具按钮（点击事件后续再做；恢复时去掉外层 display:none） -->
+              <div style="display:none;align-items:center;gap:6px;">
+                ${isHermes || isCodex ? '' : html`
+                  <div class="workspace-pill">
+                    ${icons['folder-open']}
+                    <span class="ws-label">${L('chat.workspace')}</span>
+                    <span class="ws-name">main</span>
+                  </div>`}
+                <button class="ws-btn" title="tools">
+                  ${icons['layout-panel-left']}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -781,20 +899,32 @@ export class ChatPage extends LitElement {
             }
           </div>
 
+          <!-- 待发送图片缩略图 -->
+          ${this._pendingImages.length ? html`
+            <div class="chat-pending-imgs">
+              ${this._pendingImages.map((p, i) => html`
+                <div class="pi">
+                  <img src=${p.dataUrl} title=${p.name} />
+                  <button title=${L('common.delete')}
+                    @click=${() => { this._pendingImages = this._pendingImages.filter((_, j) => j !== i); }}>×</button>
+                </div>
+              `)}
+            </div>
+          ` : ''}
+
           <!-- Input bar -->
           <div class="chat-input-bar">
             <div class="chat-input-bar__tools">
-              <button class="${this._thinkingEnabled ? 'active' : ''}"
-                      title="${L('chat.thinking')}"
-                      @click=${() => { this._thinkingEnabled = !this._thinkingEnabled; }}>
-                ${icons['sparkles']}
-              </button>
-              <button title="${L('chat.image')}">
+              <button class="${this._imgGenMode ? 'active' : ''}" title="${L('chat.imgGenMode')}"
+                @click=${() => { this._imgGenMode = !this._imgGenMode; }}>
                 ${icons['image']}
               </button>
-              <button title="${L('chat.attachment')}">
+              <button title="${L('chat.attachment')}"
+                @click=${() => (this.renderRoot.querySelector('#chat-file-input') as HTMLInputElement)?.click()}>
                 ${icons['paperclip']}
               </button>
+              <input id="chat-file-input" type="file" accept="image/*" multiple style="display:none"
+                @change=${this._onPickImages} />
             </div>
             <div class="chat-input-bar__input">
               <textarea rows="1"
@@ -806,7 +936,7 @@ export class ChatPage extends LitElement {
                   t.style.height = Math.min(t.scrollHeight, 120) + 'px';
                 }}
                 @keydown=${this._onKeydown}
-                placeholder="${L('chat.placeholder')}"
+                placeholder="${this._imgGenMode ? L('chat.imgGenPlaceholder') : L('chat.placeholder')}"
               ></textarea>
             </div>
             <button class="chat-input-bar__send"
@@ -814,12 +944,6 @@ export class ChatPage extends LitElement {
                     @click=${this._send}>
               ${this._streaming ? icons['refresh-cw'] : icons['send']}
             </button>
-            <div class="chat-input-bar__managed ${this._managed ? 'active' : ''}"
-                 @click=${() => { this._managed = !this._managed; }}>
-              <span class="m-dot"></span>
-              <span>${L('chat.managed')}</span>
-              <span style="font-size:11px;color:var(--muted)">${this._managed ? L('common.enabled') : L('common.disabled')}</span>
-            </div>
           </div>
         </div>
       </div>
