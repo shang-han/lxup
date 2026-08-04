@@ -248,9 +248,11 @@ class CodexManager:
                 providers["lxup"] = {
                     "name": "LXUP",
                     "base_url": base_url,
-                    # 三方 OpenAI 兼容服务普遍只实现 Chat Completions，
-                    # Responses API 是官方独有，故钉死 chat
-                    "wire_api": "chat",
+                    # codex 0.145.0 已移除 chat wire API（openai/codex#7782），
+                    # 自定义 provider 只接受 responses。三方若只支持
+                    # Chat Completions，需把 base_url 指向能转 Responses
+                    # 协议的中转服务，直连必然失败
+                    "wire_api": "responses",
                 }
                 cfg["model_providers"] = providers
             else:
