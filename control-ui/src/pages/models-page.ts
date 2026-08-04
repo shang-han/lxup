@@ -9,14 +9,18 @@ import '../components/page-header.js';
 /**
  * ModelsPage — 模型配置页
  *
- * 数据源 = OpenClaw 网关配置（WS RPC config.get / config.patch）：
+ * 权威数据源 = OpenClaw 网关配置（WS RPC config.get / config.patch）：
  *   - 服务商/模型    → config.models.providers（字典：{ <id>: { baseUrl, apiKey, models[] } }）
  *   - 主模型（★）   → config.agents.defaults.model（"provider/model" 引用）
  * 保存采用读-改-写 + baseHash 乐观并发，replacePaths 限定 models/agents 两棵子树，
  * 且回写完整子树（保留模型条目的 contextWindow/cost 等元数据与其他 agent 配置）。
  *
- * localStorage（openclaw.models.config）降级为镜像缓存：每次从网关加载/保存成功后
- * 同步一份，供聊天页/AI 页等 localStorage 读取方使用；网关未连接时页面只读并展示本地缓存。
+ * 离线可编辑（模型配置不依赖网关启动）：
+ *  - 网关已连接：改动直接经 config.patch 写入网关，并镜像到 localStorage；
+ *  - 网关未连接：改动先写 localStorage 镜像，并在 localStorage 记录「待同步」
+ *    （openclaw.models.pending-sync，含待删服务商 id，跨页面跳转不丢）；
+ *    网关（重新）连上后自动把本地配置 merge-push 到网关，成功后清除待同步标记。
+ * localStorage（openclaw.models.config）同时供聊天页/AI 页等读取方使用。
  *
  * 功能：
  *  - 添加/编辑/删除服务商（Provider）
@@ -43,6 +47,13 @@ type ConfirmState = {
 
 /** localStorage 镜像 key（与 utils/model-config.ts 共用） */
 const STORAGE_KEY = 'openclaw.models.config';
+
+/**
+ * 离线「待同步」标记 key：网关未连接时的改动先落本地，
+ * 记录在此（含待删服务商 id），网关连上后自动推送并清除。
+ * 组件卸载会丢实例状态，故必须持久化在 localStorage。
+ */
+const PENDING_KEY = 'openclaw.models.pending-sync';
 
 const PROVIDER_PRESETS = [
   { name: 'GPT+Claude推荐中转', baseUrl: '', models: ['gpt-4o', 'claude-sonnet-4-5'] },
@@ -110,6 +121,13 @@ export class ModelsPage extends LitElement {
     .models-error {
       font-size: 12px; color: var(--danger); margin: -4px 0 12px;
       word-break: break-all;
+    }
+    .models-notice {
+      font-size: 12px; color: var(--muted); margin: -4px 0 12px;
+    }
+    .models-pending {
+      font-size: 12px; color: var(--warn); margin: -4px 0 12px;
+      display: flex; align-items: center; gap: 6px;
     }
 
     /* === hint === */
@@ -298,6 +316,10 @@ export class ModelsPage extends LitElement {
   @state() _source: 'gateway' | 'local' = 'local';
   @state() _saving = false;
   @state() _saveError = '';
+  // 离线改动待同步（网关连上后自动推送）
+  @state() _pendingLocal = false;
+  // 轻量提示（如离线刷新反馈），数秒后自动消失
+  @state() _notice = '';
 
   // 添加/编辑对话框状态
   @state() _dialogOpen = false;
@@ -315,6 +337,7 @@ export class ModelsPage extends LitElement {
   // 行内添加模型的输入（按 provider id 索引）
   _inlineInputs: Record<string, string> = {};
   _saveTimer: ReturnType<typeof setTimeout> | null = null;
+  _noticeTimer: ReturnType<typeof setTimeout> | null = null;
   _storeUnsub: (() => void) | null = null;
 
   /** 网关侧模型条目原始元数据（contextWindow/cost/compat…），保存时原样带回避免丢字段 */
@@ -329,13 +352,26 @@ export class ModelsPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     const store = getSharedStore();
+    // 恢复上次离线编辑留下的待同步改动（实例状态随页面卸载丢失，只认 localStorage）
+    const pend = this._readPending();
+    if (pend) {
+      this._pendingLocal = true;
+      this._pendingDeletes = new Set(pend.deletes);
+    }
     this._storeUnsub = store.subscribe(snap => {
       const was = this._connected;
       this._connected = snap.connected;
-      // 网关（重新）连上 → 拉取权威配置
-      if (snap.connected && !was) this._loadFromGateway();
+      // 网关（重新）连上：有待同步的本地改动就推送，否则拉取权威配置
+      if (snap.connected && !was) {
+        if (this._pendingLocal) {
+          this._loadFromLocal(); // 先恢复本地视图，别用网关配置覆盖离线改动
+          this._saveToGateway(); // merge-push 到网关，成功后自动清待同步
+        } else {
+          this._loadFromGateway();
+        }
+      }
     });
-    // subscribe 会同步回灌当前快照：已连接时上面已触发加载；未连接时走本地兜底
+    // subscribe 会同步回灌当前快照：已连接时上面已触发加载/同步；未连接时走本地兜底
     if (!store.connected) this._loadFromGateway();
   }
 
@@ -343,6 +379,7 @@ export class ModelsPage extends LitElement {
     super.disconnectedCallback();
     this._storeUnsub?.();
     if (this._saveTimer) clearTimeout(this._saveTimer);
+    if (this._noticeTimer) clearTimeout(this._noticeTimer);
   }
 
   // ── 加载 ──────────────────────────────────────────
@@ -352,6 +389,8 @@ export class ModelsPage extends LitElement {
     const store = getSharedStore();
     if (!store.connected) {
       this._loadFromLocal();
+      // 刷新在离线时只是重载本地缓存，给出提示避免「点了没反应」的观感
+      if (!this._pendingLocal) this._showNotice(L('models.offlineRefreshed'));
       return;
     }
     try {
@@ -432,13 +471,53 @@ export class ModelsPage extends LitElement {
     } catch { /* localStorage 不可用时静默 */ }
   }
 
-  // ── 保存（写回网关配置）────────────────────────────
+  // ── 保存（在线写网关 / 离线写本地待同步）──────────────
 
-  /** 网关不可达时禁止改动，给出提示 */
-  _requireConnected(): boolean {
-    if (this._connected) return true;
-    this._saveError = L('models.gwDisconnected');
-    return false;
+  /** 统一保存入口：在线直写网关（权威）；离线落本地缓存，网关连上后自动同步 */
+  _save() {
+    const store = getSharedStore();
+    if (store.connected) this._saveToGateway();
+    else this._saveToLocal();
+  }
+
+  /** 离线保存：写 localStorage 镜像 + 记录待同步标记 */
+  _saveToLocal() {
+    this._mirrorToLS();
+    this._writePending();
+    this._saveError = '';
+    this._saveFlash = true;
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
+  }
+
+  /** 轻量提示（3 秒自动消失） */
+  _showNotice(msg: string) {
+    this._notice = msg;
+    if (this._noticeTimer) clearTimeout(this._noticeTimer);
+    this._noticeTimer = setTimeout(() => { this._notice = ''; }, 3000);
+  }
+
+  // ── 待同步标记（持久化在 localStorage，跨页面跳转不丢）──
+
+  _readPending(): { deletes: string[] } | null {
+    try {
+      const raw = localStorage.getItem(PENDING_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return { deletes: Array.isArray(p?.deletes) ? p.deletes.map((x: any) => String(x)) : [] };
+    } catch { return null; }
+  }
+
+  _writePending() {
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify({ deletes: [...this._pendingDeletes] }));
+    } catch { /* localStorage 不可用时静默 */ }
+    this._pendingLocal = true;
+  }
+
+  _clearPending() {
+    try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
+    this._pendingLocal = false;
   }
 
   /**
@@ -507,6 +586,7 @@ export class ModelsPage extends LitElement {
 
       this._defaultModelRef = primaryRef;
       this._pendingDeletes.clear();
+      this._clearPending();
       this._mirrorToLS();
       this._saveFlash = true;
       if (this._saveTimer) clearTimeout(this._saveTimer);
@@ -533,7 +613,7 @@ export class ModelsPage extends LitElement {
   // ── 对话框：打开 / 关闭 ─────────────────────────────
 
   _openAddDialog() {
-    if (!this._requireConnected()) return;
+    // 离线也允许配置（先落本地，网关连上后自动同步），不强制网关启动
     this._editingId = null;
     this._formProviderName = '';
     this._formBaseUrl = '';
@@ -545,7 +625,6 @@ export class ModelsPage extends LitElement {
   }
 
   _openEditDialog(id: string) {
-    if (!this._requireConnected()) return;
     const p = this._providers.find(x => x.id === id);
     if (!p) return;
     this._editingId = id;
@@ -597,7 +676,6 @@ export class ModelsPage extends LitElement {
   _confirmProvider() {
     const name = this._formProviderName.trim();
     if (!name) return;
-    if (!this._requireConnected()) return;
 
     if (this._editingId) {
       // 编辑模式：服务商 id（网关配置键）不变，更新其余字段，保留主模型标记
@@ -632,7 +710,7 @@ export class ModelsPage extends LitElement {
     }
 
     this._dialogOpen = false;
-    this._saveToGateway();
+    this._save();
   }
 
   // ── 服务商：删除 / 清空 ─────────────────────────────
@@ -644,10 +722,9 @@ export class ModelsPage extends LitElement {
       title: L('models.deleteProviderTitle'),
       message: L('models.deleteProviderConfirm', { name: p.name, count: p.models.length }),
       onConfirm: () => {
-        if (!this._requireConnected()) return;
         this._providers = this._providers.filter(x => x.id !== id);
         this._pendingDeletes.add(id);
-        this._saveToGateway();
+        this._save();
       },
     };
   }
@@ -658,11 +735,10 @@ export class ModelsPage extends LitElement {
       title: L('models.revokeAllTitle'),
       message: L('models.revokeAllConfirm'),
       onConfirm: () => {
-        if (!this._requireConnected()) return;
         for (const p of this._providers) this._pendingDeletes.add(p.id);
         this._providers = [];
         this._expanded = {};
-        this._saveToGateway();
+        this._save();
       },
     };
   }
@@ -679,7 +755,6 @@ export class ModelsPage extends LitElement {
   // ── 模型：主模型 / 删除 / 行内添加 ──────────────────
 
   _togglePrimary(providerId: string, modelId: string) {
-    if (!this._requireConnected()) return;
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
       return {
@@ -694,24 +769,22 @@ export class ModelsPage extends LitElement {
         ...x, models: x.models.map((m, i) => ({ ...m, isPrimary: i === 0 })),
       });
     }
-    this._saveToGateway();
+    this._save();
   }
 
   _deleteModel(providerId: string, modelId: string) {
-    if (!this._requireConnected()) return;
-    // 删除的若是主模型，网关侧引用一并清除（_saveToGateway 按当前状态重算引用）
+    // 删除的若是主模型，网关侧引用一并清除（保存时按当前状态重算引用）
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
       const models = p.models.filter(m => m.id !== modelId);
       return { ...p, models };
     });
-    this._saveToGateway();
+    this._save();
   }
 
   _addInlineModel(providerId: string) {
     const input = this._inlineInputs[providerId]?.trim();
     if (!input) return;
-    if (!this._requireConnected()) return;
     const ids = input.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
@@ -722,7 +795,7 @@ export class ModelsPage extends LitElement {
     });
     this._inlineInputs[providerId] = '';
     this.requestUpdate();
-    this._saveToGateway();
+    this._save();
   }
 
   _onInlineKeydown(e: KeyboardEvent, providerId: string) {
@@ -991,8 +1064,16 @@ export class ModelsPage extends LitElement {
         ${this._saveError ? html`
           <div class="models-error">
             ✗ ${this._saveError}
-            <button class="btn-revoke" style="margin-left:8px;padding:2px 10px;" @click=${() => this._saveToGateway()}>${L('models.retrySave')}</button>
+            <button class="btn-revoke" style="margin-left:8px;padding:2px 10px;" @click=${() => this._save()}>${L('models.retrySave')}</button>
           </div>
+        ` : ''}
+        ${this._pendingLocal ? html`
+          <div class="models-pending">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ${L('models.pendingSyncHint')}
+          </div>
+        ` : this._notice ? html`
+          <div class="models-notice">${this._notice}</div>
         ` : ''}
 
         <!-- 提示 -->

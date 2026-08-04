@@ -42,6 +42,9 @@ def make_qr_data_url(url: str) -> str:
 class WeixinLoginSession:
     """管理一次微信登录子进程"""
 
+    # 保留最近 N 行输出：进程失败时把真实报错带回前端，避免只看到干巴巴的退出码
+    _TAIL_LINES = 5
+
     def __init__(self) -> None:
         self.proc: asyncio.subprocess.Process | None = None
         self._task: asyncio.Task | None = None
@@ -50,6 +53,7 @@ class WeixinLoginSession:
         self.url: str | None = None
         self.qr_data_url: str | None = None
         self._listeners: list = []
+        self._tail: list[str] = []
 
     # ── 状态推送 ──
     def add_listener(self, cb) -> None:
@@ -75,15 +79,24 @@ class WeixinLoginSession:
         self._emit()
 
     # ── 生命周期 ──
-    async def start(self) -> None:
+    async def start(self, argv: list[str] | None = None) -> None:
+        """启动登录子进程。
+
+        argv 由调用方经 GatewayManager.cli_command() 构造（便携 node + 打包的
+        openclaw，未打包回退全局命令）。不能在这里写死裸 `openclaw` 命令：
+        便携部署的 PATH 上没有它，子进程会直接退出(code 9009)，二维码永远出不来。
+        """
         if self.proc and self.proc.returncode is None:
             return  # 已在运行
+        if not argv:
+            argv = ["openclaw", "channels", "login", "--channel", "openclaw-weixin"]
         self.url = None
         self.qr_data_url = None
+        self._tail = []
         self._set("starting", "正在启动微信登录…")
         try:
-            self.proc = await asyncio.create_subprocess_shell(
-                "openclaw channels login --channel openclaw-weixin",
+            self.proc = await asyncio.create_subprocess_exec(
+                *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -99,6 +112,9 @@ class WeixinLoginSession:
                 line = raw.decode("utf-8", errors="replace").rstrip()
                 if not line:
                     continue
+                self._tail.append(line)
+                if len(self._tail) > self._TAIL_LINES:
+                    self._tail.pop(0)
 
                 # 抓登录 URL → 生成二维码
                 m = _URL_RE.search(line)
@@ -129,7 +145,9 @@ class WeixinLoginSession:
                 if self.proc.returncode == 0:
                     self._set("success", "登录成功")
                 else:
-                    self._set("error", f"登录进程退出（code {self.proc.returncode}）")
+                    # 附上子进程真实输出尾部，避免只看到一个退出码（如 9009=命令不存在）
+                    tail = " | ".join(self._tail[-self._TAIL_LINES:]) if self._tail else "无输出"
+                    self._set("error", f"登录进程退出（code {self.proc.returncode}）: {tail}")
         except asyncio.CancelledError:
             pass
         except Exception as e:
