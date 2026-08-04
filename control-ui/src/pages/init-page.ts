@@ -63,7 +63,7 @@ export class InitPage extends LitElement {
       font-size: 12px; font-weight: 500; border: none;
       cursor: pointer; color: var(--text-soft); background: transparent;
     }
-    .init-lang button.active { background: var(--text-strong); color: var(--accent-foreground); }
+    .init-lang button.active { background: var(--text-strong); color: var(--bg); }
 
     .init-items { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
     .init-item {
@@ -247,13 +247,13 @@ export class InitPage extends LitElement {
       this._license = null;
       this._setStep('license', 'ok', resp.device_name || undefined);
       this._log(resp.days_offline
-        ? `授权有效（离线第 ${resp.days_offline} 天，剩余宽限 ${resp.offline_remaining} 天）`
-        : '授权有效');
+        ? L('init.licenseValidOffline', { days: resp.days_offline, remain: resp.offline_remaining })
+        : L('init.licenseValid'));
       this._finish();
     } else {
       this._license = resp;
       this._setStep('license', 'fail', resp.status);
-      this._log(`授权状态：${resp.status}${resp.message ? ' — ' + resp.message : ''}`);
+      this._log(`${L('init.licenseStatusPrefix')}${resp.status}${resp.message ? ' — ' + resp.message : ''}`);
     }
   }
 
@@ -261,7 +261,7 @@ export class InitPage extends LitElement {
     const code = this._code.trim();
     if (!code || this._busyAction) return;
     this._busyAction = 'activate';
-    this._log(`提交激活码 ${code.slice(0, 2)}*** → /api/license/activate`);
+    this._log(L('init.submitCodeLog', { code: code.slice(0, 2) }));
     let resp: LicenseResponse;
     try {
       resp = await activateLicense(this._fingerprint, code);

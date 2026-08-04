@@ -3,6 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { getSharedStore } from '../store/shared.js';
 import '../components/page-header.js';
+import '../components/oc-btn.js';
 
 /**
  * CronPage — AGENT 定时任务页
@@ -411,8 +412,8 @@ export class CronPage extends LitElement {
             </div>
             ${this._error ? html`<div class="cron-error">✗ ${this._error}</div>` : ''}
             <div class="confirm-box__actions">
-              <button class="btn-cancel" @click=${this._closeDialog}>${L('models.cancel')}</button>
-              <button class="btn-confirm" ?disabled=${!this._formName.trim() || !this._formExpr.trim()} @click=${() => this._submitDialog()}>${L('models.confirm')}</button>
+              <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
+              <oc-btn size="lg" variant="accent" .disabled=${!this._formName.trim() || !this._formExpr.trim()} @click=${() => this._submitDialog()}>${L('common.confirm')}</oc-btn>
             </div>
           </div>
         </div>
@@ -425,8 +426,8 @@ export class CronPage extends LitElement {
             <div class="confirm-box__title">${this._confirm.title}</div>
             <div class="confirm-box__msg">${this._confirm.message}</div>
             <div class="confirm-box__actions">
-              <button class="btn-cancel" @click=${this._closeConfirm}>${L('models.cancel')}</button>
-              <button class="btn-danger" @click=${() => this._runConfirm()}>${L('common.delete')}</button>
+              <oc-btn size="lg" @click=${this._closeConfirm}>${L('common.cancel')}</oc-btn>
+              <oc-btn size="lg" variant="accent" @click=${() => this._runConfirm()}>${L('common.confirm')}</oc-btn>
             </div>
           </div>
         </div>

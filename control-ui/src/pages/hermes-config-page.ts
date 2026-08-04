@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L, i18n } from '../i18n/index.js';
+import { L, i18n, sidecarHeaders } from '../i18n/index.js';
 import '../components/page-header.js';
 import pageStyles from './styles.css?raw';
 
@@ -81,7 +81,7 @@ export class HermesConfigPage extends LitElement {
 
   async _loadConfig() {
     try {
-      const r = await fetch(`${this._sidecarBase}/api/hermes/config`);
+      const r = await fetch(`${this._sidecarBase}/api/hermes/config`, { headers: sidecarHeaders() });
       if (!r.ok) return;
       const d = (await r.json()) as { content?: string; path?: string };
       this._configContent = d.content || '';
@@ -96,7 +96,7 @@ export class HermesConfigPage extends LitElement {
     try {
       const r = await fetch(`${this._sidecarBase}/api/hermes/config`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ content: this._configContent }),
       });
       const d = (await r.json()) as { success?: boolean; message?: string };
@@ -132,7 +132,7 @@ export class HermesConfigPage extends LitElement {
         <div class="hc-editor-card">
           <div class="hc-editor-header">
             <span class="hc-editor-filename">config.yaml</span>
-            <span class="hc-editor-link">raw yaml editor · 保存即热加载</span>
+            <span class="hc-editor-link">${L('hermesConfig.rawEditorHint')}</span>
           </div>
           <textarea class="hc-editor-textarea"
             .value=${this._configContent}

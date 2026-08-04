@@ -4,7 +4,7 @@ import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/oc-markdown.js';
 import { getSharedStore } from '../store/shared.js';
-import { listModels, getActiveModel, setSelectedModel, type ResolvedModel } from '../utils/model-config.js';
+import { listModels, getActiveModel, setSelectedModel, gatewayModelsFromConfig, type ResolvedModel } from '../utils/model-config.js';
 import {
   createChatEngine,
   type ChatEngine,
@@ -345,9 +345,12 @@ export class ChatPage extends LitElement {
 
     this._readyUnsub = this._engineAdapter.onReadyChange((ready) => {
       this._engineReady = ready;
-      if (ready && !this._historyLoaded) {
-        this._historyLoaded = true;
-        void this._bootstrapSessions();
+      if (ready) {
+        this._refreshModels(); // 网关就绪后合并网关配置里的模型
+        if (!this._historyLoaded) {
+          this._historyLoaded = true;
+          void this._bootstrapSessions();
+        }
       }
     });
     if (this._engineAdapter.onSessionsChange) {
@@ -424,6 +427,17 @@ export class ChatPage extends LitElement {
   _refreshModels() {
     this._models = listModels();
     this._activeModel = getActiveModel();
+    // 合并网关配置里的模型（与模型页同源），避免「配置了模型、下拉却没有」
+    const store = getSharedStore();
+    if (this.engine === 'openclaw' && store.connected) {
+      store.request<any>('config.get', {}).then((g) => {
+        const gw = gatewayModelsFromConfig(g?.config || g?.parsed || g);
+        if (!gw.length) return;
+        const have = new Set(this._models.map(m => `${m.providerId}::${m.model}`));
+        this._models = [...this._models, ...gw.filter(m => !have.has(`${m.providerId}::${m.model}`))];
+        if (!this._activeModel) this._activeModel = this._models[0];
+      }).catch(() => { /* 网关未连或无权限时维持本地列表 */ });
+    }
   }
 
   _onSelectModel(e: Event) {

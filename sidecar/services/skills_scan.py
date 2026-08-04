@@ -44,14 +44,17 @@ def parse_skill_md(path: Path) -> dict:
 _PLATFORM_ALIASES = {"darwin": "macos", "osx": "macos", "win32": "windows", "cygwin": "windows"}
 
 
-def classify_skill(skill: dict) -> tuple[str, str]:
-    """按平台/命令依赖判定技能可用性：available / missing(缺命令) / disabled(平台不符)"""
+def classify_skill(skill: dict, lang: str = "zh") -> tuple[str, str]:
+    """按平台/命令依赖判定技能可用性：available / missing(缺命令) / disabled(平台不符)
+    lang 决定提示语语言（en/zh，见 sidecar.i18n）"""
+    from ..i18n import tr
+
     plats = [_PLATFORM_ALIASES.get(str(p).lower(), str(p).lower()) for p in skill.get("platforms") or []]
     if plats and _PLATFORM_ALIASES.get(sys.platform, sys.platform) not in plats:
-        return "disabled", "仅支持 " + "/".join(plats)
+        return "disabled", tr(lang, "only_support", plats="/".join(plats))
     missing = [str(b) for b in (skill.get("requires") or []) if not shutil.which(str(b))]
     if missing:
-        return "missing", "缺少命令: " + ", ".join(missing)
+        return "missing", tr(lang, "missing_bins", bins=", ".join(missing))
     return "available", ""
 
 

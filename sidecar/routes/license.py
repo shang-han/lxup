@@ -9,6 +9,7 @@ import logging
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from ..i18n import ui_lang
 from ..services.license import LicenseService
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ async def activate(request: Request, body: ActivateRequest) -> LicenseResponse:
         code=body.code,
         device_fp=body.device_fingerprint,
         device_name=body.device_name,
+        lang=ui_lang(request),
     )
     return LicenseResponse(
         success=(status.value == "ok"),
@@ -75,7 +77,7 @@ async def get_status(
     前端定时轮询此端点以更新 UI 状态指示器。
     """
     service: LicenseService = request.app.state.license_service
-    info = await service.get_status(device_fp=device_fingerprint)
+    info = await service.get_status(device_fp=device_fingerprint, lang=ui_lang(request))
 
     return LicenseResponse(
         success=(info.status == "ok"),
@@ -94,7 +96,7 @@ async def validate(request: Request, body: ValidateRequest) -> LicenseResponse:
     用户点击"重新验证"按钮 / 离线超期后联网 / 启动时调用。
     """
     service: LicenseService = request.app.state.license_service
-    status, info = await service.verify_online(device_fp=body.device_fingerprint)
+    status, info = await service.verify_online(device_fp=body.device_fingerprint, lang=ui_lang(request))
 
     return LicenseResponse(
         success=(status.value == "ok"),

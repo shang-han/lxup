@@ -27,6 +27,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from ..i18n import tr, ui_lang
 from ..services import preinstalled_skills, skill_packs
 from ..services.gateway_manager import GatewayManager
 from ..services.skills_scan import classify_skill, parse_example, scan_skills
@@ -67,15 +68,16 @@ async def gateway_restart(request: Request) -> dict:
 @router.get("/skills")
 async def gateway_skills(request: Request) -> dict:
     """技能清单：OpenClaw 内置（标真实可用性）+ workspace 已装（ClawHub）+ LXUP 预装通用工具"""
+    lang = ui_lang(request)
     entry = Path(_manager(request)._oc_entry)
     root = entry.parent / "skills"
     bundled = scan_skills(root)
     ws_dir = preinstalled_skills.workspace_skills_dir()
     for s in bundled:
-        s["status"], s["status_note"] = classify_skill(s)
+        s["status"], s["status_note"] = classify_skill(s, lang)
         s["installed"] = (ws_dir / s["id"]).is_dir()
     pack_dirs = skill_packs.deployed_by_dir("openclaw")
-    preinstalled = preinstalled_skills.list_skills()
+    preinstalled = preinstalled_skills.list_skills(lang)
     pre_ids = {p["id"] for p in preinstalled}
     workspace = preinstalled_skills.scan_workspace_skills()
     # 预装技能部署后也会出现在 workspace 扫描里，去重（以预装条目为准，带依赖状态）
@@ -96,44 +98,44 @@ async def gateway_skills(request: Request) -> dict:
 
 
 @router.get("/skills/preinstalled/{skill_id}")
-async def preinstalled_skill_content(skill_id: str) -> dict:
+async def preinstalled_skill_content(request: Request, skill_id: str) -> dict:
     """预装技能 SKILL.md 全文（详情弹窗用）+ 试一下示例"""
     try:
         content = preinstalled_skills.read_content(skill_id)
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"预装技能不存在: {skill_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pre_not_found", id=skill_id))
     return {"id": skill_id, "content": content, "example": parse_example(content)}
 
 
 @router.post("/skills/preinstalled/{skill_id}/install")
-async def preinstalled_skill_install(skill_id: str) -> dict:
+async def preinstalled_skill_install(request: Request, skill_id: str) -> dict:
     """下载/部署预装技能：SKILL.md + 脚本拷入 agent workspace skills 目录"""
     try:
         return preinstalled_skills.install(skill_id)
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"预装技能不存在: {skill_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pre_not_found", id=skill_id))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"部署失败: {e}")
+        raise HTTPException(status_code=500, detail=tr(ui_lang(request), "deploy_failed", e=e))
 
 
 @router.delete("/skills/preinstalled/{skill_id}")
-async def preinstalled_skill_uninstall(skill_id: str) -> dict:
+async def preinstalled_skill_uninstall(request: Request, skill_id: str) -> dict:
     """卸载预装技能：移除 workspace skills 下的部署目录"""
     try:
         return preinstalled_skills.uninstall(skill_id)
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"预装技能不存在: {skill_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pre_not_found", id=skill_id))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"卸载失败: {e}")
+        raise HTTPException(status_code=500, detail=tr(ui_lang(request), "uninstall_failed", e=e))
 
 
 @router.post("/skills/preinstalled/{skill_id}/fix-deps")
-async def preinstalled_skill_fix_deps(skill_id: str) -> dict:
+async def preinstalled_skill_fix_deps(request: Request, skill_id: str) -> dict:
     """一键补齐缺失依赖：便携 Python pip install（阻塞操作，转线程执行）"""
     try:
-        return await asyncio.to_thread(preinstalled_skills.fix_deps, skill_id)
+        return await asyncio.to_thread(preinstalled_skills.fix_deps, skill_id, ui_lang(request))
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"预装技能不存在: {skill_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pre_not_found", id=skill_id))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -146,14 +148,14 @@ async def gateway_skill_packs() -> dict:
 
 
 @router.get("/skills/packs/{pack_id}")
-async def gateway_skill_pack_detail(pack_id: str) -> dict:
+async def gateway_skill_pack_detail(request: Request, pack_id: str) -> dict:
     """岗位包详情：post.json 全量 + 部署状态"""
     try:
         return skill_packs.pack_detail(pack_id)
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"岗位包不存在: {pack_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pack_not_found", id=pack_id))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"读取岗位包失败: {e}")
+        raise HTTPException(status_code=500, detail=tr(ui_lang(request), "read_pack_failed", e=e))
 
 
 @router.get("/skills/packs/{pack_id}/skills/{filename}")
@@ -167,25 +169,25 @@ async def gateway_skill_pack_skill_content(pack_id: str, filename: str) -> dict:
 
 
 @router.post("/skills/packs/{pack_id}/install")
-async def gateway_skill_pack_install(pack_id: str) -> dict:
+async def gateway_skill_pack_install(request: Request, pack_id: str) -> dict:
     """整包部署：包内全部技能拷入 agent workspace skills 目录"""
     try:
         return await asyncio.to_thread(skill_packs.install_pack, pack_id)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"部署失败: {e}")
+        raise HTTPException(status_code=500, detail=tr(ui_lang(request), "deploy_failed", e=e))
 
 
 @router.delete("/skills/packs/{pack_id}")
-async def gateway_skill_pack_uninstall(pack_id: str) -> dict:
+async def gateway_skill_pack_uninstall(request: Request, pack_id: str) -> dict:
     """整包卸载：移除注册表记录的部署目录"""
     try:
         return await asyncio.to_thread(skill_packs.uninstall_pack, pack_id)
     except LookupError:
-        raise HTTPException(status_code=404, detail=f"岗位包不存在: {pack_id}")
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pack_not_found", id=pack_id))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"卸载失败: {e}")
+        raise HTTPException(status_code=500, detail=tr(ui_lang(request), "uninstall_failed", e=e))
 
 
 @router.delete("/channels/{channel}")

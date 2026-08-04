@@ -76,6 +76,28 @@ function modelKey(m: { providerId: string; model: string }): string {
   return `${m.providerId}::${m.model}`;
 }
 
+/** 从网关 config.get 的返回里解析 models.providers → 可用模型列表
+ *（openclaw.json 结构：models.providers.<id> = { baseUrl, apiKey, models: [{id,name}] }） */
+export function gatewayModelsFromConfig(cfg: any): ResolvedModel[] {
+  const providers = cfg?.models?.providers;
+  if (!providers || typeof providers !== 'object') return [];
+  const out: ResolvedModel[] = [];
+  for (const [pid, pv] of Object.entries<any>(providers)) {
+    const baseUrl = String(pv?.baseUrl || '');
+    const apiKey = String(pv?.apiKey || '');
+    for (const m of Array.isArray(pv?.models) ? pv.models : []) {
+      const id = String(m?.id || m?.name || '');
+      if (!id) continue;
+      out.push({
+        providerId: pid,
+        providerName: String(pv?.name || pid),
+        baseUrl, apiKey, apiType: 'openai', model: id, isPrimary: false,
+      });
+    }
+  }
+  return out;
+}
+
 /** 当前聊天要用哪个模型：优先用户手动选择，其次主模型，最后第一个 */
 export function getActiveModel(): ResolvedModel | null {
   const all = listModels();

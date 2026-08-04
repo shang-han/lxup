@@ -185,7 +185,7 @@ export class HermesLogsPage extends LitElement {
           <div class="hl-file-list">
             <div class="hl-file-list__title">${L('hermesLogs.logFiles')}</div>
             ${this._logFiles.length === 0
-              ? html`<div style="font-size:12px;color:var(--muted);">（无日志文件）</div>`
+              ? html`<div style="font-size:12px;color:var(--muted);">${L('hermesLogs.noLogFiles')}</div>`
               : this._logFiles.map((f) => html`
                 <div class="hl-file-item ${this._activeFile === f.name ? 'active' : ''}"
                      @click=${() => this._selectFile(f.name)}>
@@ -234,7 +234,7 @@ export class HermesLogsPage extends LitElement {
 
             <div class="hl-log-body">
               ${filtered.length === 0
-                ? html`<div class="hl-empty">${this._loading ? '加载中…' : '（无内容）'}</div>`
+                ? html`<div class="hl-empty">${this._loading ? L('common.loading') : L('hermesLogs.noContent')}</div>`
                 : filtered.map((l) => html`<div class="hl-line ${this._lineClass(l)}">${l}</div>`)}
             </div>
           </div>

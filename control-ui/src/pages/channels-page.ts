@@ -8,6 +8,7 @@ import { fetchTimeout } from '../utils/net.js';
 import type { GatewayStore } from '../store/gateway-store.js';
 import '../components/page-header.js';
 import '../components/oc-dialog.js';
+import '../components/oc-btn.js';
 
 /** 页面渠道 id → OpenClaw 真实渠道 id（目录名与页面命名不一致的两个） */
 const CHANNEL_ALIASES: Record<string, string> = { qq: 'qqbot', teams: 'msteams' };
@@ -939,9 +940,9 @@ export class ChannelsPage extends LitElement {
           </div>
         </div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.cancel')}</button>
-          <button class="btn-verify">${L('channels.verify')}</button>
-          <button class="btn-confirm">${L('channels.connectAndSave')}</button>
+          <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg">${L('channels.verify')}</oc-btn>
+          <oc-btn size="lg" variant="accent">${L('common.confirm')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -1104,9 +1105,9 @@ export class ChannelsPage extends LitElement {
         </div>
         <div slot="footer">
           ${spec && !live ? html`
-            <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.cancel')}</button>
-            <button class="btn-verify" @click=${() => this._verifyForm(realId, spec)}>${L('channels.verify')}</button>
-            <button class="btn-confirm" @click=${() => this._generateConnect(realId, spec)}>${L('channelsForm.generateCmd')}</button>
+            <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
+            <oc-btn size="lg" @click=${() => this._verifyForm(realId, spec)}>${L('channels.verify')}</oc-btn>
+            <oc-btn size="lg" variant="accent" @click=${() => this._generateConnect(realId, spec)}>${L('channelsForm.generateCmd')}</oc-btn>
           ` : html`
             ${live ? this._renderRemoveButton(realId) : ''}
             <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>

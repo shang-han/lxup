@@ -131,8 +131,10 @@ def scan_workspace_skills() -> list[dict]:
     return scan_skills(_skills_dir())
 
 
-def list_skills() -> list[dict]:
-    """预装技能清单（形状与 skills_scan.scan_skills 一致，另带 preinstalled/installed/scripts）"""
+def list_skills(lang: str = "zh") -> list[dict]:
+    """预装技能清单（形状与 skills_scan.scan_skills 一致，另带 preinstalled/installed/scripts）
+    lang 决定 status_note 提示语语言"""
+    from ..i18n import tr
     skills_dir = _skills_dir()
     hermes_dir = hermes_skills_root() / HERMES_CATEGORY
     out: list[dict] = []
@@ -158,7 +160,7 @@ def list_skills() -> list[dict]:
                 "requires": requires,
                 "homepage": "",
                 "status": "missing" if missing else "available",
-                "status_note": ("缺少 Python 库: " + ", ".join(missing)) if missing else "",
+                "status_note": tr(lang, "missing_libs", libs=", ".join(missing)) if missing else "",
                 "preinstalled": True,
                 "installed": (skills_dir / sid).is_dir(),
                 "installed_hermes": (hermes_dir / sid).is_dir(),
@@ -209,9 +211,11 @@ def uninstall(skill_id: str) -> dict:
     return {"ok": True, "id": skill_id, "installed": False}
 
 
-def fix_deps(skill_id: str) -> dict:
+def fix_deps(skill_id: str, lang: str = "zh") -> dict:
     """一键补齐技能缺失的 PyPI 依赖：装进便携解释器（同 bootstrap-hermes.bat 的做法）。
     装完清除 import 缓存并重检，返回仍缺的库。"""
+    from ..i18n import tr
+
     s = _find(skill_id)
     meta = parse_skill_md(PACK_DIR / "skills" / s["file"])
     requires = meta.get("requires") or []
@@ -226,7 +230,7 @@ def fix_deps(skill_id: str) -> dict:
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip()[-800:]
-        raise RuntimeError(f"pip install 失败: {tail}")
+        raise RuntimeError(tr(lang, "pip_failed", tail=tail))
     for lib in missing:
         _lib_cache.pop(str(lib).lower(), None)
     still = _missing_libs(requires)

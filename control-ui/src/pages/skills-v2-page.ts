@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
 import '../components/page-header.js';
@@ -40,6 +40,8 @@ type SkillItem = {
 export class SkillsV2Page extends LitElement {
   static styles = css`
     :host { display: block; }
+    /* Shadow DOM 不继承文档级 box-sizing:border-box */
+    :host *, :host *::before, :host *::after { box-sizing: border-box; }
 
     .skills-page { width: 100%; }
 
@@ -278,11 +280,11 @@ export class SkillsV2Page extends LitElement {
     this._loading = true;
     try {
       const url = this._isHermes ? '/api/hermes/skills/all' : '/api/gateway/skills';
-      const r = await fetch(`${this._sidecarBase}${url}`);
+      const r = await fetch(`${this._sidecarBase}${url}`, { headers: sidecarHeaders() });
       const d = await r.json() as { data?: any[] };
       try {
         if (this._isHermes) {
-          const er = await fetch(`${this._sidecarBase}/api/hermes/skills/entries`);
+          const er = await fetch(`${this._sidecarBase}/api/hermes/skills/entries`, { headers: sidecarHeaders() });
           this._entries = er.ok ? this._normalizeEntries(await er.json()) : new Map();
         } else {
           const store = getSharedStore();
@@ -343,7 +345,7 @@ export class SkillsV2Page extends LitElement {
     this._busyPre = s.id;
     this._laneMsg = '';
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/install`, { method: 'POST' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/install`, { method: 'POST', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       await this._loadSkills();
     } catch (e) {
@@ -359,13 +361,13 @@ export class SkillsV2Page extends LitElement {
     this._busyPre = s.id;
     this._laneMsg = '';
     try {
-      const f = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/fix-deps`, { method: 'POST' });
+      const f = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/fix-deps`, { method: 'POST', headers: sidecarHeaders() });
       if (!f.ok) throw new Error((await f.json().catch(() => ({})))?.detail || `HTTP ${f.status}`);
       const fd = await f.json();
       if (fd?.still_missing?.length) {
         throw new Error(`${L('skills.fixDepsFailed')}${fd.still_missing.join(', ')}`);
       }
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/install`, { method: 'POST' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/install`, { method: 'POST', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       await this._loadSkills();
     } catch (e) {
@@ -380,7 +382,7 @@ export class SkillsV2Page extends LitElement {
     this._busyPre = s.id;
     this._laneMsg = '';
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`, { method: 'DELETE' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`, { method: 'DELETE', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       await this._loadSkills();
     } catch (e) {
@@ -395,7 +397,7 @@ export class SkillsV2Page extends LitElement {
     this._fixingId = s.id;
     this._laneMsg = '';
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/fix-deps`, { method: 'POST' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/fix-deps`, { method: 'POST', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       const d = await r.json();
       if (d?.still_missing?.length) {
@@ -435,7 +437,7 @@ export class SkillsV2Page extends LitElement {
         // Hermes：写 config.yaml skills.disabled（热加载生效）
         const r = await fetch(`${this._sidecarBase}/api/hermes/skills/toggle`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ name: s.name, enabled: next }),
         });
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
@@ -461,12 +463,12 @@ export class SkillsV2Page extends LitElement {
     this._detailLoading = true;
     try {
       if (s.preinstalled) {
-        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`);
+        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`, { headers: sidecarHeaders() });
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
         const d = await r.json();
         this._detailBody = String(d.content || '—').replace(/^---[\s\S]*?---\s*/, '');
       } else if (s.source_kind === 'jobpack' && s.pack_id && s.pack_skill_file) {
-        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(s.pack_id)}/skills/${encodeURIComponent(s.pack_skill_file)}`);
+        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(s.pack_id)}/skills/${encodeURIComponent(s.pack_skill_file)}`, { headers: sidecarHeaders() });
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
         const d = await r.json();
         this._detailBody = String(d.content || '—').replace(/^---[\s\S]*?---\s*/, '');
@@ -498,10 +500,10 @@ export class SkillsV2Page extends LitElement {
     let text = '';
     try {
       if (s.preinstalled) {
-        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`);
+        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`, { headers: sidecarHeaders() });
         if (r.ok) text = (await r.json())?.example || '';
       } else if (s.source_kind === 'jobpack' && s.pack_id && s.pack_skill_file) {
-        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(s.pack_id)}/skills/${encodeURIComponent(s.pack_skill_file)}`);
+        const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(s.pack_id)}/skills/${encodeURIComponent(s.pack_skill_file)}`, { headers: sidecarHeaders() });
         if (r.ok) text = (await r.json())?.example || '';
       }
     } catch { /* 拿不到示例时退回技能名 */ }
@@ -526,7 +528,7 @@ export class SkillsV2Page extends LitElement {
     try {
       if (this._isHermes) {
         // Hermes 技能市场：sidecar 桥接 hermes skills search --json
-        const r = await fetch(`${this._sidecarBase}/api/hermes/hub/search?query=${encodeURIComponent(q)}`);
+        const r = await fetch(`${this._sidecarBase}/api/hermes/hub/search?query=${encodeURIComponent(q)}`, { headers: sidecarHeaders() });
         if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
         const d = await r.json();
         this._hubResults = d?.results || [];
@@ -554,7 +556,7 @@ export class SkillsV2Page extends LitElement {
       if (this._isHermes) {
         const resp = await fetch(`${this._sidecarBase}/api/hermes/hub/install`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ identifier: r.identifier, source: r.source || '' }),
         });
         if (!resp.ok) throw new Error((await resp.json().catch(() => ({})))?.detail || `HTTP ${resp.status}`);

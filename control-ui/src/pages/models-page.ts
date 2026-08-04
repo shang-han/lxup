@@ -4,6 +4,7 @@ import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
 import '../components/oc-dialog.js';
+import '../components/oc-btn.js';
 import '../components/page-header.js';
 
 /**
@@ -1013,8 +1014,8 @@ export class ModelsPage extends LitElement {
           </div>
         </div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('models.cancel')}</button>
-          <button class="btn-confirm" @click=${this._confirmProvider}>${L('models.confirm')}</button>
+          <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg" variant="accent" @click=${this._confirmProvider}>${L('common.confirm')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -1028,8 +1029,8 @@ export class ModelsPage extends LitElement {
         <span slot="title">${this._confirm?.title ?? ''}</span>
         <div class="confirm-msg">${this._confirm?.message ?? ''}</div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeConfirm}>${L('models.cancel')}</button>
-          <button class="btn-confirm btn-danger" @click=${this._runConfirm}>${L('models.delete')}</button>
+          <oc-btn size="lg" @click=${this._closeConfirm}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg" variant="accent" @click=${this._runConfirm}>${L('common.confirm')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -1055,8 +1056,6 @@ export class ModelsPage extends LitElement {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             ${L('models.revoke')}
           </button>
-          <button class="btn-revoke" title=${L('common.refresh')} @click=${() => this._loadFromGateway()}>${L('common.refresh')}</button>
-          <span class="source-badge">${this._source === 'gateway' ? L('models.sourceGateway') : L('models.sourceLocal')}</span>
           ${this._saving
             ? html`<span class="saving-hint">${L('models.saving')}</span>`
             : this._saveFlash ? html`<span class="save-flash">${icons['check']} ${L('models.saved')}</span>` : ''}

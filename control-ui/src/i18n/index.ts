@@ -3,6 +3,7 @@ const en = {
   common: {
     health: 'Health', ok: 'OK', online: 'Online', offline: 'Offline',
     connect: 'Connect', refresh: 'Refresh', enabled: 'Enabled', disabled: 'Disabled',
+    show: 'Show', hide: 'Hide',
     na: 'n/a', version: 'Version', docs: 'Docs', search: 'Search',
     darkMode: 'Dark Mode', lightMode: 'Light Mode', systemMode: 'System Mode',
     uptime: 'Uptime', connectedClients: 'connected clients', activeSessions: 'active sessions',
@@ -64,7 +65,7 @@ const en = {
     cliArgs: 'CLI Arguments', resetDefaults: 'Reset to Defaults',
     copy: 'Copy', copied: 'Copied!', hash: 'Hash',
     workspace: 'Workspace', modelLoading: 'Loading model...',
-    noModelOption: 'No model configured',
+    noModelOption: 'Please configure a model first',
     noModelConfigured: 'No model is configured yet. Please go to the "Models" page to add a provider and model first.',
     useRealtimeChat: 'You are using "Real-time Chat"',
     realtimeChatDesc: 'This page connects to OpenClaw\'s AI Agent via the Gateway. Conversations are handled by your deployed OpenClaw service.',
@@ -80,7 +81,12 @@ const en = {
     attachment: 'Attachment', image: 'Image',
     noSession: 'No session selected', createFirst: 'Create a new chat to get started.',
     mainSession: 'Main Session',
-    dismiss: 'Dismiss',
+    dismiss: 'Dismiss', cancel: 'Cancel', confirm: 'Confirm',
+    aiServiceError: 'AI assistant service error ({status})',
+    hermesError: 'Hermes error ({status})',
+    codexError: 'Codex error ({status})',
+    hermesErrorPlain: 'Hermes error',
+    codexErrorPlain: 'Codex error',
     // services page
     currentVersion: 'Current Version', sinicizedOptimized: 'Sinicized Optimized',
     noRecommendedStable: 'No recommended stable version available', latestUpstream: 'Latest upstream',
@@ -716,6 +722,8 @@ const en = {
   dashboard: {
     subtitle: 'OpenClaw runtime status overview.',
     running: 'Running', stopped: 'Stopped',
+    opTimeout: 'Operation timed out ({action})',
+    opFailed: 'Operation failed: {msg}',
     versionSinicized: 'Version · Sinicized', latestUpstream: 'Latest upstream', standaloneInstall: 'Standalone install',
     agentFleet: 'Agent Fleet', defaultAgent: 'Default: main',
     modelPool: 'Model Pool', basedOn: 'Based on', channelProviders: 'channel providers',
@@ -731,7 +739,7 @@ const en = {
     recentLogs: 'Recent Logs',
     licenseCard: 'License Status', licenseOk: 'Activated', licenseNotActivated: 'Not Activated', licenseIssue: 'Needs Attention',
     activeSessions: 'Active Sessions', sessionSource: 'OpenClaw engine sessions',
-    builtinSkills: 'Built-in skills', defaultAgentLabel: 'Default',
+    builtinSkills: 'Currently callable skills', defaultAgentLabel: 'Default',
     fromGatewayConfig: 'gateway config',
   },
   hermesDashboard: {
@@ -756,6 +764,20 @@ const en = {
     savedHotReload: 'Saved — Hermes hot-reloaded',
     saveFailed: 'Save failed',
     sidecarOffline: 'Cannot connect to Sidecar (:7889)',
+    providerPresets: 'Provider presets',
+    fetchModels: 'Fetch models',
+    testConn: 'Test connection',
+    envAdvanced: '.env advanced editor',
+    needBaseUrl: 'Enter or pick an API Base URL first',
+    noModels: 'Provider returned no models',
+    fetchModelsOk: 'Fetched {n} models — click one to pick',
+    fetchModelsFailed: 'Failed to fetch models: ',
+    connOk: 'Connection OK',
+    connFailed: 'Connection failed: ',
+    customUrlLabel: 'Custom gateway address',
+    connInvalid: 'Invalid address — must start with http(s)://',
+    connSaved: 'Saved — Hermes chat will use this address',
+    connLocalRestored: 'Switched back to local default (127.0.0.1:8642)',
     saving: 'Saving…',
     connectionTarget: 'Connection Target',
     detectEnv: 'Detect Environment',
@@ -788,7 +810,6 @@ const en = {
     cmdGatewayStopSub: 'Stop background Gateway process',
     cmdExplorerDesc: 'Open Config Directory',
     cmdExplorerSub: 'View config files in file manager',
-    providerPresets: 'Provider Presets',
     model: 'Model',
     fetchModelList: 'Fetch Model List',
     testConnectivity: 'Test Connectivity',
@@ -823,6 +844,7 @@ const en = {
   hermesConfig: {
     title: 'Hermes Config',
     path: '~/.hermes/config.yaml',
+    rawEditorHint: 'raw yaml editor · saved changes hot-reload',
     backToService: 'Back to Service',
     reload: 'Reload',
     saveConfig: 'Save Config',
@@ -866,6 +888,8 @@ const en = {
   hermesLogs: {
     title: 'Agent Logs',
     path: '~/.hermes/logs/ · agent.log',
+    noLogFiles: '(no log files)',
+    noContent: '(no content)',
     backToDashboard: 'Back to Dashboard',
     tail: 'Tail',
     download: 'Download',
@@ -943,6 +967,10 @@ const en = {
   init: {
     title: 'OpenClaw Portable',
     frontendReady: 'Frontend modules ready',
+    licenseValidOffline: 'License valid (offline day {days}, {remain} days of grace left)',
+    licenseValid: 'License valid',
+    licenseStatusPrefix: 'License status: ',
+    submitCodeLog: 'Submitting code {code}*** → /api/license/activate',
     sidecar: 'Sidecar · service bridge',
     engineOpenclaw: 'Engine · openclaw',
     engineHermes: 'Engine · hermes',
@@ -979,6 +1007,7 @@ const zhCN = {
   common: {
     health: '健康状况', ok: '正常', online: '在线', offline: '离线',
     connect: '连接', refresh: '刷新', enabled: '已启用', disabled: '已禁用',
+    show: '显示', hide: '隐藏',
     na: '不适用', version: '版本', docs: '文档', search: '搜索',
     darkMode: '深色模式', lightMode: '浅色模式', systemMode: '跟随系统',
     uptime: '运行时间', connectedClients: '已连接客户端', activeSessions: '活动会话', scheduled: '已调度',
@@ -1038,7 +1067,7 @@ const zhCN = {
     cliArgs: 'CLI 参数', resetDefaults: '恢复默认',
     copy: '复制', copied: '已复制！', hash: '哈希',
     workspace: '工作区', modelLoading: '加载模型中...',
-    noModelOption: '未配置模型',
+    noModelOption: '请先配置模型',
     noModelConfigured: '尚未配置模型，请先到「模型配置」页添加服务商和模型。',
     useRealtimeChat: '你正在使用「实时聊天」',
     realtimeChatDesc: '此页面通过 Gateway 连接 OpenClaw 的 AI Agent，对话由你部署的 OpenClaw 服务处理。',
@@ -1054,7 +1083,12 @@ const zhCN = {
     attachment: '附件', image: '图片',
     noSession: '未选择会话', createFirst: '新建聊天以开始。',
     mainSession: '主会话',
-    dismiss: '关闭',
+    dismiss: '关闭', cancel: '取消', confirm: '确认',
+    aiServiceError: 'AI 助手服务错误（{status}）',
+    hermesError: 'Hermes 错误（{status}）',
+    codexError: 'Codex 错误（{status}）',
+    hermesErrorPlain: 'Hermes 错误',
+    codexErrorPlain: 'Codex 错误',
     // services page
     currentVersion: '当前版本', sinicizedOptimized: '汉化优化版',
     noRecommendedStable: '未获取到推荐稳定版', latestUpstream: '最新上游',
@@ -1702,6 +1736,8 @@ const zhCN = {
   dashboard: {
     subtitle: 'OpenClaw 运行状态概览',
     running: '运行中', stopped: '已停止',
+    opTimeout: '操作超时（{action}）',
+    opFailed: '操作失败：{msg}',
     versionSinicized: '版本 · 汉化', latestUpstream: '最新上游', standaloneInstall: '独立安装版',
     agentFleet: 'Agent 舰队', defaultAgent: '默认: main',
     modelPool: '模型池', basedOn: '基于', channelProviders: '个渠道商',
@@ -1717,7 +1753,7 @@ const zhCN = {
     recentLogs: '最近日志',
     licenseCard: '授权状态', licenseOk: '已激活', licenseNotActivated: '未激活', licenseIssue: '需处理',
     activeSessions: '活动会话', sessionSource: 'OpenClaw 引擎会话',
-    builtinSkills: '内置技能包', defaultAgentLabel: '默认',
+    builtinSkills: '当前可调用技能', defaultAgentLabel: '默认',
     fromGatewayConfig: '网关配置',
   },
   hermesDashboard: {
@@ -1742,6 +1778,20 @@ const zhCN = {
     savedHotReload: '已保存，Hermes 热加载生效',
     saveFailed: '保存失败',
     sidecarOffline: '无法连接 Sidecar（:7889）',
+    providerPresets: '服务商预设',
+    fetchModels: '获取模型列表',
+    testConn: '测试连通性',
+    envAdvanced: '.env 高级编辑',
+    needBaseUrl: '请先填写或选择 API Base URL',
+    noModels: '服务商未返回模型',
+    fetchModelsOk: '获取到 {n} 个模型，点击选择',
+    fetchModelsFailed: '获取模型列表失败：',
+    connOk: '连接成功',
+    connFailed: '连接失败：',
+    customUrlLabel: '自定义网关地址',
+    connInvalid: '地址无效，需以 http(s):// 开头',
+    connSaved: '已保存，Hermes 聊天通道将使用此地址',
+    connLocalRestored: '已切回本地默认地址（127.0.0.1:8642）',
     saving: '保存中…',
     connectionTarget: '连接目标',
     detectEnv: '探测环境',
@@ -1774,7 +1824,6 @@ const zhCN = {
     cmdGatewayStopSub: '停止后台 Gateway 进程',
     cmdExplorerDesc: '打开配置目录',
     cmdExplorerSub: '在文件管理器中查看配置文件',
-    providerPresets: '服务商预设',
     model: '模型',
     fetchModelList: '获取模型列表',
     testConnectivity: '测试连通性',
@@ -1809,6 +1858,7 @@ const zhCN = {
   hermesConfig: {
     title: 'Hermes 配置',
     path: '~/.hermes/config.yaml',
+    rawEditorHint: 'raw yaml 编辑器 · 保存即热加载',
     backToService: '返回服务',
     reload: '重新加载',
     saveConfig: '保存配置',
@@ -1852,6 +1902,8 @@ const zhCN = {
   hermesLogs: {
     title: 'Agent 日志',
     path: '~/.hermes/logs/ · agent.log',
+    noLogFiles: '（无日志文件）',
+    noContent: '（无内容）',
     backToDashboard: '返回仪表盘',
     tail: '追踪',
     download: '下载',
@@ -1929,6 +1981,10 @@ const zhCN = {
   init: {
     title: 'OpenClaw U盘版',
     frontendReady: '前端模块已就绪',
+    licenseValidOffline: '授权有效（离线第 {days} 天，剩余宽限 {remain} 天）',
+    licenseValid: '授权有效',
+    licenseStatusPrefix: '授权状态：',
+    submitCodeLog: '提交激活码 {code}*** → /api/license/activate',
     sidecar: 'Sidecar · 服务桥',
     engineOpenclaw: '引擎 · openclaw',
     engineHermes: '引擎 · hermes',
@@ -2011,5 +2067,10 @@ class I18n {
 }
 
 export const i18n = new I18n();
+
+/** 请求 Sidecar 时带上当前语言，后端提示语据此切换中/英文 */
+export function sidecarHeaders(extra?: Record<string, string>): Record<string, string> {
+  return { 'X-UI-Lang': i18n.locale, ...(extra || {}) };
+}
 export const L = (path: string, vars?: Record<string, any>) => i18n.t(path, vars);
 export const Lget = (path: string) => i18n.get(path);

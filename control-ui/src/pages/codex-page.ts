@@ -151,12 +151,15 @@ export class CodexPage extends LitElement {
         <div style="flex:1;min-width:320px;">
           <oc-card heading="${L('common.approvalPolicy')}">
             ${this._approvalModes().map((m:any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approval===m.value?'var(--accent-subtle)':'transparent'};border:1px solid ${this._config.approval===m.value?'var(--accent)':'transparent'};">
+              <div class="toggle-row" @click=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }}
+                style="cursor:pointer;user-select:none;margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approval===m.value?'var(--accent-subtle)':'transparent'};border:1px solid ${this._config.approval===m.value?'var(--accent)':'transparent'};">
                 <div style="flex:1;">
                   <div style="font-size:13px;font-weight:500;color:var(--text);font-family:var(--font-mono);">${m.value}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${m.label}</div>
                 </div>
-                <input type="radio" name="approval_policy" ?checked=${this._config.approval===m.value} @change=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }} />
+                <input type="radio" name="approval_policy" ?checked=${this._config.approval===m.value}
+                  @click=${(e: Event) => e.stopPropagation()}
+                  @change=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }} />
               </div>
             `)}
           </oc-card>

@@ -14,7 +14,9 @@
   --bg: #0b0b12; --bg-elevated: #111118; --bg-hover: rgba(255,255,255,0.05);
   --bg-muted: rgba(255,255,255,0.03); --bg-content: #14141c;
   --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.12);
-  --text: #c8c8d4; --text-soft: #8e8e9e; --text-strong: #f0f0f8; --muted: #6b6b7c;
+  /* 深色模式灰阶提亮：原 --muted #6b6b7c 在 #14141c 卡片上仅 ~3.5:1 对比度，
+     小字阅读吃力；提亮后 muted≈5.3:1、soft≈7:1，层级关系不变 */
+  --text: #c8c8d4; --text-soft: #a2a2b2; --text-strong: #f0f0f8; --muted: #8b8b9c;
   --accent: #e94560; --accent-hover: #ff5a78;
   --accent-subtle: rgba(233,69,96,0.12); --accent-muted: rgba(233,69,96,0.06);
   --accent-foreground: #fff;

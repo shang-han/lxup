@@ -85,7 +85,7 @@ export class HermesServicePage extends LitElement {
     }
     .hs-maint-btn:hover:not(:disabled) { background: var(--bg-hover); }
     .hs-maint-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .hs-maint-btn--primary { background: var(--text-strong); color: var(--accent-foreground); border-color: var(--text-strong); }
+    .hs-maint-btn--primary { background: var(--text-strong); color: var(--bg); border-color: var(--text-strong); }
     .hs-maint-btn--primary:hover:not(:disabled) { opacity: 0.9; }
     .hs-maint-btn--danger { color: var(--danger); border-color: rgba(239,68,68,0.3); }
     .hs-maint-btn--danger:hover:not(:disabled) { background: var(--danger-subtle); }

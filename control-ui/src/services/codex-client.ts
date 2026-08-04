@@ -20,6 +20,8 @@
  * 调用 /api/hermes/* 一致）；如需带 token 可用 localStorage 'lxup.codex.key'。
  */
 
+import { L } from '../i18n/index.js';
+
 const URL_KEY = 'lxup.codex.url';
 const KEY_KEY = 'lxup.codex.key';
 
@@ -75,7 +77,7 @@ export type CodexSseEvent = { event: string; data: Record<string, unknown> };
 // ── HTTP 辅助 ──
 
 async function errMsg(res: Response): Promise<string> {
-  let m = `Codex 错误 (${res.status})`;
+  let m = L('common.codexError', { status: String(res.status) });
   try {
     const j = (await res.json()) as { detail?: string; message?: string };
     if (j?.detail) m = j.detail;

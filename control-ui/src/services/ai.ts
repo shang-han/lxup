@@ -10,6 +10,7 @@
  * 否则 http://<hostname>:8080。
  */
 import type { Conversation } from './types.js';
+import { L } from '../i18n/index.js';
 
 const STORAGE_KEY = 'openclaw.assistant.url';
 
@@ -180,7 +181,7 @@ export function chat(
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {
-        onEvent({ type: 'error', error: `助手服务错误 (${res.status})` });
+        onEvent({ type: 'error', error: L('common.aiServiceError', { status: String(res.status) }) });
         onEvent({ type: 'done' });
         return;
       }

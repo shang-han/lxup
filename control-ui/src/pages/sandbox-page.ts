@@ -139,12 +139,14 @@ export class SandboxPage extends LitElement {
         <div style="flex:1;min-width:340px;">
           <oc-card heading="${L('sandbox.modeTitle')}">
             ${this._sandboxModes.map((m: any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.sandboxMode === m.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.sandboxMode === m.value ? 'var(--accent)' : 'transparent'};">
+              <div class="toggle-row" @click=${() => this._setMode(m.value)}
+                style="cursor:pointer;user-select:none;margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.sandboxMode === m.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.sandboxMode === m.value ? 'var(--accent)' : 'transparent'};">
                 <div style="flex:1;">
                   <div style="font-size:14px;font-weight:600;color:var(--text);">${m.label}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${m.desc}</div>
                 </div>
                 <input type="radio" name="sandbox_mode" ?checked=${this._config.sandboxMode === m.value}
+                  @click=${(e: Event) => e.stopPropagation()}
                   @change=${() => this._setMode(m.value)} />
               </div>
             `)}
@@ -152,12 +154,14 @@ export class SandboxPage extends LitElement {
 
           <oc-card heading="${L('sandbox.approvalTitle')}" style="margin-top:16px;">
             ${this._approvalPolicies.map((p: any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approvalPolicy === p.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.approvalPolicy === p.value ? 'var(--accent)' : 'transparent'};">
+              <div class="toggle-row" @click=${() => this._setPolicy(p.value)}
+                style="cursor:pointer;user-select:none;margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approvalPolicy === p.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.approvalPolicy === p.value ? 'var(--accent)' : 'transparent'};">
                 <div style="flex:1;">
                   <div style="font-size:14px;font-weight:600;color:var(--text);">${p.label}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${p.desc}</div>
                 </div>
                 <input type="radio" name="approval_policy" ?checked=${this._config.approvalPolicy === p.value}
+                  @click=${(e: Event) => e.stopPropagation()}
                   @change=${() => this._setPolicy(p.value)} />
               </div>
             `)}

@@ -19,6 +19,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from ..i18n import tr, ui_lang
 from ..services import preinstalled_skills, skill_packs
 from ..services.hermes_manager import PROJECT_ROOT
 from ..services.preinstalled_skills import _portable_python
@@ -221,6 +222,42 @@ async def hermes_skills_toggle(request: Request, body: HermesSkillToggle):
     return {"ok": True, "name": body.name, "enabled": body.enabled}
 
 
+class HermesModelProbeRequest(BaseModel):
+    """连通性探测：表单值优先，打码/留空的 Key 回落到 config.yaml 真实 Key"""
+
+    baseUrl: str = ""
+    apiKey: str = ""
+
+
+@router.post("/model/probe")
+async def probe_model(request: Request, body: HermesModelProbeRequest) -> dict:
+    """服务端探测 OpenAI 兼容端点 GET {baseUrl}/models。
+    浏览器直连有两个坑：拿不到真实 Key（打码值）、跨域 CORS；故由 Sidecar 代探。"""
+    cfg = _load_config(_config_path(request))
+    model = cfg.get("model") or {}
+    base = (body.baseUrl or "").strip().rstrip("/") or str(model.get("base_url") or "")
+    if not base:
+        return {"ok": False, "error": tr(ui_lang(request), "missing_base_url"), "models": []}
+    key = (body.apiKey or "").strip()
+    if not key or "****" in key:
+        key = str(model.get("api_key") or "")
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        r = httpx.get(f"{base}/models", headers=headers, timeout=10)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": tr(ui_lang(request), "network_error", e=e), "models": []}
+    if r.status_code >= 400:
+        return {"ok": False, "error": f"HTTP {r.status_code}", "models": []}
+    try:
+        data = r.json()
+        items = data.get("data") if isinstance(data, dict) else None
+        models = [str(m.get("id") or m.get("name") or "") for m in (items or []) if isinstance(m, dict)]
+        models = [m for m in models if m]
+    except Exception:  # noqa: BLE001
+        models = []
+    return {"ok": True, "error": "", "models": models}
+
+
 # ── Hermes 技能市场（Skills Hub）桥接 ──
 
 
@@ -257,9 +294,9 @@ async def hermes_hub_search(
     try:
         results = await asyncio.to_thread(_run)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=f"技能市场搜索失败: {e}")
+        raise HTTPException(status_code=502, detail=tr(ui_lang(request), "hub_search_failed", e=e))
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="技能市场搜索超时（网络不可达？）")
+        raise HTTPException(status_code=504, detail=tr(ui_lang(request), "search_timeout"))
     return {"results": results, "count": len(results)}
 
 
@@ -291,12 +328,12 @@ async def hermes_hub_install(request: Request, body: HubInstallRequest) -> dict:
     try:
         proc = await asyncio.to_thread(_run)
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="安装超时（网络不可达？）")
+        raise HTTPException(status_code=504, detail=tr(ui_lang(request), "install_timeout"))
     out = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
     # CLI 失败时也可能返回 0（do_install 打印错误后正常退出），按输出兜底判定
     failed = proc.returncode != 0 or re.search(r"(?im)^\s*Error:|Could not fetch|BLOCKED", out)
     if failed:
-        raise HTTPException(status_code=502, detail=f"安装失败: {out[-500:]}")
+        raise HTTPException(status_code=502, detail=tr(ui_lang(request), "install_failed", e=out[-500:]))
     logger.info("Hermes 技能市场已安装: %s", identifier)
     return {"ok": True, "identifier": identifier, "output": out[-800:]}
 
@@ -367,11 +404,11 @@ async def set_config(request: Request, body: ConfigWriteRequest):
     try:
         yaml.safe_load(body.content)
     except Exception as e:
-        return {"success": False, "message": f"YAML 格式错误：{e}"}
+        return {"success": False, "message": tr(ui_lang(request), "yaml_invalid", detail=e)}
     p = _config_path(request)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(body.content, encoding="utf-8")
-    return {"success": True, "message": "已保存，Hermes 热加载生效"}
+    return {"success": True, "message": tr(ui_lang(request), "saved_hot_reload")}
 
 
 # ── .env 键值读写 ──
@@ -413,7 +450,7 @@ async def set_env(request: Request, body: EnvWriteRequest):
         lines.append(f"{name}={v.value}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    return {"success": True, "message": "已保存（下次网关重启生效）"}
+    return {"success": True, "message": tr(ui_lang(request), "saved_restart")}
 
 
 # ── 日志列表 / 内容 ──

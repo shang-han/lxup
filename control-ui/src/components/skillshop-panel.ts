@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import '../components/oc-dialog.js';
 import '../components/oc-toast.js';
 
@@ -62,6 +62,8 @@ const STORE_KEY = 'lxup.skillpacks.v1'; // 与旧面板共用：购买状态在�
 export class SkillshopPanel extends LitElement {
   static styles = css`
     :host { display: block; }
+    /* Shadow DOM 不继承文档级 box-sizing:border-box */
+    :host *, :host *::before, :host *::after { box-sizing: border-box; }
 
     .summary { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
     .demo-note {
@@ -243,7 +245,7 @@ export class SkillshopPanel extends LitElement {
 
   async _loadPacks() {
     try {
-      const res = await fetch(`${this._sidecarBase}/api/gateway/skills/packs`);
+      const res = await fetch(`${this._sidecarBase}/api/gateway/skills/packs`, { headers: sidecarHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       this._packs = Array.isArray(data?.data) ? data.data : [];
@@ -292,7 +294,7 @@ export class SkillshopPanel extends LitElement {
     if (!this._isPurchased(pack.id) || this._busyPack) return false;
     this._busyPack = pack.id;
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}/install`, { method: 'POST' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}/install`, { method: 'POST', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       await this._loadPacks();
       this._toast(successMsg);
@@ -310,7 +312,7 @@ export class SkillshopPanel extends LitElement {
     if (!pack.installed || this._busyPack) return;
     this._busyPack = pack.id;
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}`, { method: 'DELETE' });
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}`, { method: 'DELETE', headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       await this._loadPacks();
       this._toast(L('skills.uninstallSuccess', { name: pack.name }));
@@ -327,7 +329,7 @@ export class SkillshopPanel extends LitElement {
     this._detailLoading = true;
     this._detail = { id: pack.id, installed: pack.installed, installed_at: pack.installed_at, post: { name: pack.name, icon: pack.icon } };
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}`);
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}`, { headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       this._detail = await r.json();
     } catch (e) {
@@ -346,7 +348,7 @@ export class SkillshopPanel extends LitElement {
     this._mdBody = '';
     this._mdLoading = true;
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(packId)}/skills/${encodeURIComponent(file)}`);
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(packId)}/skills/${encodeURIComponent(file)}`, { headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       const d = await r.json();
       this._mdBody = String(d.content || '—').replace(/^---[\s\S]*?---\s*/, '');

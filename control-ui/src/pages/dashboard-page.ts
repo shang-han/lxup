@@ -35,7 +35,7 @@ export class DashboardPage extends LitElement {
       font-size: 18px; font-weight: 700; color: var(--text-strong); margin-bottom: 2px;
     }
     .dashboard-stat__hint {
-      font-size: 11px; color: var(--text-soft); line-height: 1.4;
+      font-size: 12px; color: var(--text-soft); line-height: 1.4;
     }
     .dashboard-stat__status {
       width: 8px; height: 8px; border-radius: 50%;
@@ -67,7 +67,7 @@ export class DashboardPage extends LitElement {
     .dashboard-info-card__title svg { color: var(--text-soft); }
     .dashboard-info-card__actions { display: flex; gap: 6px; }
     .dashboard-info-card__actions button {
-      padding: 3px 10px; border-radius: var(--radius-sm); font-size: 11px;
+      padding: 3px 10px; border-radius: var(--radius-sm); font-size: 12px;
       font-weight: 500; border: 1px solid var(--border); cursor: pointer;
       transition: all var(--duration-fast);
     }
@@ -85,7 +85,7 @@ export class DashboardPage extends LitElement {
     .dashboard-info-card__value.ok { color: var(--success); }
     .dashboard-info-card__value.warn { color: var(--warn); }
     .dashboard-info-card__sub {
-      font-size: 11px; color: var(--muted); word-break: break-all;
+      font-size: 12px; color: var(--muted); word-break: break-all;
     }
     .dashboard-info-card__status {
       font-size: 14px; font-weight: 600; margin-bottom: 2px;
@@ -127,7 +127,7 @@ export class DashboardPage extends LitElement {
     }
     .dashboard-logs__body {
       background: var(--bg-muted); border: 1px solid var(--border); border-radius: var(--radius-sm);
-      padding: 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+      padding: 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
       color: var(--text); max-height: 240px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
     }
   `;
@@ -304,7 +304,7 @@ export class DashboardPage extends LitElement {
       await this._refreshServiceHealth();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this._setGwMessage(msg.includes('aborted') ? `操作超时（${action}）` : `操作失败：${msg}`);
+      this._setGwMessage(msg.includes('aborted') ? L('dashboard.opTimeout', { action }) : L('dashboard.opFailed', { msg }));
     } finally {
       this._gwBusy = false;
       // 网关状态变化后，共享连接的 store 会自动重连/断开
@@ -429,7 +429,7 @@ export class DashboardPage extends LitElement {
                 ? `${this._gwModelProvider ? this._gwModelProvider + ' · ' : ''}${L('dashboard.fromGatewayConfig')}`
                 : L('dashboard.concurrencyLimit') + ' 4'}</div>
           </div>
-          <div class="dashboard-info-card" @click=${() => this.onNavigate('skills')}>
+          <div class="dashboard-info-card" @click=${() => this.onNavigate('skills2')}>
             <div class="dashboard-info-card__header">
               <div class="dashboard-info-card__title">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
@@ -479,7 +479,7 @@ export class DashboardPage extends LitElement {
         <div class="dashboard-ws">
           <span class="dashboard-ws__dot ${this.connected ? 'connected' : 'disconnected'}"></span>
           WebSocket ${this.connected ? L('dashboard.wsConnected') : L('dashboard.wsDisconnected')}
-          ${this._gwVersion ? html`<span style="margin-left:auto;font-size:11px;color:var(--muted);">v${this._gwVersion}</span>` : ''}
+          ${this._gwVersion ? html`<span style="margin-left:auto;font-size:12px;color:var(--muted);">v${this._gwVersion}</span>` : ''}
         </div>
 
         <!-- Action buttons -->

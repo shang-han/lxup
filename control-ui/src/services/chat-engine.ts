@@ -11,6 +11,7 @@
  */
 
 import type { GatewayStore } from '../store/gateway-store.js';
+import { L } from '../i18n/index.js';
 import * as hermes from './hermes-client.js';
 import * as codex from './codex-client.js';
 
@@ -307,7 +308,7 @@ export class HermesChatEngine implements ChatEngine {
             break;
           }
           case 'error':
-            onEvent({ type: 'error', message: String(d.message ?? 'Hermes 错误') });
+            onEvent({ type: 'error', message: String(d.message ?? L('common.hermesErrorPlain')) });
             break;
           case 'done':
             onEvent({ type: 'final' });
@@ -447,7 +448,7 @@ export class CodexChatEngine implements ChatEngine {
             break;
           }
           case 'error':
-            onEvent({ type: 'error', message: String(d.message ?? 'Codex 错误') });
+            onEvent({ type: 'error', message: String(d.message ?? L('common.codexErrorPlain')) });
             break;
           case 'done':
             onEvent({ type: 'final' });

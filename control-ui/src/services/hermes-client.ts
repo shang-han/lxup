@@ -12,6 +12,8 @@
  * 鉴权：Authorization: Bearer <API_SERVER_KEY>
  */
 
+import { L } from '../i18n/index.js';
+
 const URL_KEY = 'lxup.hermes.url';
 const KEY_KEY = 'lxup.hermes.key';
 const DEFAULT_KEY = 'lxup-hermes-dev-2026';
@@ -23,6 +25,19 @@ export function hermesUrl(): string {
   } catch { /* ignore */ }
   const host = (typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1';
   return `http://${host}:8642`;
+}
+
+/** 读取用户自定义的连接地址（空串 = 用本地默认） */
+export function getStoredHermesUrl(): string {
+  try { return localStorage.getItem(URL_KEY) || ''; } catch { return ''; }
+}
+
+/** 写入/清除自定义连接地址（null = 恢复本地默认） */
+export function setHermesUrl(url: string | null) {
+  try {
+    if (url) localStorage.setItem(URL_KEY, url);
+    else localStorage.removeItem(URL_KEY);
+  } catch { /* ignore */ }
 }
 
 export function hermesKey(): string {
@@ -55,7 +70,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function errMsg(res: Response): Promise<string> {
-  let m = `Hermes 错误 (${res.status})`;
+  let m = L('common.hermesError', { status: String(res.status) });
   try {
     const j = (await res.json()) as { error?: { message?: string } };
     if (j?.error?.message) m = j.error.message;

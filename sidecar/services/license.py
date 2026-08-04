@@ -20,6 +20,7 @@ import httpx
 from sqlalchemy import select
 
 from ..config import GatewayConfig
+from ..i18n import tr
 from ..database import get_session_context
 from ..models import LicenseLocal
 
@@ -63,6 +64,7 @@ class LicenseService:
         code: str,
         device_fp: str,
         device_name: str = "",
+        lang: str = "zh",
     ) -> tuple[LicenseStatus, LicenseInfo]:
         """激活新设备
 
@@ -82,13 +84,13 @@ class LicenseService:
             logger.warning("激活请求被拒绝: %s", detail)
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message=detail or f"激活失败 (HTTP {e.response.status_code})",
+                message=detail or tr(lang, "activate_failed_http", status=e.response.status_code),
             )
         except Exception as e:
             logger.error("激活请求失败: %s", e)
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message=f"无法连接授权服务器: {e}",
+                message=tr(lang, "cannot_connect_server", e=e),
             )
 
         token = resp.get("activation_token", "")
@@ -97,7 +99,7 @@ class LicenseService:
             detail = resp.get("detail", "")
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message=detail or "服务器未返回有效令牌",
+                message=detail or tr(lang, "no_valid_token"),
             )
 
         # 解密 token 提取信息用于本地存储
@@ -109,14 +111,14 @@ class LicenseService:
             logger.exception("解析 activation_token 失败")
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message="令牌格式无效",
+                message=tr(lang, "token_invalid_format"),
             )
 
         # 验证服务器返回的 fp_hash 与本地一致
         if fp_hash_in_token != _hash_fp(device_fp):
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message="设备指纹不匹配，请重试",
+                message=tr(lang, "fp_mismatch"),
             )
 
         # 加密存储 token
@@ -142,10 +144,10 @@ class LicenseService:
         return LicenseStatus.OK, LicenseInfo(
             status=LicenseStatus.OK.value,
             device_name=dev_name,
-            message="激活成功",
+            message=tr(lang, "activate_ok"),
         )
 
-    async def validate_on_startup(self, device_fp: str) -> tuple[LicenseStatus, LicenseInfo]:
+    async def validate_on_startup(self, device_fp: str, lang: str = "zh") -> tuple[LicenseStatus, LicenseInfo]:
         """启动时校验授权状态
 
         这是每次 Gateway 启动时的入口，执行完整的离线/在线判断逻辑。
@@ -155,7 +157,7 @@ class LicenseService:
         if record is None:
             return LicenseStatus.NOT_ACTIVATED, LicenseInfo(
                 status=LicenseStatus.NOT_ACTIVATED.value,
-                message="未激活，请输入激活码",
+                message=tr(lang, "not_activated_input"),
             )
 
         # 2. 校验设备指纹是否变化
@@ -164,7 +166,7 @@ class LicenseService:
             logger.warning("设备指纹不匹配: stored=%s current=%s",
                           record.device_fp_hash[:8], current_fp_hash[:8])
             # 尝试在线重验
-            status, info = await self._verify_device_change(record, device_fp)
+            status, info = await self._verify_device_change(record, device_fp, lang)
             if status == LicenseStatus.OK:
                 # 更新本地指纹记录
                 async with get_session_context() as db:
@@ -190,15 +192,15 @@ class LicenseService:
                 device_name=record.device_name,
                 days_offline=days_offline,
                 offline_remaining=offline_remaining,
-                message=f"离线第 {days_offline} 天，剩余 {offline_remaining} 天",
+                message=tr(lang, "offline_day_remaining", days=days_offline, remain=offline_remaining),
             )
 
         # 4. 离线超期 — 必须联网校验
         logger.info("离线 %d 天，尝试在线校验...", days_offline)
-        status, info = await self.verify_online(device_fp)
+        status, info = await self.verify_online(device_fp, lang)
         return status, info
 
-    async def verify_online(self, device_fp: str) -> tuple[LicenseStatus, LicenseInfo]:
+    async def verify_online(self, device_fp: str, lang: str = "zh") -> tuple[LicenseStatus, LicenseInfo]:
         """在线校验授权
 
         向 License Server 发送当前 token 和设备指纹，验证授权是否仍然有效。
@@ -207,7 +209,7 @@ class LicenseService:
         if record is None:
             return LicenseStatus.NOT_ACTIVATED, LicenseInfo(
                 status=LicenseStatus.NOT_ACTIVATED.value,
-                message="未激活",
+                message=tr(lang, "not_activated"),
             )
 
         # 解密 token
@@ -218,7 +220,7 @@ class LicenseService:
             logger.exception("解密 token 失败，可能设备指纹已变化")
             return LicenseStatus.DEVICE_CHANGED, LicenseInfo(
                 status=LicenseStatus.DEVICE_CHANGED.value,
-                message="无法解密授权数据，请重新激活",
+                message=tr(lang, "token_decrypt_failed"),
             )
 
         # 调用服务器
@@ -237,18 +239,18 @@ class LicenseService:
                 await self._clear_local_record()
                 return LicenseStatus.REVOKED, LicenseInfo(
                     status=LicenseStatus.REVOKED.value,
-                    message="授权已被吊销，请联系客服",
+                    message=tr(lang, "revoked_contact"),
                 )
             elif code == 403:  # Forbidden — device mismatch
                 return LicenseStatus.DEVICE_CHANGED, LicenseInfo(
                     status=LicenseStatus.DEVICE_CHANGED.value,
-                    message=detail or "此码已绑定其他设备",
+                    message=detail or tr(lang, "code_bound_other"),
                 )
             else:
                 logger.warning("在线校验被拒绝: %s", detail)
                 return LicenseStatus.ERROR, LicenseInfo(
                     status=LicenseStatus.ERROR.value,
-                    message=detail or "校验失败",
+                    message=detail or tr(lang, "validate_failed"),
                 )
         except Exception as e:
             logger.error("在线校验不可达: %s", e)
@@ -258,14 +260,14 @@ class LicenseService:
                 return LicenseStatus.BLOCKED_OFFLINE, LicenseInfo(
                     status=LicenseStatus.BLOCKED_OFFLINE.value,
                     days_offline=days_offline,
-                    message=f"离线超过 {OFFLINE_GRACE_DAYS} 天，请连接网络验证授权",
+                    message=tr(lang, "offline_grace_exceeded", days=OFFLINE_GRACE_DAYS),
                 )
             return LicenseStatus.OK, LicenseInfo(
                 status=LicenseStatus.OK.value,
                 device_name=record.device_name,
                 days_offline=days_offline,
                 offline_remaining=offline_remaining,
-                message=f"无法连接授权服务器，离线第 {days_offline} 天",
+                message=tr(lang, "offline_day", days=days_offline),
             )
 
         # 校验成功
@@ -285,22 +287,22 @@ class LicenseService:
             return LicenseStatus.OK, LicenseInfo(
                 status=LicenseStatus.OK.value,
                 device_name=record.device_name,
-                message="授权有效",
+                message=tr(lang, "license_valid"),
             )
         else:
-            reason = resp.get("reason", "未知原因")
+            reason = resp.get("reason") or tr(lang, "unknown_reason")
             return LicenseStatus.ERROR, LicenseInfo(
                 status=LicenseStatus.ERROR.value,
-                message=f"校验失败: {reason}",
+                message=tr(lang, "validate_failed_reason", reason=reason),
             )
 
-    async def get_status(self, device_fp: str) -> LicenseInfo:
+    async def get_status(self, device_fp: str, lang: str = "zh") -> LicenseInfo:
         """查询当前授权状态（不触发在线校验）"""
         record = await self._load_local_record()
         if record is None:
             return LicenseInfo(
                 status=LicenseStatus.NOT_ACTIVATED.value,
-                message="未激活",
+                message=tr(lang, "not_activated"),
             )
 
         current_fp_hash = _hash_fp(device_fp)
@@ -308,7 +310,7 @@ class LicenseService:
             return LicenseInfo(
                 status=LicenseStatus.DEVICE_CHANGED.value,
                 device_name=record.device_name,
-                message="检测到硬件变更",
+                message=tr(lang, "device_changed"),
             )
 
         days_offline = _days_since(record.last_online_at)
@@ -320,7 +322,7 @@ class LicenseService:
                 device_name=record.device_name,
                 days_offline=days_offline,
                 offline_remaining=0,
-                message=f"离线超过 {OFFLINE_GRACE_DAYS} 天，需要联网验证",
+                message=tr(lang, "offline_grace_need_online", days=OFFLINE_GRACE_DAYS),
             )
 
         return LicenseInfo(
@@ -328,7 +330,7 @@ class LicenseService:
             device_name=record.device_name,
             days_offline=days_offline,
             offline_remaining=offline_remaining,
-            message=f"授权正常",
+            message=tr(lang, "license_ok"),
         )
 
     # ── 内部方法 ──────────────────────────────────────
@@ -355,7 +357,7 @@ class LicenseService:
             logger.exception("清除本地授权记录失败")
 
     async def _verify_device_change(
-        self, record: LicenseLocal, device_fp: str
+        self, record: LicenseLocal, device_fp: str, lang: str = "zh"
     ) -> tuple[LicenseStatus, LicenseInfo]:
         """处理设备指纹变化的情况 — 尝试在线重验"""
         # 尝试解密 token（旧指纹派生的 key 可能已失效）
@@ -368,7 +370,7 @@ class LicenseService:
             # 这意味着确实换机了，需要重新激活
             return LicenseStatus.DEVICE_CHANGED, LicenseInfo(
                 status=LicenseStatus.DEVICE_CHANGED.value,
-                message="检测到硬件变更，请使用激活码重新激活",
+                message=tr(lang, "device_changed_reactivate"),
             )
 
         # 用当前 fp 去服务器重验
@@ -387,17 +389,17 @@ class LicenseService:
                 return LicenseStatus.OK, LicenseInfo(
                     status=LicenseStatus.OK.value,
                     device_name=record.device_name,
-                    message="设备验证通过",
+                    message=tr(lang, "device_verified"),
                 )
             else:
                 return LicenseStatus.DEVICE_CHANGED, LicenseInfo(
                     status=LicenseStatus.DEVICE_CHANGED.value,
-                    message=resp.get("reason", "此码已绑定其他设备"),
+                    message=resp.get("reason") or tr(lang, "code_bound_other"),
                 )
         except Exception:
             return LicenseStatus.DEVICE_CHANGED, LicenseInfo(
                 status=LicenseStatus.DEVICE_CHANGED.value,
-                message="检测到硬件变更，请连接网络完成验证",
+                message=tr(lang, "device_changed_validate"),
             )
 
     async def _call_server(self, path: str, data: dict) -> dict:

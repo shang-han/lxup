@@ -6,6 +6,7 @@ import { getSharedStore } from '../store/shared.js';
 import type { GatewayStore } from '../store/gateway-store.js';
 import '../components/page-header.js';
 import '../components/oc-dialog.js';
+import '../components/oc-btn.js';
 
 /** 字节数格式化为 B / KB */
 function fmtSize(bytes: number | null | undefined): string {
@@ -27,6 +28,8 @@ function fmtTime(ms: number | null | undefined): string {
 export class AgentsPage extends LitElement {
   static styles = css`
     :host { display: block; }
+    /* Shadow DOM 不继承文档级 box-sizing:border-box；弹窗输入框 width:100%+padding 会溢出横向滚动 */
+    :host *, :host *::before, :host *::after { box-sizing: border-box; }
 
     .agents-page { width: 100%; }
 
@@ -451,10 +454,8 @@ export class AgentsPage extends LitElement {
           ></textarea>
         </div>
         <div slot="footer">
-          <button style="padding:6px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);transition:all var(--duration-fast);"
-                  @click=${this._closeFileEdit}>${L('common.cancel')}</button>
-          <button style="padding:6px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;border:none;cursor:pointer;background:var(--accent);color:var(--accent-foreground);transition:background var(--duration-fast);"
-                  @click=${this._saveFileContent}>${L('agents.saveConfig')}</button>
+          <oc-btn size="lg" @click=${this._closeFileEdit}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg" variant="accent" @click=${this._saveFileContent}>${L('common.confirm')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -488,8 +489,8 @@ export class AgentsPage extends LitElement {
           </div>
         </div>
         <div slot="footer">
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('common.cancel')}</button>
-          <button class="btn-confirm" @click=${this._createAgent}>${L('agents.create')}</button>
+          <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg" variant="accent" @click=${this._createAgent}>${L('common.confirm')}</oc-btn>
         </div>
       </oc-dialog>
     `;
