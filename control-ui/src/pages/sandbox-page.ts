@@ -24,6 +24,7 @@ type CodexConfig = {
   sandboxMode: string;
   apiKey: string;
   workspace: string;
+  baseUrl: string;
 };
 
 export class SandboxPage extends LitElement {
@@ -33,7 +34,7 @@ export class SandboxPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
 
-  @state() _config: CodexConfig = { model: '', approvalPolicy: '', sandboxMode: '', apiKey: '', workspace: '' };
+  @state() _config: CodexConfig = { model: '', approvalPolicy: '', sandboxMode: '', apiKey: '', workspace: '', baseUrl: '' };
   @state() _loaded = false;
   @state() _offline = false;
   @state() _saving = false;
@@ -78,6 +79,7 @@ export class SandboxPage extends LitElement {
         sandboxMode: String(j.sandboxMode ?? ''),
         apiKey: String(j.apiKey ?? ''),
         workspace: String(j.workspace ?? ''),
+        baseUrl: String(j.baseUrl ?? ''),
       };
       this._loaded = true;
       this._offline = false;
@@ -139,7 +141,8 @@ export class SandboxPage extends LitElement {
         <div style="flex:1;min-width:340px;">
           <oc-card heading="${L('sandbox.modeTitle')}">
             ${this._sandboxModes.map((m: any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.sandboxMode === m.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.sandboxMode === m.value ? 'var(--accent)' : 'transparent'};">
+              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);cursor:pointer;background:${this._config.sandboxMode === m.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.sandboxMode === m.value ? 'var(--accent)' : 'transparent'};"
+                @click=${() => this._setMode(m.value)}>
                 <div style="flex:1;">
                   <div style="font-size:14px;font-weight:600;color:var(--text);">${m.label}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${m.desc}</div>
@@ -152,7 +155,8 @@ export class SandboxPage extends LitElement {
 
           <oc-card heading="${L('sandbox.approvalTitle')}" style="margin-top:16px;">
             ${this._approvalPolicies.map((p: any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approvalPolicy === p.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.approvalPolicy === p.value ? 'var(--accent)' : 'transparent'};">
+              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);cursor:pointer;background:${this._config.approvalPolicy === p.value ? 'var(--accent-subtle)' : 'transparent'};border:1px solid ${this._config.approvalPolicy === p.value ? 'var(--accent)' : 'transparent'};"
+                @click=${() => this._setPolicy(p.value)}>
                 <div style="flex:1;">
                   <div style="font-size:14px;font-weight:600;color:var(--text);">${p.label}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${p.desc}</div>
@@ -186,6 +190,10 @@ export class SandboxPage extends LitElement {
               <div class="stat-row">
                 <span class="stat-row-label">${L('sandbox.apiKey')}</span>
                 <span style="font-family:var(--font-mono);">${this._config.apiKey || '—'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-row-label">${L('common.baseUrl')}</span>
+                <span style="font-family:var(--font-mono);word-break:break-all;">${this._config.baseUrl || L('sandbox.officialApi')}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-row-label">${L('common.status')}</span>

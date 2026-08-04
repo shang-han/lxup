@@ -24,6 +24,7 @@ export class CodexPage extends LitElement {
   @state() _config = {
     workspace: '',
     apiKey: '',
+    baseUrl: '',
     model: '',
     approval: 'on-failure',
     sandbox: 'workspace-write',
@@ -49,6 +50,7 @@ export class CodexPage extends LitElement {
       this._config = {
         workspace: cfg.workspace || '',
         apiKey: cfg.apiKey || '',
+        baseUrl: cfg.baseUrl || '',
         model: cfg.model || '',
         approval: cfg.approvalPolicy || 'on-failure',
         sandbox: cfg.sandboxMode || 'workspace-write',
@@ -73,6 +75,7 @@ export class CodexPage extends LitElement {
       const r = await saveConfig({
         workspace: this._config.workspace,
         apiKey: this._config.apiKey,
+        baseUrl: this._config.baseUrl,
         model: this._config.model,
         approvalPolicy: this._config.approval,
         sandboxMode: this._config.sandbox,
@@ -92,7 +95,7 @@ export class CodexPage extends LitElement {
   }
 
   _resetDefaults() {
-    this._config = { workspace: 'D:\\lxup', apiKey: this._config.apiKey, model: '', approval: 'on-failure', sandbox: 'workspace-write' };
+    this._config = { workspace: 'D:\\lxup', apiKey: this._config.apiKey, baseUrl: '', model: '', approval: 'on-failure', sandbox: 'workspace-write' };
     this.requestUpdate();
   }
 
@@ -134,6 +137,11 @@ export class CodexPage extends LitElement {
               <input class="form-input" type="password" .value=${this._config.apiKey} placeholder="sk-... (OPENAI_API_KEY)" @input=${(e:Event) => { this._config = {...this._config, apiKey:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
             </div>
             <div class="form-group">
+              <label class="form-label">${L('common.baseUrl')}</label>
+              <input class="form-input" .value=${this._config.baseUrl} placeholder="https://api.openai.com/v1" @input=${(e:Event) => { this._config = {...this._config, baseUrl:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+              <p style="font-size:12px;color:var(--text-soft);margin:6px 0 0;line-height:1.5;">${L('common.baseUrlHint')}</p>
+            </div>
+            <div class="form-group">
               <label class="form-label">${L('common.defaultModel')}</label>
               <input class="form-input" .value=${this._config.model} placeholder="gpt-5-codex" @input=${(e:Event) => { this._config = {...this._config, model:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
             </div>
@@ -151,7 +159,8 @@ export class CodexPage extends LitElement {
         <div style="flex:1;min-width:320px;">
           <oc-card heading="${L('common.approvalPolicy')}">
             ${this._approvalModes().map((m:any) => html`
-              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approval===m.value?'var(--accent-subtle)':'transparent'};border:1px solid ${this._config.approval===m.value?'var(--accent)':'transparent'};">
+              <div class="toggle-row" style="margin-bottom:12px;padding:10px;border-radius:var(--radius-md);cursor:pointer;background:${this._config.approval===m.value?'var(--accent-subtle)':'transparent'};border:1px solid ${this._config.approval===m.value?'var(--accent)':'transparent'};"
+                @click=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }}>
                 <div style="flex:1;">
                   <div style="font-size:13px;font-weight:500;color:var(--text);font-family:var(--font-mono);">${m.value}</div>
                   <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${m.label}</div>

@@ -114,6 +114,9 @@ class CodexManager:
                 "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                # CODEX_HOME 钉死项目内 runtime/codex-home，
+                # 任何 codex 调用都不允许碰用户自带的 ~\.codex
+                env=self._codex_env(),
             )
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
             return out.decode("utf-8", errors="replace").strip()
@@ -175,6 +178,20 @@ class CodexManager:
             logger.warning("读取 codex auth.json 失败: %s", e)
             return "", False
 
+    @staticmethod
+    def _active_base_url(cfg: dict) -> str:
+        """读当前激活 provider 的 base_url；空串表示走官方 API"""
+        name = str(cfg.get("model_provider") or "")
+        if not name:
+            return ""
+        providers = cfg.get("model_providers") or {}
+        if not isinstance(providers, dict):
+            return ""
+        prov = providers.get(name)
+        if not isinstance(prov, dict):
+            return ""
+        return str(prov.get("base_url") or "")
+
     def get_config_view(self) -> dict:
         cfg = self._read_config_toml()
         key, has_key = self._read_auth()
@@ -185,6 +202,7 @@ class CodexManager:
             "apiKey": _mask_key(key),
             "hasKey": has_key,
             "workspace": self._get_default_workspace(),
+            "baseUrl": self._active_base_url(cfg),
         }
 
     def save_config_view(self, body: dict) -> dict:
@@ -216,12 +234,44 @@ class CodexManager:
         if ws:
             self._set_default_workspace(ws)
 
+        # baseUrl 三态：None（字段缺席，如沙箱页保存）= 不改动；
+        # ""（显式清空）= 恢复官方接口；非空 = 写入自定义 provider。
+        # 若写成其他字段一样的「空即保留」，用户就永远没法切回官方 API 了。
+        base_url = body.get("baseUrl")
+        if base_url is not None:
+            base_url = str(base_url).strip()
+            if base_url:
+                cfg["model_provider"] = "lxup"
+                providers = cfg.get("model_providers")
+                if not isinstance(providers, dict):
+                    providers = {}
+                providers["lxup"] = {
+                    "name": "LXUP",
+                    "base_url": base_url,
+                    # 三方 OpenAI 兼容服务普遍只实现 Chat Completions，
+                    # Responses API 是官方独有，故钉死 chat
+                    "wire_api": "chat",
+                }
+                cfg["model_providers"] = providers
+            else:
+                active = str(cfg.get("model_provider") or "")
+                if active:
+                    providers = cfg.get("model_providers")
+                    if isinstance(providers, dict):
+                        providers.pop(active, None)
+                        if providers:
+                            cfg["model_providers"] = providers
+                        else:
+                            cfg.pop("model_providers", None)
+                    cfg.pop("model_provider", None)
+
         self._write_config_toml(cfg)
         logger.info(
-            "Codex 配置已更新: model=%s approval=%s sandbox=%s",
+            "Codex 配置已更新: model=%s approval=%s sandbox=%s baseUrl=%s",
             cfg.get("model"),
             cfg.get("approval_policy"),
             cfg.get("sandbox_mode"),
+            self._active_base_url(cfg) or "(官方)",
         )
         _, has_key = self._read_auth()
         return {"success": True, "hasKey": has_key}

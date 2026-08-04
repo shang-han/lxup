@@ -59,6 +59,8 @@ export type CodexConfigView = {
   apiKey: string;
   hasKey: boolean;
   workspace: string;
+  /** 三方 OpenAI 兼容 Base URL；空串 = 官方接口 */
+  baseUrl: string;
 };
 
 export type CodexSession = {
