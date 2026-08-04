@@ -31,6 +31,10 @@ if not defined PYDIR (
   exit /b 1
 )
 set "PYTHON=%PYDIR%\python.exe"
+REM Bare `python` in agent commands (LXUP general-tool skill scripts) must
+REM resolve to the bundled interpreter with the preinstalled libraries,
+REM not the system python (which may not exist or lack the deps).
+set "PATH=%PYDIR%;%PATH%"
 
 echo [1/5] Starting LXUP Sidecar (7889)...
 start "LXUP-Sidecar-7889" cmd /k "cd /d "%ROOT%" && "%PYTHON%" -m sidecar.main --db-path "%ROOT%runtime\data\gateway.db" --port 7889"

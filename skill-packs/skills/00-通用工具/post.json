@@ -7,12 +7,11 @@
   "icon": "🧰",
   "locked": false,
   "version": "1.0.0",
-  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理能力,技能自带可执行脚本。含 PDF 处理、Word 文档生成、数据图表、图片处理、语音转写。",
+  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理能力,技能自带可执行脚本。含 PDF 处理、Word 文档生成、数据图表、图片处理。",
   "skills": [
     { "file": "01-PDF处理.SKILL.md", "name": "PDF处理", "scripts": ["pdf_tool.py"], "triggers": ["PDF", "合并PDF", "拆分PDF", "提取PDF文字", "PDF旋转"] },
     { "file": "02-Word文档生成.SKILL.md", "name": "Word文档生成", "scripts": ["docx_tool.py"], "triggers": ["Word", "生成文档", "导出Word", "写报告", "文档排版"] },
     { "file": "03-数据图表.SKILL.md", "name": "数据图表", "scripts": ["chart_tool.py"], "triggers": ["图表", "柱状图", "折线图", "饼图", "数据可视化"] },
-    { "file": "04-图片处理.SKILL.md", "name": "图片处理", "scripts": ["image_tool.py"], "triggers": ["图片", "图片转换", "压缩图片", "图片缩放", "裁剪图片"] },
-    { "file": "05-语音转写.SKILL.md", "name": "语音转写", "scripts": ["audio_tool.py"], "triggers": ["语音转写", "录音转文字", "字幕", "音频转文字", "SRT"] }
+    { "file": "04-图片处理.SKILL.md", "name": "图片处理", "scripts": ["image_tool.py"], "triggers": ["图片", "图片转换", "压缩图片", "图片缩放", "裁剪图片"] }
   ]
 }

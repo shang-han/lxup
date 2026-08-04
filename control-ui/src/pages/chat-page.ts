@@ -308,6 +308,12 @@ export class ChatPage extends LitElement {
     this._refreshModels();
     this._setupEngine();
     this._inited = true;
+    // 技能页「试一下」预填：读取后立即清除（约定键，见 skills-v2-page CHAT_PREFILL_KEY）
+    const prefill = sessionStorage.getItem('lxup.chat.prefill');
+    if (prefill) {
+      this._input = prefill;
+      sessionStorage.removeItem('lxup.chat.prefill');
+    }
   }
 
   updated(changed: Map<string, unknown>) {

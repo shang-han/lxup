@@ -9,9 +9,9 @@
       "category": "通用工具",
       "priority": "P0",
       "version": "1.0.0",
-      "skills": 5,
+      "skills": 4,
       "dir": "skills/00-通用工具",
-      "sha256": "5843a797bb9744440ab21104fb2614248e0ca4d0a54fc5e035f92b74e033241f"
+      "sha256": "1d32166724a42498ce369cf5cd1692ca120bbee17034e920410aadb776358547"
     },
     {
       "post": "01-餐饮店长",

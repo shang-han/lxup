@@ -26,11 +26,5 @@
 - 子命令:`info` / `convert` / `resize` / `crop` / `rotate`(透明图转 JPG 自动铺白底)
 - 示例:`python image_tool.py convert 图.png -o 图.jpg --quality 85 --max-side 1280`
 
-## audio_tool.py — 语音转写
-- 依赖:`pip install "faster-whisper>=1.0"`(含 numpy)
-- 子命令:`transcribe`(离线语音识别,出文稿/SRT 字幕;WAV 零额外依赖)
-- 示例:`python audio_tool.py transcribe 录音.wav -o 文稿.txt --srt 字幕.srt --language zh`
-- **模型需下载**:首次联网从 HuggingFace 拉取;国内设 `HF_ENDPOINT=https://hf-mirror.com`;离线应预缓存
-
-> 便携部署:龙虾优盘的便携 Python 运行时应预装 pypdf / python-docx / matplotlib / Pillow /
-> faster-whisper(建议写入 bootstrap 或引擎 requirements),语音模型需预缓存,保证离线开箱即用。
+> 便携部署:龙虾优盘的便携 Python 运行时已预装 pypdf / python-docx / matplotlib / Pillow
+> (由 bootstrap 写入),保证离线开箱即用。

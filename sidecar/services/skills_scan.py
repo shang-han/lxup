@@ -12,6 +12,9 @@ frontmatter 元数据兼容两种风格：
 """
 
 import logging
+import re
+import shutil
+import sys
 from pathlib import Path
 
 import yaml
@@ -36,6 +39,29 @@ def parse_skill_md(path: Path) -> dict:
         logger.debug("解析 SKILL.md frontmatter 失败 %s: %s", path, e)
         return {}
     return data if isinstance(data, dict) else {}
+
+
+_PLATFORM_ALIASES = {"darwin": "macos", "osx": "macos", "win32": "windows", "cygwin": "windows"}
+
+
+def classify_skill(skill: dict) -> tuple[str, str]:
+    """按平台/命令依赖判定技能可用性：available / missing(缺命令) / disabled(平台不符)"""
+    plats = [_PLATFORM_ALIASES.get(str(p).lower(), str(p).lower()) for p in skill.get("platforms") or []]
+    if plats and _PLATFORM_ALIASES.get(sys.platform, sys.platform) not in plats:
+        return "disabled", "仅支持 " + "/".join(plats)
+    missing = [str(b) for b in (skill.get("requires") or []) if not shutil.which(str(b))]
+    if missing:
+        return "missing", "缺少命令: " + ", ".join(missing)
+    return "available", ""
+
+
+def parse_example(skill_md_text: str) -> str:
+    """从 SKILL.md 的 `## 示例` 段抽取第一条「输入：…」作为试一下预填文本；无则空串"""
+    m = re.search(r"^##\s*示例\s*$(.*?)(?=^##\s|\Z)", skill_md_text, re.M | re.S)
+    if not m:
+        return ""
+    m2 = re.search(r"输入[：:]\s*[「『\"]?(.+?)[」』\"]?\s*$", m.group(1), re.M)
+    return m2.group(1).strip() if m2 else ""
 
 
 def scan_skills(root: Path) -> list[dict]:

@@ -131,16 +131,23 @@ def start_services(dry_run: bool = False) -> None:
            "--port", str(SIDECAR_PORT)],
           cwd=ROOT, env=env, logfile="sidecar.log", dry_run=dry_run)
 
-    # 2. OpenClaw 网关(:18789)
+    # 2. OpenClaw 网关(:18789)—— 便携 Python 置顶 PATH,
+    #    agent 命令里的裸 `python`(通用工具技能脚本)即解析到便携解释器,
+    #    而不是客户机的系统 python(可能不存在、也没装依赖)
+    gw_env = dict(env)
+    gw_env["PATH"] = os.path.dirname(py) + os.pathsep + gw_env.get("PATH", os.environ.get("PATH", ""))
     spawn("openclaw",
           [NODE, OPENCLAW_ENTRY, "gateway", "--port", "18789", "--force"],
-          cwd=ROOT, env=env, logfile="openclaw-gateway.log", dry_run=dry_run)
+          cwd=ROOT, env=gw_env, logfile="openclaw-gateway.log", dry_run=dry_run)
 
     # 3. Hermes 网关(:8642)— 对齐 start-hermes.bat 的环境变量
+    #    便携 Python 同样置顶 PATH：Hermes agent 执行技能脚本（通用工具）
+    #    时的裸 `python` 必须解析到带依赖的便携解释器
     hermes_home = os.path.join(ROOT, "runtime", "hermes-home")
     if not dry_run:
         os.makedirs(hermes_home, exist_ok=True)
     hermes_env = dict(env)
+    hermes_env["PATH"] = os.path.dirname(py) + os.pathsep + hermes_env.get("PATH", os.environ.get("PATH", ""))
     hermes_env.update({
         "HERMES_HOME": hermes_home,
         "PYTHONPATH": os.path.join(ROOT, "runtime", "hermes-libs"),

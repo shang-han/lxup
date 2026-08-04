@@ -179,6 +179,26 @@ export class SkillsPage extends LitElement {
     .skill-item__badge.missing {
       background: rgba(245,158,11,0.12); color: var(--warn);
     }
+    .skill-item__icon.preinstalled { font-size: 17px; line-height: 20px; text-align: center; }
+    .skill-item__actions .btn-install-pre {
+      background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);
+    }
+    .skill-item__actions .btn-install-pre:hover { background: var(--accent-hover); }
+    .skill-item__actions .btn-install-pre:disabled { opacity: 0.5; cursor: wait; }
+    .skill-item.off { opacity: 0.55; }
+    .skill-item__actions .btn-toggle {
+      background: transparent; color: var(--text-soft); border-color: var(--border);
+    }
+    .skill-item__actions .btn-toggle:hover { background: var(--bg-hover); color: var(--text); }
+    .skill-item__actions .btn-toggle.on {
+      background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);
+    }
+    .skill-item__actions .btn-toggle.on:hover { background: var(--accent-hover); }
+    .skill-item__actions .btn-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+    .skills-section__header.clickable { cursor: pointer; user-select: none; }
+    .skills-section__header.clickable:hover { color: var(--text); }
+    .skills-section__header .caret { font-size: 11px; color: var(--muted); }
+    .missing-hint { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted); }
 
     /* === empty state === */
     .skills-empty {
@@ -202,6 +222,16 @@ export class SkillsPage extends LitElement {
   @state() _installingSlug = '';
   @state() _hubMsg = '';
   @state() _hubMsgCls = '';
+  // 预装通用工具（下载=部署到 agent workspace）
+  @state() _busyPre = '';
+  @state() _preMsg = '';
+  // 已安装技能的启用/禁用（网关 skills.entries + skills.update）
+  @state() _togglingKey = '';
+  @state() _listMsg = '';
+  @state() _expandedMissing = false;
+  @state() _gwConnected = false;
+  _entries = new Map<string, boolean>();
+  _unsubStore: (() => void) | null = null;
   // 技能详情（skills.detail）
   @state() _detailOpen = false;
   @state() _detailTitle = '';
@@ -215,7 +245,22 @@ export class SkillsPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    const store = getSharedStore();
+    this._gwConnected = store.connected;
+    this._unsubStore = store.subscribe(() => {
+      const c = getSharedStore().connected;
+      if (c !== this._gwConnected) {
+        this._gwConnected = c;
+        if (c) void this._loadSkills(); // 连上/重连时刷新清单与启用状态
+        this.requestUpdate();
+      }
+    });
     void this._loadSkills();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsubStore?.();
   }
 
   /** 从 Sidecar 读取 OpenClaw 内置技能包（扫描打包 npm 包内 skills 目录下各 SKILL.md） */
@@ -224,13 +269,31 @@ export class SkillsPage extends LitElement {
     try {
       const r = await fetch(`${this._sidecarBase}/api/gateway/skills`);
       const d = await r.json() as { data?: any[] };
-      this._skills = (d.data || []).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        source: `OpenClaw ${L('skills.bundled')}${s.version ? ' · v' + s.version : ''}`,
-        desc: (s.description || '') + ((s.requires && s.requires.length) ? `\n${L('skills.requires')}: ${s.requires.join(', ')}` : ''),
-        status: 'available',
-      }));
+      // 网关侧启用/禁用状态（skills.entries，按技能名合并）
+      try {
+        const store = getSharedStore();
+        this._entries = store.connected
+          ? this._normalizeEntries(await store.request('skills.entries'))
+          : new Map();
+      } catch { this._entries = new Map(); }
+      this._skills = (d.data || []).map((s: any) => {
+        const note = s.status_note
+          || ((s.requires && s.requires.length) ? `${L('skills.requires')}: ${s.requires.join(', ')}` : '');
+        return {
+          id: s.id,
+          name: s.name,
+          source: s.preinstalled
+            ? `LXUP ${L('skills.preinstalled')}`
+            : s.source_kind === 'clawhub'
+              ? L('skills.fromClawhub')
+              : `OpenClaw ${L('skills.bundled')}${s.version ? ' · v' + s.version : ''}`,
+          desc: (s.description || '') + (note ? `\n${note}` : ''),
+          status: s.status || 'available',
+          preinstalled: !!s.preinstalled,
+          installed: !!s.installed,
+          enabled: this._entries.has(s.name) ? this._entries.get(s.name) : true,
+        };
+      });
     } catch {
       this._skills = [];
     }
@@ -300,11 +363,61 @@ export class SkillsPage extends LitElement {
     }
   }
 
+  // ── LXUP 预装通用工具（经 Sidecar 部署/卸载）────────────
+
+  async _openPreDetail(id: string, name: string) {
+    this._detailOpen = true;
+    this._detailTitle = name;
+    this._detailBody = '';
+    this._detailLoading = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(id)}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      const d = await r.json() as { content?: string };
+      // 去掉 frontmatter（--- ... ---），与网关技能详情一致
+      this._detailBody = String(d.content || '—').replace(/^---[\s\S]*?---\s*/, '');
+    } catch (e) {
+      this._detailBody = e instanceof Error ? e.message : String(e);
+    } finally {
+      this._detailLoading = false;
+    }
+  }
+
+  async _downloadPre(s: any) {
+    if (this._busyPre) return;
+    this._busyPre = s.id;
+    this._preMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}/install`, { method: 'POST' });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      await this._loadSkills();
+    } catch (e) {
+      this._preMsg = `${L('skills.preDownloadFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._busyPre = '';
+    }
+  }
+
+  async _uninstallPre(s: any) {
+    if (this._busyPre) return;
+    this._busyPre = s.id;
+    this._preMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/skills/preinstalled/${encodeURIComponent(s.id)}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      await this._loadSkills();
+    } catch (e) {
+      this._preMsg = `${L('skills.preUninstallFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._busyPre = '';
+    }
+  }
+
   /** 详情：skills.detail 返回 SKILL.md 全文（含 frontmatter），截取正文展示 */
-  async _openDetail(slug: string) {
+  async _openDetail(slug: string, displayName?: string) {
     const store = getSharedStore();
     this._detailOpen = true;
-    this._detailTitle = slug;
+    this._detailTitle = displayName || slug;
     this._detailBody = '';
     this._detailLoading = true;
     try {
@@ -316,7 +429,7 @@ export class SkillsPage extends LitElement {
         body = body.replace(/^---[\s\S]*?---\s*/, '');
         this._detailBody = body || skill.summary || '—';
       } else {
-        const local = this._skills.find(s => s.name === slug);
+        const local = this._skills.find(s => s.id === slug || s.name === slug);
         this._detailBody = local?.desc || L('dashboard.wsDisconnected');
       }
     } catch (e) {
@@ -332,7 +445,8 @@ export class SkillsPage extends LitElement {
 
   render() {
     const filtered = this._filteredSkills();
-    const available = filtered.filter(s => s.status === 'available').length;
+    const preinstalled = filtered.filter(s => s.preinstalled);
+    const available = filtered.filter(s => s.status === 'available' && !s.preinstalled).length;
     const missing = filtered.filter(s => s.status === 'missing').length;
     const disabled = filtered.filter(s => s.status === 'disabled').length;
 
@@ -371,6 +485,20 @@ export class SkillsPage extends LitElement {
           <div class="skills-summary">
             ${L('skills.summary', { total: filtered.length, available, missing, disabled })}
           </div>
+          ${this._listMsg ? html`<div class="hub-msg err">${this._listMsg}</div>` : ''}
+
+          <!-- LXUP 预装通用工具（免费，下载部署后 agent 可用） -->
+          ${preinstalled.length > 0 ? html`
+            <div class="skills-section">
+              <div class="skills-section__header" style="color:var(--accent);">
+                🧰 ${L('skills.preinstalledTitle')} <span class="count">(${preinstalled.length})</span>
+              </div>
+              ${this._preMsg ? html`<div class="hub-msg err" style="margin:10px 18px 0;">${this._preMsg}</div>` : ''}
+              <div class="skills-section__body">
+                ${preinstalled.map(s => this._renderPreinstalledItem(s))}
+              </div>
+            </div>
+          ` : ''}
 
           <!-- Available skills -->
           ${available > 0 ? html`
@@ -379,31 +507,36 @@ export class SkillsPage extends LitElement {
                 ✓ ${L('skills.available')} <span class="count">(${available})</span>
               </div>
               <div class="skills-section__body">
-                ${filtered.filter(s => s.status === 'available').map(s => this._renderSkillItem(s))}
+                ${filtered.filter(s => s.status === 'available' && !s.preinstalled).map(s => this._renderSkillItem(s))}
               </div>
             </div>
           ` : ''}
 
-          <!-- Missing dependencies -->
+          <!-- Missing dependencies（默认折叠，补齐依赖前不可用） -->
           ${missing > 0 ? html`
             <div class="skills-section">
-              <div class="skills-section__header" style="color:var(--warn);">
-                 ${L('skills.missingDeps')} <span class="count">(${missing})</span>
+              <div class="skills-section__header clickable" style="color:var(--warn);"
+                   @click=${() => { this._expandedMissing = !this._expandedMissing; }}>
+                <span class="caret">${this._expandedMissing ? '▾' : '▸'}</span>
+                ${L('skills.missingDeps')} <span class="count">(${missing})</span>
+                <span class="missing-hint">${L('skills.missingHint')}</span>
               </div>
-              <div class="skills-section__body">
-                ${filtered.filter(s => s.status === 'missing').map(s => this._renderSkillItem(s))}
-              </div>
+              ${this._expandedMissing ? html`
+                <div class="skills-section__body">
+                  ${filtered.filter(s => s.status === 'missing').map(s => this._renderPassiveItem(s))}
+                </div>
+              ` : ''}
             </div>
           ` : ''}
 
-          <!-- Disabled -->
+          <!-- Disabled（平台不支持） -->
           ${disabled > 0 ? html`
             <div class="skills-section">
               <div class="skills-section__header" style="color:var(--muted);">
                 ✗ ${L('skills.disabled')} <span class="count">(${disabled})</span>
               </div>
               <div class="skills-section__body">
-                ${filtered.filter(s => s.status === 'disabled').map(s => this._renderSkillItem(s))}
+                ${filtered.filter(s => s.status === 'disabled').map(s => this._renderPassiveItem(s))}
               </div>
             </div>
           ` : ''}
@@ -507,23 +640,105 @@ export class SkillsPage extends LitElement {
     `;
   }
 
-  _renderSkillItem(s: any) {
-    const badgeClass = s.status === 'available' ? '' : s.status === 'disabled' ? 'disabled' : 'missing';
-    const badgeText = s.status === 'available' ? L('skills.available') : s.status === 'disabled' ? L('skills.disabled') : L('skills.missingDeps');
+  // ── 已安装技能启用 / 禁用（网关 skills.update）────────────
 
+  /** skills.entries 响应形态不定（数组 / {entries} / 键值表），统一成 名称→enabled */
+  _normalizeEntries(res: any): Map<string, boolean> {
+    const m = new Map<string, boolean>();
+    const items = Array.isArray(res) ? res : Array.isArray(res?.entries) ? res.entries : null;
+    if (items) {
+      for (const e of items) {
+        const k = e?.skillKey || e?.key || e?.name;
+        if (k) m.set(String(k), e.enabled !== false);
+      }
+    } else if (res && typeof res === 'object') {
+      for (const [k, v] of Object.entries(res)) m.set(k, (v as any)?.enabled !== false);
+    }
+    return m;
+  }
+
+  async _toggleSkill(s: any) {
+    const store = getSharedStore();
+    if (this._togglingKey || !store.connected) return;
+    const next = s.enabled === false; // 当前禁用 → 启用
+    this._togglingKey = s.name;
+    this._listMsg = '';
+    try {
+      await store.request('skills.update', { skillKey: s.name, enabled: next });
+      await this._loadSkills();
+    } catch (e) {
+      this._listMsg = `${L('skills.toggleFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._togglingKey = '';
+    }
+  }
+
+  _renderPreinstalledItem(s: any) {
+    const busy = this._busyPre === s.id;
+    const badgeText = s.status === 'missing' ? L('skills.missingDeps')
+      : s.installed ? L('skills.preDownloaded') : L('skills.preNotDownloaded');
     return html`
       <div class="skill-item">
-        <div class="skill-item__icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
-        </div>
+        <div class="skill-item__icon preinstalled">🧰</div>
         <div class="skill-item__content">
           <div class="skill-item__name">${s.name}</div>
           <div class="skill-item__source">${s.source}</div>
           <div class="skill-item__desc">${s.desc}</div>
         </div>
         <div class="skill-item__actions">
-          <button class="btn-detail" @click=${() => this._openDetail(s.name)}>${L('skills.detail')}</button>
-          <span class="skill-item__badge ${badgeClass}">${badgeText}</span>
+          <button class="btn-detail" @click=${() => this._openPreDetail(s.id, s.name)}>${L('skills.detail')}</button>
+          ${s.installed
+            ? html`<button class="btn-uninstall" ?disabled=${busy} @click=${() => this._uninstallPre(s)}>${L('skills.uninstall')}</button>`
+            : html`<button class="btn-install-pre" ?disabled=${busy || !!this._busyPre} @click=${() => this._downloadPre(s)}>
+                ${busy ? L('skills.downloading') : L('skills.download')}</button>`}
+          <span class="skill-item__badge ${s.status === 'missing' || !s.installed ? 'missing' : ''}">${badgeText}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  _skillIcon() {
+    return html`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>`;
+  }
+
+  /** 已安装且可用：详情 + 启用/禁用开关（同一按钮两态） */
+  _renderSkillItem(s: any) {
+    const off = s.enabled === false;
+    const busy = this._togglingKey === s.name;
+    return html`
+      <div class="skill-item ${off ? 'off' : ''}">
+        <div class="skill-item__icon">${this._skillIcon()}</div>
+        <div class="skill-item__content">
+          <div class="skill-item__name">${s.name}</div>
+          <div class="skill-item__source">${s.source}</div>
+          <div class="skill-item__desc">${s.desc}</div>
+        </div>
+        <div class="skill-item__actions">
+          <button class="btn-detail" @click=${() => this._openDetail(s.id, s.name)}>${L('skills.detail')}</button>
+          <button class="btn-toggle ${off ? 'on' : ''}" ?disabled=${!this._gwConnected || !!this._togglingKey}
+            @click=${() => this._toggleSkill(s)}>
+            ${busy ? L('common.loading') : off ? L('skills.enableBtn') : L('skills.disableBtn')}</button>
+          ${off ? html`<span class="skill-item__badge disabled">${L('skills.disabled')}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  /** 缺依赖 / 平台不支持：只给详情，不能操作 */
+  _renderPassiveItem(s: any) {
+    const isDisabled = s.status === 'disabled';
+    return html`
+      <div class="skill-item">
+        <div class="skill-item__icon">${this._skillIcon()}</div>
+        <div class="skill-item__content">
+          <div class="skill-item__name">${s.name}</div>
+          <div class="skill-item__source">${s.source}</div>
+          <div class="skill-item__desc">${s.desc}</div>
+        </div>
+        <div class="skill-item__actions">
+          <button class="btn-detail" @click=${() => this._openDetail(s.id, s.name)}>${L('skills.detail')}</button>
+          <span class="skill-item__badge ${isDisabled ? 'disabled' : 'missing'}">
+            ${isDisabled ? L('skills.disabled') : L('skills.missingDeps')}</span>
         </div>
       </div>
     `;
