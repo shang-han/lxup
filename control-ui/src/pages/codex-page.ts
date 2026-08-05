@@ -95,12 +95,8 @@ export class CodexPage extends LitElement {
   }
 
   _resetDefaults() {
-<<<<<<< Updated upstream
     // 不硬编码机器路径；workspace 留空由 Sidecar 侧默认值兜底
     this._config = { workspace: '', apiKey: this._config.apiKey, baseUrl: '', model: '', approval: 'on-failure', sandbox: 'workspace-write' };
-=======
-    this._config = { workspace: 'D:\\dk-ai-agent\\02_Company_Projects\\lxup', apiKey: this._config.apiKey, baseUrl: '', model: '', approval: 'on-failure', sandbox: 'workspace-write' };
->>>>>>> Stashed changes
     this.requestUpdate();
   }
 
@@ -135,11 +131,7 @@ export class CodexPage extends LitElement {
             <p style="font-size:12px;color:var(--text-soft);margin:0 0 16px;line-height:1.6;">${L('common.codexConfigHint')}</p>
             <div class="form-group">
               <label class="form-label">${L('common.workspaceDir')}</label>
-<<<<<<< Updated upstream
               <input class="form-input" .value=${this._config.workspace} placeholder="C:\my-project" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
-=======
-              <input class="form-input" .value=${this._config.workspace} placeholder="D:\\dk-ai-agent\\02_Company_Projects\\lxup" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
->>>>>>> Stashed changes
             </div>
             <div class="form-group">
               <label class="form-label">${L('common.apiKey')}</label>
