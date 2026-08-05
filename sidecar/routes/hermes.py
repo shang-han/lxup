@@ -43,6 +43,22 @@ def _config_path(request: Request) -> Path:
     return _hermes_home_dir(request) / "config.yaml"
 
 
+# ── 工作区面板（与 OpenClaw 共用端点实现，根目录为 hermes-home）──
+
+from .gateway_routes import register_workspace_routes
+
+_HERMES_WS_SKIP = {".git", "node_modules", "__pycache__", "cache", "audio_cache", "image_cache", "logs"}
+
+register_workspace_routes(
+    router,
+    root_fn=lambda: preinstalled_skills.hermes_skills_root().parent,
+    core_files=["SOUL.md", "config.yaml", ".env"],
+    skip_dirs=_HERMES_WS_SKIP,
+    agent_id_fn=lambda: "hermes",
+    name_suffix="hermes",
+)
+
+
 def _gateway_url(request: Request) -> str:
     return (
         getattr(request.app.state.config, "hermes_gateway_url", "")

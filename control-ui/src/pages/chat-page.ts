@@ -169,6 +169,7 @@ export class ChatPage extends LitElement {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       padding: 8px 10px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
     }
+    .ws-core-item.active { border-color: var(--accent); background: var(--accent-subtle); }
     .ws-core-item__name { flex: 1; font-size: 12px; font-weight: 600; color: var(--text); }
     .ws-core-item button {
       background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0;
@@ -191,6 +192,7 @@ export class ChatPage extends LitElement {
     }
     .ws-panel__toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     .ws-panel__toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ws-panel__toolbar button.mode-active { border-color: var(--accent); color: var(--accent); }
     .ws-panel__msg { padding: 6px 14px 0; font-size: 11px; color: var(--warn); }
     .ws-panel__content { flex: 1; margin: 12px 14px; min-height: 0; }
     .ws-panel__content textarea {
@@ -207,6 +209,21 @@ export class ChatPage extends LitElement {
       margin: 12px 14px; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius-md);
       font-size: 12px; color: var(--muted); text-align: center;
     }
+
+    /* === 快捷键面板 === */
+    .sc-backdrop { position: fixed; inset: 0; z-index: 85; }
+    .sc-panel {
+      position: fixed; top: 64px; right: 16px; z-index: 90;
+      width: min(380px, calc(100vw - 32px)); max-height: min(520px, calc(100vh - 90px));
+      overflow-y: auto; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+      padding: 4px 0 8px;
+    }
+    .sc-group { padding: 10px 14px 4px; font-size: 11px; font-weight: 600; color: var(--text-soft); }
+    .sc-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 14px; cursor: pointer; }
+    .sc-row:hover { background: var(--bg-hover); }
+    .sc-row__cmd { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 96px; flex-shrink: 0; }
+    .sc-row__desc { font-size: 12px; color: var(--text-soft); }
 
     /* === banner === */
     .chat-banner {
@@ -379,6 +396,9 @@ export class ChatPage extends LitElement {
   @state() _wsEditing = false;
   @state() _wsBusy = false;
   @state() _wsMsg = '';
+  @state() _wsDirty = false;
+  _wsMsgTimer: number | null = null;
+  @state() _scOpen = false;
   _pollTimer: number | null = null;
   @state() _streaming = false;
   @state() _models: ResolvedModel[] = [];
@@ -412,10 +432,18 @@ export class ChatPage extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    // 引擎切换 → 换用对应引擎的网关 + 重拉该引擎的模型列表
+    // 引擎切换 → 换用对应引擎的网关 + 重拉该引擎的模型列表 + 重置工作区面板（数据源不同）
     if (this._inited && changed.has('engine')) {
       this._setupEngine();
       this._refreshModels();
+      this._wsPanelOpen = false;
+      this._wsSel = '';
+      this._wsContent = '';
+      this._wsTree = {};
+      this._wsCore = [];
+      this._wsName = '';
+      this._wsPath = '';
+      void this._loadWorkspace();
     }
   }
 
@@ -425,6 +453,9 @@ export class ChatPage extends LitElement {
       clearInterval(this._pollTimer);
       this._pollTimer = null;
     }
+    document.removeEventListener('keydown', this._wsOnKey);
+    document.removeEventListener('keydown', this._scOnKey);
+    if (this._wsMsgTimer) { window.clearTimeout(this._wsMsgTimer); this._wsMsgTimer = null; }
     this._teardownEngine();
   }
 
@@ -587,6 +618,18 @@ export class ChatPage extends LitElement {
     const text = this._input.trim();
     const imgs = this._pendingImages;
     if ((!text && imgs.length === 0) || this._streaming) return;
+    // 斜杠命令走 RPC 执行（webchat 下网关不解释斜杠文本）；按当前引擎清单匹配
+    if (text.startsWith('/')) {
+      const flat = this._scCommands().flatMap(g => g.items);
+      const hit = flat.find(it => it.cmd === text || (it.needsArg && text.startsWith(`${it.cmd} `)));
+      if (hit) {
+        this._messages = [...this._messages, { role: 'user', text }];
+        this._input = '';
+        this._scrollToBottom();
+        void this._execSlash(text);
+        return;
+      }
+    }
     if (!this._engineAdapter.ready()) {
       this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
       this._scrollToBottom();
@@ -769,6 +812,17 @@ export class ChatPage extends LitElement {
 
   /** 工作区胶囊：读默认 Agent 与其 workspace 路径（真实数据） */
   async _loadWorkspace() {
+    if (this.engine === 'hermes') {
+      try {
+        const r = await fetch(this._wsApi, { headers: sidecarHeaders() });
+        if (r.ok) {
+          const d = await r.json();
+          this._wsName = d.agentId || 'hermes';
+          this._wsPath = d.path || '';
+        }
+      } catch { /* sidecar 未连时保持现状 */ }
+      return;
+    }
     try {
       const res = await getSharedStore().request<any>('agents.list', {});
       const defId = res?.defaultId || '';
@@ -780,17 +834,76 @@ export class ChatPage extends LitElement {
 
   // ── 工作区面板 ──────────────────────────────────────
 
+  /** 工作区端点前缀：OpenClaw 挂 /api/gateway，Hermes 挂 /api/hermes（sidecar 同实现挂两处） */
+  get _wsApi(): string {
+    return this.engine === 'hermes'
+      ? `${this._sidecarBase}/api/hermes/workspace`
+      : `${this._sidecarBase}/api/gateway/workspace`;
+  }
+
+  /** 草稿持久化：dev 下 HMR 全量刷新或整页重启后不丢未保存内容 */
+  static WS_DRAFT_KEY = 'lxup.ws.draft';
+
+  _wsSaveDraft() {
+    try {
+      sessionStorage.setItem(ChatPage.WS_DRAFT_KEY, JSON.stringify({ path: this._wsSel, content: this._wsContent }));
+    } catch { /* 存储满等场景静默降级 */ }
+  }
+
+  _wsClearDraft() {
+    try { sessionStorage.removeItem(ChatPage.WS_DRAFT_KEY); } catch {}
+  }
+
+  _wsRestoreDraft(): boolean {
+    try {
+      const raw = sessionStorage.getItem(ChatPage.WS_DRAFT_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      if (!d?.path) return false;
+      this._wsSel = String(d.path);
+      this._wsContent = String(d.content ?? '');
+      this._wsEditing = true;
+      this._wsDirty = true;
+      this._wsFlash(L('chat.wsDraftRestored'), 4000);
+      return true;
+    } catch { return false; }
+  }
+
   async _toggleWsPanel() {
-    this._wsPanelOpen = !this._wsPanelOpen;
     if (this._wsPanelOpen) {
-      await this._loadWsInfo();
-      void this._loadWsDir('');
+      this._closeWsPanel();
+      return;
     }
+    this._wsPanelOpen = true;
+    document.addEventListener('keydown', this._wsOnKey);
+    await this._loadWsInfo();
+    void this._loadWsDir('');
+    this._wsRestoreDraft();
+  }
+
+  /** Esc 关闭面板 */
+  _wsOnKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') this._closeWsPanel();
+  };
+
+  _closeWsPanel() {
+    if (this._wsEditing && this._wsDirty) {
+      if (!window.confirm(L('chat.wsUnsaved'))) return;
+      this._wsClearDraft();
+    }
+    this._wsPanelOpen = false;
+    document.removeEventListener('keydown', this._wsOnKey);
+  }
+
+  _wsFlash(msg: string, ms = 2500) {
+    this._wsMsg = msg;
+    if (this._wsMsgTimer) window.clearTimeout(this._wsMsgTimer);
+    this._wsMsgTimer = window.setTimeout(() => { this._wsMsg = ''; this._wsMsgTimer = null; }, ms);
   }
 
   async _loadWsInfo() {
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace`, { headers: sidecarHeaders() });
+      const r = await fetch(this._wsApi, { headers: sidecarHeaders() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       this._wsName = d.agentId || 'main';
@@ -803,7 +916,7 @@ export class ChatPage extends LitElement {
 
   async _loadWsDir(dir: string) {
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/list?dir=${encodeURIComponent(dir)}`, { headers: sidecarHeaders() });
+      const r = await fetch(`${this._wsApi}/list?dir=${encodeURIComponent(dir)}`, { headers: sidecarHeaders() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       this._wsTree = { ...this._wsTree, [dir]: d.entries || [] };
@@ -819,15 +932,23 @@ export class ChatPage extends LitElement {
   }
 
   async _wsOpenFile(path: string) {
+    if (path === this._wsSel) { // 点当前文件：仅切回预览/保持
+      return;
+    }
+    if (this._wsEditing && this._wsDirty) {
+      if (!window.confirm(L('chat.wsUnsaved'))) return;
+      this._wsClearDraft();
+    }
     this._wsBusy = true;
     this._wsMsg = '';
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file?path=${encodeURIComponent(path)}`, { headers: sidecarHeaders() });
+      const r = await fetch(`${this._wsApi}/file?path=${encodeURIComponent(path)}`, { headers: sidecarHeaders() });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       const d = await r.json();
       this._wsSel = path;
       this._wsContent = d.content || '';
       this._wsEditing = false;
+      this._wsDirty = false;
     } catch (e) {
       this._wsMsg = e instanceof Error ? e.message : String(e);
     }
@@ -839,7 +960,7 @@ export class ChatPage extends LitElement {
     if (this._wsBusy) return;
     this._wsBusy = true;
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file`, {
+      const r = await fetch(`${this._wsApi}/file`, {
         method: 'POST',
         headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ path: name, content: '' }),
@@ -849,6 +970,7 @@ export class ChatPage extends LitElement {
       this._wsSel = name;
       this._wsContent = '';
       this._wsEditing = true;
+      this._wsDirty = false;
     } catch (e) {
       this._wsMsg = e instanceof Error ? e.message : String(e);
     }
@@ -860,14 +982,16 @@ export class ChatPage extends LitElement {
     this._wsBusy = true;
     this._wsMsg = '';
     try {
-      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file`, {
+      const r = await fetch(`${this._wsApi}/file`, {
         method: 'POST',
         headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ path: this._wsSel, content: this._wsContent }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
       this._wsEditing = false;
-      this._wsMsg = L('common.configSaved');
+      this._wsDirty = false;
+      this._wsClearDraft();
+      this._wsFlash(L('common.configSaved'));
     } catch (e) {
       this._wsMsg = e instanceof Error ? e.message : String(e);
     }
@@ -896,6 +1020,188 @@ export class ChatPage extends LitElement {
         </div>
       `;
     });
+  }
+
+  // ── 快捷键（斜杠命令）面板 ──────────────────────────
+
+  /** 命令清单：按引擎能力分组。OpenClaw 全量（对齐原生 UI）；Hermes/Codex 仅各自能真实执行的子集 */
+  _scCommands(): Array<{ group: string; items: Array<{ cmd: string; desc: string; needsArg?: boolean }> }> {
+    if (this.engine === 'hermes') return [
+      { group: L('chat.scSession'), items: [
+        { cmd: '/new', desc: L('chat.scNew') },
+        { cmd: '/stop', desc: L('chat.scStop') },
+      ] },
+      { group: L('chat.scModel'), items: [
+        { cmd: '/model', desc: L('chat.scModelSwitch'), needsArg: true },
+        { cmd: '/model status', desc: L('chat.scModelStatus') },
+      ] },
+    ];
+    if (this.engine === 'codex') return [
+      { group: L('chat.scSession'), items: [
+        { cmd: '/stop', desc: L('chat.scStop') },
+      ] },
+      { group: L('chat.scModel'), items: [
+        { cmd: '/model status', desc: L('chat.scModelStatus') },
+      ] },
+    ];
+    return [
+      { group: L('chat.scSession'), items: [
+        { cmd: '/new', desc: L('chat.scNew') },
+        { cmd: '/reset', desc: L('chat.scReset') },
+        { cmd: '/stop', desc: L('chat.scStop') },
+      ] },
+      { group: L('chat.scModel'), items: [
+        { cmd: '/model', desc: L('chat.scModelSwitch'), needsArg: true },
+        { cmd: '/model list', desc: L('chat.scModelList') },
+        { cmd: '/model status', desc: L('chat.scModelStatus') },
+      ] },
+      { group: L('chat.scThink'), items: [
+        { cmd: '/think off', desc: L('chat.scThinkOff') },
+        { cmd: '/think low', desc: L('chat.scThinkLow') },
+        { cmd: '/think medium', desc: L('chat.scThinkMed') },
+        { cmd: '/think high', desc: L('chat.scThinkHigh') },
+      ] },
+    ];
+  }
+
+  _toggleSc() {
+    this._scOpen = !this._scOpen;
+    if (this._scOpen) document.addEventListener('keydown', this._scOnKey);
+    else document.removeEventListener('keydown', this._scOnKey);
+  }
+
+  _scOnKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') this._toggleSc();
+  };
+
+  /** 点快捷键：需参数的填入输入框等用户补全；其余走网关 RPC 客户端执行（实测：斜杠文本直发 webchat 网关不解释） */
+  _runSlash(item: { cmd: string; needsArg?: boolean }) {
+    this._toggleSc();
+    if (item.needsArg) {
+      this._input = `${item.cmd} `;
+      const ta = this.shadowRoot?.querySelector('.chat-input-bar__input textarea') as HTMLTextAreaElement | null;
+      ta?.focus();
+      return;
+    }
+    this._messages = [...this._messages, { role: 'user', text: item.cmd }];
+    this._scrollToBottom();
+    void this._execSlash(item.cmd);
+  }
+
+  /** 斜杠命令按引擎分发执行 */
+  async _execSlash(cmd: string) {
+    const note = (text: string) => {
+      this._messages = [...this._messages, { role: 'assistant', text }];
+      this._scrollToBottom();
+    };
+    try {
+      if (this.engine === 'hermes') return await this._execSlashHermes(cmd, note);
+      if (this.engine === 'codex') return await this._execSlashCodex(cmd, note);
+      await this._execSlashOpenClaw(cmd, note);
+    } catch (e) {
+      note(`⚠️ ${cmd}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** Hermes：会话经其 HTTP API 动态创建；模型写 sidecar config.yaml 热加载；停止=本地 abort SSE */
+  async _execSlashHermes(cmd: string, note: (t: string) => void) {
+    if (cmd === '/new') {
+      this._chatCancel?.abort();
+      const s = await this._engineAdapter.createSession();
+      if (!s) throw new Error(L('chat.engineOffline'));
+      this._sessionKey = s.id;
+      this._messages = [];
+      void this._loadSessions();
+      note(`✅ /new — ${s.name}`);
+      return;
+    }
+    if (cmd === '/stop') {
+      this._chatCancel?.abort();
+      note(`🛑 ${L('chat.scStop')}`);
+      return;
+    }
+    if (cmd === '/model status') {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const m = await r.json();
+      note(`**${L('chat.scModelStatus')}**\n\n- model: ${m.name || '—'}\n- provider: ${m.provider || 'auto'}\n- baseUrl: ${m.baseUrl || '—'}\n- apiKey: ${m.hasKey ? m.apiKey : '—'}`);
+      return;
+    }
+    if (cmd.startsWith('/model ')) {
+      const name = cmd.slice('/model '.length).trim();
+      if (!name) return;
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ name, baseUrl: '', apiKey: '' }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.success === false) throw new Error(d.detail || d.message || `HTTP ${r.status}`);
+      note(`✅ /model → ${name}`);
+      void this._refreshModels();
+    }
+  }
+
+  /** Codex：仅停止（本地 abort CLI 子进程）与模型状态（读 codex 配置） */
+  async _execSlashCodex(cmd: string, note: (t: string) => void) {
+    if (cmd === '/stop') {
+      this._chatCancel?.abort();
+      note(`🛑 ${L('chat.scStop')}`);
+      return;
+    }
+    if (cmd === '/model status') {
+      const cfg: any = await codex.getConfig();
+      note(`**${L('chat.scModelStatus')}**\n\n- model: ${cfg?.model || '—'}`);
+    }
+  }
+
+  /** OpenClaw：网关 RPC（方法/参数形状均经实测：sessions.* 用 key，chat.abort 用 sessionKey） */
+  async _execSlashOpenClaw(cmd: string, note: (t: string) => void) {
+    const sid = this._sessionKey || 'agent:main:main';
+    const store = getSharedStore();
+    {
+      if (cmd === '/new' || cmd === '/reset') {
+        this._chatCancel?.abort();
+        await store.request('sessions.reset', { key: sid });
+        this._messages = [];
+        void this._loadSessions();
+        note(`✅ ${cmd} — ${L('chat.scReset')}`);
+        return;
+      }
+      if (cmd === '/stop') {
+        this._chatCancel?.abort();
+        const r = await store.request<{ runIds?: string[] }>('chat.abort', { sessionKey: sid });
+        note(`🛑 ${L('chat.scStop')}${(r?.runIds || []).length ? ` (${r!.runIds!.length})` : ''}`);
+        return;
+      }
+      if (cmd === '/model list') {
+        const r = await store.request<{ models?: Array<Record<string, any>> }>('models.list', {});
+        const lines = (r?.models || []).map((m) =>
+          `- ${m.name || m.id}（${m.provider}）${m.reasoning ? ' · reasoning' : ''}${m.available === false ? ' · ✗' : ''}`);
+        note(`**${L('chat.scModelList')}**\n\n${lines.join('\n') || '—'}`);
+        return;
+      }
+      if (cmd === '/model status') {
+        const d = await store.request<{ session?: Record<string, any> }>('sessions.describe', { key: sid });
+        const s = d?.session || {};
+        note(`**${L('chat.scModelStatus')}**\n\n- model: ${s.model || this._activeModel?.model || '—'}\n- thinking: ${s.thinkingLevel || 'off'}`);
+        return;
+      }
+      if (cmd.startsWith('/model ')) {
+        const model = cmd.slice('/model '.length).trim();
+        if (!model) return;
+        await store.request('sessions.patch', { key: sid, model });
+        note(`✅ /model → ${model}`);
+        void this._refreshModels();
+        return;
+      }
+      if (cmd.startsWith('/think ')) {
+        const level = cmd.slice('/think '.length).trim();
+        if (!level) return;
+        await store.request('sessions.patch', { key: sid, thinkingLevel: level });
+        note(`✅ /think → ${level}`);
+      }
+    }
   }
 
   /** 轮询等待引擎就绪（重连后 WS 就绪前拉历史会空转） */
@@ -1063,18 +1369,16 @@ export class ChatPage extends LitElement {
                 ?disabled=${this._refreshing} @click=${this._refresh}>
                 ${icons['refresh-cw']}
               </button>
-              <!-- 暂隐藏：工作区胶囊与工具按钮（功能保留，恢复时去掉外层 display:none） -->
-              <div style="display:none;align-items:center;gap:6px;">
-                ${isHermes || isCodex ? '' : html`
-                  <div class="workspace-pill" title=${this._wsPath || ''} @click=${this._toggleWsPanel}>
-                    ${icons['folder-open']}
-                    <span class="ws-label">${L('chat.workspace')}</span>
-                    <span class="ws-name">${this._wsName || '—'}</span>
-                  </div>`}
-                <button class="ws-btn" title=${L('chat.tools')}>
-                  ${icons['layout-panel-left']}
-                </button>
-              </div>
+              ${isCodex ? '' : html`
+                <div class="workspace-pill" title=${this._wsPath || ''} @click=${this._toggleWsPanel}>
+                  ${icons['folder-open']}
+                  <span class="ws-label">${L('chat.workspace')}</span>
+                  <span class="ws-name">${this._wsName || '—'}</span>
+                </div>`}
+              <!-- 快捷键入口：弹出斜杠命令列表 -->
+              <button class="ws-btn" title=${L('chat.scTitle')} @click=${() => this._toggleSc()}>
+                ${icons['command']}
+              </button>
             </div>
           </div>
 
@@ -1159,6 +1463,22 @@ export class ChatPage extends LitElement {
         </div>
       </div>
 
+      <!-- 快捷键面板 -->
+      ${this._scOpen ? html`
+        <div class="sc-backdrop" @click=${() => this._toggleSc()}></div>
+        <div class="sc-panel">
+          ${this._scCommands().map(g => html`
+            <div class="sc-group">${g.group}</div>
+            ${g.items.map(it => html`
+              <div class="sc-row" @click=${() => this._runSlash(it)}>
+                <span class="sc-row__cmd">${it.cmd}</span>
+                <span class="sc-row__desc">${it.desc}</span>
+              </div>
+            `)}
+          `)}
+        </div>
+      ` : ''}
+
       <!-- 工作区文件面板 -->
       ${this._wsPanelOpen ? html`
         <div class="ws-panel">
@@ -1169,7 +1489,7 @@ export class ChatPage extends LitElement {
               <button title=${L('common.refresh')} @click=${() => { void this._loadWsInfo(); void this._loadWsDir(''); if (this._wsSel) void this._wsOpenFile(this._wsSel); }}>
                 ${icons['refresh-cw']}
               </button>
-              <button title=${L('channels.close')} @click=${() => { this._wsPanelOpen = false; }}>
+              <button title=${L('channels.close')} @click=${() => this._closeWsPanel()}>
                 ${icons['x']}
               </button>
             </div>
@@ -1183,7 +1503,7 @@ export class ChatPage extends LitElement {
               <div class="ws-panel__section-label">${L('chat.wsCoreFiles')}</div>
               <div class="ws-panel__core">
                 ${this._wsCore.map(f => html`
-                  <div class="ws-core-item">
+                  <div class="ws-core-item ${this._wsSel === f.name ? 'active' : ''}">
                     <span class="ws-tree__icon">📄</span>
                     <span class="ws-core-item__name">${f.name}</span>
                     ${f.exists
@@ -1202,8 +1522,8 @@ export class ChatPage extends LitElement {
                 <strong style="font-size:13px;color:var(--text-strong);">${this._wsSel || L('chat.wsSelectFile')}</strong>
                 <span class="spacer"></span>
                 <button @click=${() => { if (this._wsSel) void this._wsOpenFile(this._wsSel); }}>${L('chat.wsReload')}</button>
-                <button ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = true; }}>${L('common.edit')}</button>
-                <button ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = false; }}>${L('chat.wsPreview')}</button>
+                <button class="${this._wsEditing ? 'mode-active' : ''}" ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = true; }}>${L('common.edit')}</button>
+                <button class="${!this._wsEditing && this._wsSel ? 'mode-active' : ''}" ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = false; }}>${L('chat.wsPreview')}</button>
                 <button class="primary" ?disabled=${!this._wsSel || this._wsBusy || !this._wsEditing} @click=${this._wsSave}>${L('common.save')}</button>
               </div>
               ${this._wsMsg ? html`<div class="ws-panel__msg">${this._wsMsg}</div>` : ''}
@@ -1211,7 +1531,7 @@ export class ChatPage extends LitElement {
                 <div class="ws-panel__content">
                   ${this._wsEditing ? html`
                     <textarea .value=${this._wsContent}
-                      @input=${(e: Event) => { this._wsContent = (e.target as HTMLTextAreaElement).value; }}></textarea>
+                      @input=${(e: Event) => { this._wsContent = (e.target as HTMLTextAreaElement).value; this._wsDirty = true; this._wsSaveDraft(); }}></textarea>
                   ` : html`<pre>${this._wsContent}</pre>`}
                 </div>
               ` : html`<div class="ws-panel__empty">${L('chat.wsReady')}</div>`}

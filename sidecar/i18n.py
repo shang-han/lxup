@@ -17,6 +17,7 @@ _MSGS: dict[str, tuple[str, str]] = {
     "saved_hot_reload": ("Saved — Hermes hot-reloaded", "已保存，Hermes 热加载生效"),
     "saved_restart": ("Saved (takes effect after gateway restart)", "已保存（下次网关重启生效）"),
     "mem_invalid_file": ("Invalid memory file path: {file}", "无效的记忆文件路径: {file}"),
+    "ws_invalid_file": ("Invalid workspace file path: {file}", "无效的工作区文件路径: {file}"),
     # license
     "activate_failed_http": ("Activation failed (HTTP {status})", "激活失败 (HTTP {status})"),
     "cannot_connect_server": ("Cannot reach license server: {e}", "无法连接授权服务器: {e}"),

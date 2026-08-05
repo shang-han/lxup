@@ -193,28 +193,96 @@ async def gateway_skill_pack_uninstall(request: Request, pack_id: str) -> dict:
         raise HTTPException(status_code=500, detail=tr(ui_lang(request), "uninstall_failed", e=e))
 
 
-# ── OpenClaw workspace 文件浏览/编辑（工作区面板）──
+# ── workspace 文件浏览/编辑（工作区面板，OpenClaw/Hermes 共用）──
 
 _WS_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".openclaw"}
 
 
-def _ws_safe_path(rel: str) -> Path:
-    """工作区内路径安全解析：拒绝绝对路径与 .. 穿越"""
-    root = preinstalled_skills.workspace_dir()
-    f = (rel or "").replace("\\", "/").strip("/")
-    if not f or ".." in f.split("/"):
-        raise LookupError(rel)
-    p = (root / f).resolve()
-    if not str(p).startswith(str(root.resolve()) + os.sep) and p != root.resolve():
-        raise LookupError(rel)
-    return p
+class WorkspaceFileBody(BaseModel):
+    path: str
+    content: str = ""
 
 
-@router.get("/workspace")
-async def gateway_workspace_info(request: Request) -> dict:
-    """工作区元信息：默认 Agent 与其 workspace 路径 + 核心文件存在性"""
-    lang = ui_lang(request)
-    ws = preinstalled_skills.workspace_dir()
+def register_workspace_routes(
+    router: APIRouter,
+    root_fn,
+    core_files: list,
+    skip_dirs: set,
+    agent_id_fn,
+    name_suffix: str,
+) -> None:
+    """在指定 router 挂 /workspace、/workspace/list、/workspace/file(GET/POST) 四端点。
+    路径安全：拒绝绝对路径与 .. 穿越；前缀比较用 normcase 兼容 Windows 大小写不敏感。"""
+
+    def safe_path(rel: str) -> Path:
+        root = root_fn().resolve()
+        f = (rel or "").replace("\\", "/").strip("/")
+        if not f or ".." in f.split("/"):
+            raise LookupError(rel)
+        p = (root / f).resolve()
+        if p != root and not os.path.normcase(str(p)).startswith(os.path.normcase(str(root)) + os.sep):
+            raise LookupError(rel)
+        return p
+
+    async def ws_info(request: Request) -> dict:
+        ws = root_fn()
+        return {
+            "agentId": agent_id_fn(),
+            "path": str(ws),
+            "coreFiles": [{"name": n, "exists": (ws / n).is_file()} for n in core_files],
+        }
+
+    async def ws_list(request: Request, dir: str = Query(default="")) -> dict:
+        try:
+            base = safe_path(dir) if dir else root_fn()
+        except LookupError:
+            raise HTTPException(status_code=400, detail=tr(ui_lang(request), "ws_invalid_file", file=dir))
+        if not base.is_dir():
+            return {"entries": []}
+        entries = []
+        try:
+            names = sorted(base.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+        except OSError:
+            return {"entries": []}
+        for p in names[:200]:
+            if p.is_dir() and p.name in skip_dirs:
+                continue
+            entries.append({"name": p.name, "type": "dir" if p.is_dir() else "file"})
+        return {"entries": entries}
+
+    async def ws_file(request: Request, path: str = Query(...)) -> dict:
+        try:
+            p = safe_path(path)
+        except LookupError:
+            raise HTTPException(status_code=400, detail=tr(ui_lang(request), "ws_invalid_file", file=path))
+        if not p.is_file():
+            raise HTTPException(status_code=404, detail=tr(ui_lang(request), "ws_invalid_file", file=path))
+        if p.stat().st_size > 1024 * 1024:
+            raise HTTPException(status_code=413, detail="file too large")
+        return {"path": path, "content": p.read_text(encoding="utf-8", errors="replace")}
+
+    async def ws_file_write(request: Request, body: WorkspaceFileBody) -> dict:
+        try:
+            p = safe_path(body.path)
+        except LookupError:
+            raise HTTPException(status_code=400, detail=tr(ui_lang(request), "ws_invalid_file", file=body.path))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body.content, encoding="utf-8")
+        return {"ok": True, "path": body.path}
+
+    # 区分 operation id，避免两个 router 挂同名函数时 OpenAPI 告警
+    ws_info.__name__ = f"workspace_info_{name_suffix}"
+    ws_list.__name__ = f"workspace_list_{name_suffix}"
+    ws_file.__name__ = f"workspace_file_{name_suffix}"
+    ws_file_write.__name__ = f"workspace_file_write_{name_suffix}"
+    router.get("/workspace")(ws_info)
+    router.get("/workspace/list")(ws_list)
+    router.get("/workspace/file")(ws_file)
+    router.post("/workspace/file")(ws_file_write)
+
+
+def _oc_default_agent_id() -> str:
+    """OpenClaw 默认 Agent id（openclaw.json agents.list[0] / defaults）"""
     agent_id = "main"
     try:
         import json as _json
@@ -224,64 +292,17 @@ async def gateway_workspace_info(request: Request) -> dict:
         agent_id = (lst[0] or {}).get("id", "main") if lst else (agents.get("defaults") or {}).get("defaultAgent", "main")
     except Exception:  # noqa: BLE001
         pass
-    core = ["AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md", "USER.md", "HEARTBEAT.md", "BOOTSTRAP.md", "MEMORY.md"]
-    return {
-        "agentId": agent_id,
-        "path": str(ws),
-        "coreFiles": [{"name": n, "exists": (ws / n).is_file()} for n in core],
-    }
+    return agent_id
 
 
-@router.get("/workspace/list")
-async def gateway_workspace_list(request: Request, dir: str = Query(default="")) -> dict:
-    """列工作区某层目录（默认根层）；目录优先，限 200 条"""
-    try:
-        base = _ws_safe_path(dir) if dir else preinstalled_skills.workspace_dir()
-    except LookupError:
-        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=dir))
-    if not base.is_dir():
-        return {"entries": []}
-    entries = []
-    try:
-        names = sorted(base.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-    except OSError:
-        return {"entries": []}
-    for p in names[:200]:
-        if p.is_dir() and p.name in _WS_SKIP_DIRS:
-            continue
-        entries.append({"name": p.name, "type": "dir" if p.is_dir() else "file"})
-    return {"entries": entries}
-
-
-class WorkspaceFileBody(BaseModel):
-    path: str
-    content: str = ""
-
-
-@router.get("/workspace/file")
-async def gateway_workspace_file(request: Request, path: str = Query(...)) -> dict:
-    """读工作区单文件（≤1MB）"""
-    try:
-        p = _ws_safe_path(path)
-    except LookupError:
-        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=path))
-    if not p.is_file():
-        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "mem_invalid_file", file=path))
-    if p.stat().st_size > 1024 * 1024:
-        raise HTTPException(status_code=413, detail="file too large")
-    return {"path": path, "content": p.read_text(encoding="utf-8", errors="replace")}
-
-
-@router.post("/workspace/file")
-async def gateway_workspace_file_write(request: Request, body: WorkspaceFileBody) -> dict:
-    """写工作区单文件（不存在则创建）"""
-    try:
-        p = _ws_safe_path(body.path)
-    except LookupError:
-        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=body.path))
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(body.content, encoding="utf-8")
-    return {"ok": True, "path": body.path}
+register_workspace_routes(
+    router,
+    root_fn=preinstalled_skills.workspace_dir,
+    core_files=["AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md", "USER.md", "HEARTBEAT.md", "BOOTSTRAP.md", "MEMORY.md"],
+    skip_dirs=_WS_SKIP_DIRS,
+    agent_id_fn=_oc_default_agent_id,
+    name_suffix="openclaw",
+)
 
 
 # ── OpenClaw workspace 记忆文件（MEMORY.md + memory/*.md）──
