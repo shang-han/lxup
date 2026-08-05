@@ -23,6 +23,7 @@ OpenClaw 网关进程。
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -190,6 +191,97 @@ async def gateway_skill_pack_uninstall(request: Request, pack_id: str) -> dict:
         raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pack_not_found", id=pack_id))
     except OSError as e:
         raise HTTPException(status_code=500, detail=tr(ui_lang(request), "uninstall_failed", e=e))
+
+
+# ── OpenClaw workspace 文件浏览/编辑（工作区面板）──
+
+_WS_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".openclaw"}
+
+
+def _ws_safe_path(rel: str) -> Path:
+    """工作区内路径安全解析：拒绝绝对路径与 .. 穿越"""
+    root = preinstalled_skills.workspace_dir()
+    f = (rel or "").replace("\\", "/").strip("/")
+    if not f or ".." in f.split("/"):
+        raise LookupError(rel)
+    p = (root / f).resolve()
+    if not str(p).startswith(str(root.resolve()) + os.sep) and p != root.resolve():
+        raise LookupError(rel)
+    return p
+
+
+@router.get("/workspace")
+async def gateway_workspace_info(request: Request) -> dict:
+    """工作区元信息：默认 Agent 与其 workspace 路径 + 核心文件存在性"""
+    lang = ui_lang(request)
+    ws = preinstalled_skills.workspace_dir()
+    agent_id = "main"
+    try:
+        import json as _json
+        cfg = _json.loads((preinstalled_skills._state_dir() / "openclaw.json").read_text(encoding="utf-8"))
+        agents = (cfg.get("agents") or {})
+        lst = agents.get("list") or []
+        agent_id = (lst[0] or {}).get("id", "main") if lst else (agents.get("defaults") or {}).get("defaultAgent", "main")
+    except Exception:  # noqa: BLE001
+        pass
+    core = ["AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md", "USER.md", "HEARTBEAT.md", "BOOTSTRAP.md", "MEMORY.md"]
+    return {
+        "agentId": agent_id,
+        "path": str(ws),
+        "coreFiles": [{"name": n, "exists": (ws / n).is_file()} for n in core],
+    }
+
+
+@router.get("/workspace/list")
+async def gateway_workspace_list(request: Request, dir: str = Query(default="")) -> dict:
+    """列工作区某层目录（默认根层）；目录优先，限 200 条"""
+    try:
+        base = _ws_safe_path(dir) if dir else preinstalled_skills.workspace_dir()
+    except LookupError:
+        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=dir))
+    if not base.is_dir():
+        return {"entries": []}
+    entries = []
+    try:
+        names = sorted(base.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+    except OSError:
+        return {"entries": []}
+    for p in names[:200]:
+        if p.is_dir() and p.name in _WS_SKIP_DIRS:
+            continue
+        entries.append({"name": p.name, "type": "dir" if p.is_dir() else "file"})
+    return {"entries": entries}
+
+
+class WorkspaceFileBody(BaseModel):
+    path: str
+    content: str = ""
+
+
+@router.get("/workspace/file")
+async def gateway_workspace_file(request: Request, path: str = Query(...)) -> dict:
+    """读工作区单文件（≤1MB）"""
+    try:
+        p = _ws_safe_path(path)
+    except LookupError:
+        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=path))
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail=tr(ui_lang(request), "mem_invalid_file", file=path))
+    if p.stat().st_size > 1024 * 1024:
+        raise HTTPException(status_code=413, detail="file too large")
+    return {"path": path, "content": p.read_text(encoding="utf-8", errors="replace")}
+
+
+@router.post("/workspace/file")
+async def gateway_workspace_file_write(request: Request, body: WorkspaceFileBody) -> dict:
+    """写工作区单文件（不存在则创建）"""
+    try:
+        p = _ws_safe_path(body.path)
+    except LookupError:
+        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=body.path))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body.content, encoding="utf-8")
+    return {"ok": True, "path": body.path}
 
 
 # ── OpenClaw workspace 记忆文件（MEMORY.md + memory/*.md）──

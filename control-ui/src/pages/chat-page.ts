@@ -141,6 +141,72 @@ export class ChatPage extends LitElement {
     }
     .workspace-pill .ws-label { font-size: 11px; }
     .workspace-pill .ws-name { font-weight: 600; font-size: 12px; color: var(--accent); }
+    .workspace-pill { cursor: pointer; }
+    .workspace-pill:hover { border-color: var(--text-muted); }
+
+    /* === 工作区面板 === */
+    .ws-panel {
+      position: fixed; top: 64px; right: 16px; z-index: 80;
+      width: min(880px, calc(100vw - 32px)); height: min(660px, calc(100vh - 90px));
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25); display: flex; flex-direction: column;
+    }
+    .ws-panel__header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; }
+    .ws-panel__title { font-size: 14px; font-weight: 700; color: var(--text-strong); }
+    .ws-panel__badge { font-size: 10px; padding: 2px 8px; border-radius: var(--radius-full); background: var(--accent-subtle); color: var(--accent); font-weight: 600; }
+    .ws-panel__actions { margin-left: auto; display: flex; gap: 6px; }
+    .ws-panel__actions button {
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text-soft); cursor: pointer;
+    }
+    .ws-panel__sub { padding: 0 16px 10px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .ws-panel__body { flex: 1; display: flex; min-height: 0; }
+    .ws-panel__left { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+    .ws-panel__section-label { font-size: 11px; font-weight: 600; color: var(--text-soft); padding: 10px 12px 6px; }
+    .ws-panel__core { padding: 0 10px 10px; overflow-y: auto; flex: 1; }
+    .ws-core-item {
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 8px 10px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .ws-core-item__name { flex: 1; font-size: 12px; font-weight: 600; color: var(--text); }
+    .ws-core-item button {
+      background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0;
+    }
+    .ws-panel__browse { border-top: 1px solid var(--border); max-height: 42%; overflow-y: auto; padding-bottom: 8px; }
+    .ws-tree__row {
+      display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+      font-size: 12px; color: var(--text-soft); cursor: pointer; border-radius: var(--radius-sm);
+    }
+    .ws-tree__row:hover { background: var(--bg-hover); color: var(--text); }
+    .ws-tree__row.active { background: var(--accent-subtle); color: var(--accent); }
+    .ws-tree__caret { width: 12px; font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    .ws-tree__icon { font-size: 12px; }
+    .ws-panel__right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .ws-panel__toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .ws-panel__toolbar .spacer { flex: 1; }
+    .ws-panel__toolbar button {
+      padding: 4px 12px; font-size: 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer;
+    }
+    .ws-panel__toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .ws-panel__toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ws-panel__msg { padding: 6px 14px 0; font-size: 11px; color: var(--warn); }
+    .ws-panel__content { flex: 1; margin: 12px 14px; min-height: 0; }
+    .ws-panel__content textarea {
+      width: 100%; height: 100%; background: var(--input); border: 1px solid var(--border);
+      border-radius: var(--radius-md); color: var(--text); font-family: var(--font-mono);
+      font-size: 12px; line-height: 1.6; padding: 10px; resize: none; outline: none;
+    }
+    .ws-panel__content pre {
+      width: 100%; height: 100%; overflow: auto; margin: 0;
+      background: var(--input); border: 1px solid var(--border); border-radius: var(--radius-md);
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.6; padding: 10px; color: var(--text-soft);
+    }
+    .ws-panel__empty {
+      margin: 12px 14px; padding: 18px; border: 1px dashed var(--border); border-radius: var(--radius-md);
+      font-size: 12px; color: var(--muted); text-align: center;
+    }
 
     /* === banner === */
     .chat-banner {
@@ -301,6 +367,18 @@ export class ChatPage extends LitElement {
   @state() _loadingHistory = false;
   @state() _engineReady = false;
   @state() _refreshing = false;
+  @state() _wsName = '';
+  @state() _wsPath = '';
+  // 工作区面板
+  @state() _wsPanelOpen = false;
+  @state() _wsCore: Array<{ name: string; exists: boolean }> = [];
+  @state() _wsTree: Record<string, Array<{ name: string; type: string }>> = {};
+  @state() _wsOpenDirs: Record<string, boolean> = { '': true };
+  @state() _wsSel = '';
+  @state() _wsContent = '';
+  @state() _wsEditing = false;
+  @state() _wsBusy = false;
+  @state() _wsMsg = '';
   _pollTimer: number | null = null;
   @state() _streaming = false;
   @state() _models: ResolvedModel[] = [];
@@ -369,6 +447,7 @@ export class ChatPage extends LitElement {
       this._engineReady = ready;
       if (ready) {
         this._refreshModels(); // 网关就绪后合并网关配置里的模型
+        void this._loadWorkspace();
         if (!this._historyLoaded) {
           this._historyLoaded = true;
           void this._bootstrapSessions();
@@ -688,6 +767,137 @@ export class ChatPage extends LitElement {
     this._showSessionList = false;
   }
 
+  /** 工作区胶囊：读默认 Agent 与其 workspace 路径（真实数据） */
+  async _loadWorkspace() {
+    try {
+      const res = await getSharedStore().request<any>('agents.list', {});
+      const defId = res?.defaultId || '';
+      const ag = (res?.agents || []).find((a: any) => a?.id === defId) || (res?.agents || [])[0];
+      this._wsName = ag?.id || defId || '';
+      this._wsPath = ag?.workspace || '';
+    } catch { /* 网关未连时保持现状 */ }
+  }
+
+  // ── 工作区面板 ──────────────────────────────────────
+
+  async _toggleWsPanel() {
+    this._wsPanelOpen = !this._wsPanelOpen;
+    if (this._wsPanelOpen) {
+      await this._loadWsInfo();
+      void this._loadWsDir('');
+    }
+  }
+
+  async _loadWsInfo() {
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      this._wsName = d.agentId || 'main';
+      this._wsPath = d.path || '';
+      this._wsCore = d.coreFiles || [];
+    } catch (e) {
+      this._wsMsg = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async _loadWsDir(dir: string) {
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/list?dir=${encodeURIComponent(dir)}`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      this._wsTree = { ...this._wsTree, [dir]: d.entries || [] };
+    } catch (e) {
+      this._wsMsg = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  _wsToggleDir(dir: string) {
+    const open = !this._wsOpenDirs[dir];
+    this._wsOpenDirs = { ...this._wsOpenDirs, [dir]: open };
+    if (open && !this._wsTree[dir]) void this._loadWsDir(dir);
+  }
+
+  async _wsOpenFile(path: string) {
+    this._wsBusy = true;
+    this._wsMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file?path=${encodeURIComponent(path)}`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      const d = await r.json();
+      this._wsSel = path;
+      this._wsContent = d.content || '';
+      this._wsEditing = false;
+    } catch (e) {
+      this._wsMsg = e instanceof Error ? e.message : String(e);
+    }
+    this._wsBusy = false;
+  }
+
+  /** 核心文件不存在时「添加」：建空文件并打开编辑 */
+  async _wsAddCore(name: string) {
+    if (this._wsBusy) return;
+    this._wsBusy = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path: name, content: '' }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      await this._loadWsInfo();
+      this._wsSel = name;
+      this._wsContent = '';
+      this._wsEditing = true;
+    } catch (e) {
+      this._wsMsg = e instanceof Error ? e.message : String(e);
+    }
+    this._wsBusy = false;
+  }
+
+  async _wsSave() {
+    if (!this._wsSel || this._wsBusy) return;
+    this._wsBusy = true;
+    this._wsMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/workspace/file`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path: this._wsSel, content: this._wsContent }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      this._wsEditing = false;
+      this._wsMsg = L('common.configSaved');
+    } catch (e) {
+      this._wsMsg = e instanceof Error ? e.message : String(e);
+    }
+    this._wsBusy = false;
+  }
+
+  _wsRenderTree(dir: string, depth: number): any {
+    const entries = this._wsTree[dir] || [];
+    return entries.map(e => {
+      const path = dir ? `${dir}/${e.name}` : e.name;
+      if (e.type === 'dir') {
+        const open = !!this._wsOpenDirs[path];
+        return html`
+          <div class="ws-tree__row" style="padding-left:${8 + depth * 14}px;" @click=${() => this._wsToggleDir(path)}>
+            <span class="ws-tree__caret">${open ? '▾' : '▸'}</span>
+            <span class="ws-tree__icon">📁</span> ${e.name}
+          </div>
+          ${open ? this._wsRenderTree(path, depth + 1) : ''}
+        `;
+      }
+      return html`
+        <div class="ws-tree__row ${this._wsSel === path ? 'active' : ''}" style="padding-left:${8 + depth * 14}px;"
+          @click=${() => this._wsOpenFile(path)}>
+          <span class="ws-tree__caret"></span>
+          <span class="ws-tree__icon">📄</span> ${e.name}
+        </div>
+      `;
+    });
+  }
+
   /** 轮询等待引擎就绪（重连后 WS 就绪前拉历史会空转） */
   async _waitReady(timeoutMs = 6000): Promise<boolean> {
     const t0 = Date.now();
@@ -853,15 +1063,15 @@ export class ChatPage extends LitElement {
                 ?disabled=${this._refreshing} @click=${this._refresh}>
                 ${icons['refresh-cw']}
               </button>
-              <!-- 暂隐藏：工作区与工具按钮（点击事件后续再做；恢复时去掉外层 display:none） -->
+              <!-- 暂隐藏：工作区胶囊与工具按钮（功能保留，恢复时去掉外层 display:none） -->
               <div style="display:none;align-items:center;gap:6px;">
                 ${isHermes || isCodex ? '' : html`
-                  <div class="workspace-pill">
+                  <div class="workspace-pill" title=${this._wsPath || ''} @click=${this._toggleWsPanel}>
                     ${icons['folder-open']}
                     <span class="ws-label">${L('chat.workspace')}</span>
-                    <span class="ws-name">main</span>
+                    <span class="ws-name">${this._wsName || '—'}</span>
                   </div>`}
-                <button class="ws-btn" title="tools">
+                <button class="ws-btn" title=${L('chat.tools')}>
                   ${icons['layout-panel-left']}
                 </button>
               </div>
@@ -948,6 +1158,67 @@ export class ChatPage extends LitElement {
           </div>
         </div>
       </div>
+
+      <!-- 工作区文件面板 -->
+      ${this._wsPanelOpen ? html`
+        <div class="ws-panel">
+          <div class="ws-panel__header">
+            <span class="ws-panel__title">${L('chat.wsTitle')}</span>
+            <span class="ws-panel__badge">${this._wsName || 'main'}</span>
+            <div class="ws-panel__actions">
+              <button title=${L('common.refresh')} @click=${() => { void this._loadWsInfo(); void this._loadWsDir(''); if (this._wsSel) void this._wsOpenFile(this._wsSel); }}>
+                ${icons['refresh-cw']}
+              </button>
+              <button title=${L('channels.close')} @click=${() => { this._wsPanelOpen = false; }}>
+                ${icons['x']}
+              </button>
+            </div>
+          </div>
+          <div class="ws-panel__sub">
+            <div style="font-weight:600;color:var(--text-soft);margin-bottom:2px;">${L('chat.wsMainSession')}</div>
+            ${this._wsPath || '—'}
+          </div>
+          <div class="ws-panel__body">
+            <div class="ws-panel__left">
+              <div class="ws-panel__section-label">${L('chat.wsCoreFiles')}</div>
+              <div class="ws-panel__core">
+                ${this._wsCore.map(f => html`
+                  <div class="ws-core-item">
+                    <span class="ws-tree__icon">📄</span>
+                    <span class="ws-core-item__name">${f.name}</span>
+                    ${f.exists
+                      ? html`<button @click=${() => this._wsOpenFile(f.name)}>${L('common.edit')}</button>`
+                      : html`<button @click=${() => this._wsAddCore(f.name)}>${L('chat.wsAdd')}</button>`}
+                  </div>
+                `)}
+              </div>
+              <div class="ws-panel__browse">
+                <div class="ws-panel__section-label">${L('chat.wsBrowse')}</div>
+                ${this._wsRenderTree('', 0)}
+              </div>
+            </div>
+            <div class="ws-panel__right">
+              <div class="ws-panel__toolbar">
+                <strong style="font-size:13px;color:var(--text-strong);">${this._wsSel || L('chat.wsSelectFile')}</strong>
+                <span class="spacer"></span>
+                <button @click=${() => { if (this._wsSel) void this._wsOpenFile(this._wsSel); }}>${L('chat.wsReload')}</button>
+                <button ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = true; }}>${L('common.edit')}</button>
+                <button ?disabled=${!this._wsSel || this._wsBusy} @click=${() => { this._wsEditing = false; }}>${L('chat.wsPreview')}</button>
+                <button class="primary" ?disabled=${!this._wsSel || this._wsBusy || !this._wsEditing} @click=${this._wsSave}>${L('common.save')}</button>
+              </div>
+              ${this._wsMsg ? html`<div class="ws-panel__msg">${this._wsMsg}</div>` : ''}
+              ${this._wsSel ? html`
+                <div class="ws-panel__content">
+                  ${this._wsEditing ? html`
+                    <textarea .value=${this._wsContent}
+                      @input=${(e: Event) => { this._wsContent = (e.target as HTMLTextAreaElement).value; }}></textarea>
+                  ` : html`<pre>${this._wsContent}</pre>`}
+                </div>
+              ` : html`<div class="ws-panel__empty">${L('chat.wsReady')}</div>`}
+            </div>
+          </div>
+        </div>
+      ` : ''}
     `;
   }
 }

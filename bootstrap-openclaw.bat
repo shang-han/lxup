@@ -33,6 +33,15 @@ echo === Verify ===
 "%ROOT%\runtime\data\node.exe" "%ROOT%\runtime\openclaw\node_modules\openclaw\openclaw.mjs" --version
 
 echo.
+echo === Preinstall WeChat plugin (needed for QR login; requires network, best-effort) ===
+set "OPENCLAW_STATE_DIR=%ROOT%\runtime\openclaw-home"
+"%ROOT%\runtime\data\node.exe" "%ROOT%\runtime\openclaw\node_modules\openclaw\openclaw.mjs" plugins install --force @tencent-weixin/openclaw-weixin@2.4.6
+if errorlevel 1 (
+  echo [WARN] WeChat plugin preinstall failed (offline?). Later manual fix:
+  echo        openclaw plugins install @tencent-weixin/openclaw-weixin@2.4.6
+)
+
+echo.
 echo ============================================================
 echo  Bootstrap complete! Start the OpenClaw gateway via start-all.bat or the Sidecar.
 echo ============================================================
