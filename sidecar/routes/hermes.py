@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -256,6 +257,58 @@ async def probe_model(request: Request, body: HermesModelProbeRequest) -> dict:
     except Exception:  # noqa: BLE001
         models = []
     return {"ok": True, "error": "", "models": models}
+
+
+# ── 记忆文件（SOUL / MEMORY / USER）读写 ──
+# 与 hermes-agent 约定一致：SOUL.md 在 HERMES_HOME 根；
+# MEMORY.md / USER.md 在 HERMES_HOME/memories/（memory_tool.get_memory_dir）
+
+_MEMORY_FILES = {
+    "memory": "memories/MEMORY.md",
+    "user": "memories/USER.md",
+    "soul": "SOUL.md",
+}
+
+
+@router.get("/memories")
+async def get_memories(request: Request) -> dict:
+    """读取三份记忆文件（不存在返回空串），附带 mtime 供「最近更新」展示"""
+    home = _hermes_home_dir(request)
+    out: dict = {}
+    for key, rel in _MEMORY_FILES.items():
+        p = home / rel
+        try:
+            if p.is_file():
+                st = p.stat()
+                out[key] = {
+                    "content": p.read_text(encoding="utf-8"),
+                    "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+                }
+            else:
+                out[key] = {"content": "", "mtime": None}
+        except OSError:
+            out[key] = {"content": "", "mtime": None}
+    return out
+
+
+class MemoryWriteRequest(BaseModel):
+    """写单份记忆文件（整文件覆盖）"""
+
+    key: str = Field(description="memory / user / soul")
+    content: str = ""
+
+
+@router.post("/memories")
+async def set_memory(request: Request, body: MemoryWriteRequest) -> dict:
+    """保存记忆文件。记忆快照在新会话注入，编辑对新会话生效。"""
+    rel = _MEMORY_FILES.get(body.key)
+    if rel is None:
+        raise HTTPException(status_code=400, detail=f"unknown memory key: {body.key}")
+    p = _hermes_home_dir(request) / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body.content, encoding="utf-8")
+    logger.info("Hermes 记忆已保存: %s (%d 字符)", rel, len(body.content))
+    return {"success": True, "key": body.key}
 
 
 # ── Hermes 技能市场（Skills Hub）桥接 ──

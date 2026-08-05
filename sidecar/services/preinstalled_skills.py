@@ -28,6 +28,11 @@ PACK_DIR = _PROJECT_ROOT / "skill-packs" / "skills" / "00-通用工具"
 HERMES_CATEGORY = "LXUP通用工具"
 
 
+def workspace_dir() -> Path:
+    """OpenClaw agent workspace 根目录（agents.defaults.workspace 或 agents.list[].workspace，回退状态目录）"""
+    return _skills_dir().parent
+
+
 def hermes_skills_root() -> Path:
     """Hermes 技能目录（解析规则同 sidecar config：LXUP_HERMES_HOME 或 runtime/hermes-home）"""
     home = os.getenv("LXUP_HERMES_HOME") or str(_PROJECT_ROOT / "runtime" / "hermes-home")

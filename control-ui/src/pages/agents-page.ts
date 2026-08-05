@@ -283,6 +283,13 @@ export class AgentsPage extends LitElement {
   @state() _detailView = false;
   @state() _detailAgent: any = null;
   @state() _detailTab = 'overview'; // 'overview' | 'files' | 'channels' | 'tools' | 'skills'
+  // 工具权限（真实配置：agents.list[].tools = {allow, alsoAllow, deny}）
+  @state() _toolAllow = '';
+  @state() _toolAlsoAllow = '';
+  @state() _toolDeny = '';
+  @state() _toolsBusy = false;
+  @state() _toolsMsg = '';
+  @state() _toolsMsgOk = false;
 
   // 详情实例的 bootstrap 文件（agents.files.list）
   @state() _files: any[] = [];
@@ -517,7 +524,7 @@ export class AgentsPage extends LitElement {
         <div class="detail-tabs">
           ${['overview', 'files', 'channels', 'tools', 'skills'].map(tab => html`
             <div class="detail-tab ${this._detailTab === tab ? 'active' : ''}"
-                 @click=${() => { this._detailTab = tab; }}>
+                 @click=${() => { this._detailTab = tab; if (tab === 'tools') void this._loadTools(); }}>
               ${{ overview: L('agents.overview'), files: L('agents.files'), channels: L('agents.channels'), tools: L('agents.tools'), skills: L('agents.skills') }[tab]}
             </div>
           `)}
@@ -633,6 +640,90 @@ export class AgentsPage extends LitElement {
     `;
   }
 
+  _parseToolList(s: string): string[] {
+    return s.split(/[,，\s]+/).map(x => x.trim()).filter(Boolean);
+  }
+
+  /** 从网关配置读取该 Agent 的 tools 策略 */
+  async _loadTools() {
+    const id = this._detailAgent?.id;
+    if (!id) return;
+    this._toolsBusy = true;
+    this._toolsMsg = '';
+    try {
+      const g = await getSharedStore().request<any>('config.get', {});
+      const cfg = g?.config || g?.parsed || {};
+      const ag = (cfg?.agents?.list || []).find((a: any) => a?.id === id) || {};
+      const t = ag.tools || {};
+      const join = (v: any) => (Array.isArray(v) ? v.join(', ') : '');
+      this._toolAllow = join(t.allow);
+      this._toolAlsoAllow = join(t.alsoAllow);
+      this._toolDeny = join(t.deny);
+    } catch (e) {
+      this._toolsMsg = e instanceof Error ? e.message : String(e);
+      this._toolsMsgOk = false;
+    }
+    this._toolsBusy = false;
+  }
+
+  /** 模板只是快速填充三个列表，保存才写配置 */
+  _applyToolTemplate(tpl: string) {
+    if (tpl === 'full') { this._toolAllow = ''; this._toolAlsoAllow = ''; this._toolDeny = ''; }
+    else if (tpl === 'safe') { this._toolAllow = 'read, write, apply_patch'; this._toolAlsoAllow = ''; this._toolDeny = 'exec, browser, gateway, discord'; }
+    else if (tpl === 'none') { this._toolAllow = 'read'; this._toolAlsoAllow = ''; this._toolDeny = 'exec, write, edit, apply_patch, process, browser'; }
+    else { this._toolAllow = ''; this._toolAlsoAllow = ''; this._toolDeny = ''; }
+  }
+
+  /** 写回 config.patch（replacePaths agents，乐观并发） */
+  async _saveTools() {
+    const id = this._detailAgent?.id;
+    if (!id || this._toolsBusy) return;
+    this._toolsBusy = true;
+    this._toolsMsg = '';
+    try {
+      const store = getSharedStore();
+      const g = await store.request<any>('config.get', {});
+      const hash = g?.hash || '';
+      const cfg = g?.config || {};
+      const agents = { ...(cfg.agents || {}) };
+      const list: any[] = Array.isArray(agents.list) ? agents.list.map((a: any) => ({ ...a })) : [];
+      let ag = list.find((a: any) => a?.id === id);
+      if (!ag) { ag = { id }; list.push(ag); }
+      const allow = this._parseToolList(this._toolAllow);
+      const also = this._parseToolList(this._toolAlsoAllow);
+      const deny = this._parseToolList(this._toolDeny);
+      const tools: any = {};
+      if (allow.length) tools.allow = allow;
+      if (also.length) tools.alsoAllow = also;
+      if (deny.length) tools.deny = deny;
+      if (Object.keys(tools).length) ag.tools = tools; else delete ag.tools;
+      agents.list = list;
+      await store.request('config.patch', {
+        raw: JSON.stringify({ agents }),
+        baseHash: hash,
+        replacePaths: ['agents'],
+      });
+      this._toolsMsg = L('common.configSaved');
+      this._toolsMsgOk = true;
+    } catch (e) {
+      this._toolsMsg = e instanceof Error ? e.message : String(e);
+      this._toolsMsgOk = false;
+    }
+    this._toolsBusy = false;
+  }
+
+  /** 技能白名单复选框 → 网关 skills.update（真实启停） */
+  async _toggleAgentSkill(s: any, on: boolean) {
+    try {
+      await getSharedStore().request('skills.update', { skillKey: s.name, enabled: on });
+      s.disabled = !on;
+      this.requestUpdate();
+    } catch (e) {
+      this._toolsMsg = e instanceof Error ? e.message : String(e);
+      this._toolsMsgOk = false;
+    }
+  }
+
   _renderToolsTab() {
     return html`
       <div style="max-width:640px;">
@@ -641,31 +732,37 @@ export class AgentsPage extends LitElement {
           <div class="detail-section__desc">${L('agents.toolPermDesc')}</div>
           <div class="detail-field" style="margin-bottom:14px;">
             <label class="detail-field__label">${L('agents.toolTemplate')}</label>
-            <select class="detail-field__input">
-              <option>${L('agents.notSet')}</option>
-              <option>${L('agents.fullAllow')}</option>
-              <option>${L('agents.safeOnly')}</option>
-              <option>${L('agents.disableAll')}</option>
+            <select class="detail-field__input" @change=${(e: Event) => this._applyToolTemplate((e.target as HTMLSelectElement).value)}>
+              <option value="">${L('agents.notSet')}</option>
+              <option value="full">${L('agents.fullAllow')}</option>
+              <option value="safe">${L('agents.safeOnly')}</option>
+              <option value="none">${L('agents.disableAll')}</option>
             </select>
           </div>
           <div class="detail-field" style="margin-bottom:14px;">
             <label class="detail-field__label">${L('agents.explicitAllow')}</label>
-            <textarea class="detail-textarea" placeholder="read_file, write_file, exec">read_file, write_file, exec</textarea>
+            <textarea class="detail-textarea" placeholder="read, write, exec" .value=${this._toolAllow}
+              @input=${(e: Event) => { this._toolAllow = (e.target as HTMLTextAreaElement).value; }}></textarea>
             <div style="font-size:11px;color:var(--muted);margin-top:4px;">${L('agents.explicitAllowHint')}</div>
           </div>
           <div class="detail-field" style="margin-bottom:14px;">
             <label class="detail-field__label">${L('agents.appendAllow')}</label>
-            <textarea class="detail-textarea" placeholder="grep_search, apply_patch">grep_search, apply_patch</textarea>
+            <textarea class="detail-textarea" placeholder="grep_search, apply_patch" .value=${this._toolAlsoAllow}
+              @input=${(e: Event) => { this._toolAlsoAllow = (e.target as HTMLTextAreaElement).value; }}></textarea>
             <div style="font-size:11px;color:var(--muted);margin-top:4px;">${L('agents.appendAllowHint')}</div>
           </div>
           <div class="detail-field">
             <label class="detail-field__label">${L('agents.explicitDeny')}</label>
-            <textarea class="detail-textarea" placeholder="delete_file">delete_file</textarea>
+            <textarea class="detail-textarea" placeholder="delete_file" .value=${this._toolDeny}
+              @input=${(e: Event) => { this._toolDeny = (e.target as HTMLTextAreaElement).value; }}></textarea>
             <div style="font-size:11px;color:var(--muted);margin-top:4px;">${L('agents.explicitDenyHint')}</div>
           </div>
         </div>
+        ${this._toolsMsg ? html`
+          <div style="margin:0 0 10px;font-size:12px;color:${this._toolsMsgOk ? 'var(--success)' : 'var(--danger)'};">${this._toolsMsg}</div>
+        ` : ''}
         <div class="detail-save">
-          <button>${L('agents.saveToolConfig')}</button>
+          <button ?disabled=${this._toolsBusy} @click=${this._saveTools}>${L('agents.saveToolConfig')}</button>
         </div>
       </div>
     `;
@@ -680,7 +777,8 @@ export class AgentsPage extends LitElement {
           <div class="skills-grid">
             ${this._skills.map((s: any) => html`
               <div class="skill-checkbox-item">
-                <input type="checkbox" ?checked=${!s.disabled} />
+                <input type="checkbox" ?checked=${!s.disabled}
+                  @change=${(e: Event) => this._toggleAgentSkill(s, (e.target as HTMLInputElement).checked)} />
                 <div class="skill-checkbox-item__content">
                   <div class="skill-checkbox-item__name">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>

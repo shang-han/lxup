@@ -150,6 +150,8 @@ export class DashboardPage extends LitElement {
   // 网关进程管理（经 Sidecar :7889）
   @state() _gwRunning = false;
   @state() _gwPid: number | null = null;
+  @state() _gwPort: number | null = null;
+  @state() _maxConcurrent: number | null = null;
   @state() _gwBusy = false;
   @state() _gwMessage = '';
 
@@ -209,10 +211,12 @@ export class DashboardPage extends LitElement {
       const s = await r.json();
       this._gwRunning = !!s.running;
       this._gwPid = s.pid ?? null;
+      this._gwPort = s.port ?? null;
     } catch {
       // Sidecar 不可达时保持现状（不误报停止），仅标记未知
       this._gwRunning = false;
       this._gwPid = null;
+      this._gwPort = null;
     }
   }
 
@@ -275,6 +279,8 @@ export class DashboardPage extends LitElement {
           this._gwModelProvider = slash > 0 ? modelStr.slice(0, slash) : '';
           this._gwModel = slash > 0 ? modelStr.slice(slash + 1) : modelStr;
         }
+        const mc = cfg?.agents?.defaults?.maxConcurrent;
+        this._maxConcurrent = typeof mc === 'number' ? mc : null;
       } catch { /* ignore */ }
     }
   }
@@ -364,7 +370,7 @@ export class DashboardPage extends LitElement {
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.versionSinicized')}</div>
             <div class="dashboard-stat__value">${this._gwVersion || '—'}</div>
-            <div class="dashboard-stat__hint">${L('dashboard.port')} 18789${this._gwPid ? ' · PID ' + this._gwPid : ''}</div>
+            <div class="dashboard-stat__hint">${L('dashboard.port')} ${this._gwPort ?? '—'}${this._gwPid ? ' · PID ' + this._gwPid : ''}</div>
           </div>
           <div class="dashboard-stat">
             <div class="dashboard-stat__label">${L('dashboard.agentFleet')}</div>
@@ -411,7 +417,7 @@ export class DashboardPage extends LitElement {
               </div>
             </div>
             <div class="dashboard-info-card__status ${this._gwRunning ? 'online' : 'offline'}">${this._gwRunning ? L('dashboard.running') : L('dashboard.stopped')}</div>
-            <div class="dashboard-info-card__sub">${this._gwMessage || (L('dashboard.port') + ' 18789 · ' + (this._gwPid ? 'PID ' + this._gwPid : '—'))}</div>
+            <div class="dashboard-info-card__sub">${this._gwMessage || (L('dashboard.port') + ` ${this._gwPort ?? '—'} · ` + (this._gwPid ? 'PID ' + this._gwPid : '—'))}</div>
           </div>
           <div class="dashboard-info-card" @click=${() => this.onNavigate('models')}>
             <div class="dashboard-info-card__header">
@@ -427,7 +433,7 @@ export class DashboardPage extends LitElement {
               ? `${this._activeModel.providerName} · ${this._activeModel.apiType}`
               : this._gwModel
                 ? `${this._gwModelProvider ? this._gwModelProvider + ' · ' : ''}${L('dashboard.fromGatewayConfig')}`
-                : L('dashboard.concurrencyLimit') + ' 4'}</div>
+                : `${L('dashboard.concurrencyLimit')} ${this._maxConcurrent ?? '—'}`}</div>
           </div>
           <div class="dashboard-info-card" @click=${() => this.onNavigate('skills2')}>
             <div class="dashboard-info-card__header">

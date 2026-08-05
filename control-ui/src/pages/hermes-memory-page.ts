@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/page-header.js';
 import pageStyles from './styles.css?raw';
@@ -79,13 +79,49 @@ export class HermesMemoryPage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = `${L('hermesMemory.path', '~/.hermes/memories/')} · 3 ${L('hermesMemory.files', '个文件')}`;
 
-  @state() _memories: Record<string, { content: string; words: number }> = {
-    memory: { content: '', words: 0 },
-    user: { content: '', words: 0 },
-    soul: { content: '', words: 0 },
+  @state() _memories: Record<string, { content: string; words: number; mtime: string | null }> = {
+    memory: { content: '', words: 0, mtime: null },
+    user: { content: '', words: 0, mtime: null },
+    soul: { content: '', words: 0, mtime: null },
   };
   @state() _editing: string | null = null;
   @state() _editContent = '';
+  @state() _msg = '';
+  @state() _msgOk = false;
+  @state() _saving = false;
+
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    void this._load();
+  }
+
+  /** 从 Sidecar 读三份真实记忆文件（SOUL.md + memories/{MEMORY,USER}.md） */
+  async _load() {
+    this._msg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/memories`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = (await r.json()) as Record<string, { content?: string; mtime?: string | null }>;
+      const next: Record<string, { content: string; words: number; mtime: string | null }> = {};
+      for (const key of ['memory', 'user', 'soul']) {
+        const content = String(d[key]?.content ?? '');
+        next[key] = {
+          content,
+          words: content.trim() ? content.trim().split(/\s+/).length : 0,
+          mtime: d[key]?.mtime ?? null,
+        };
+      }
+      this._memories = next;
+    } catch (e) {
+      this._msg = `✗ ${e instanceof Error ? e.message : String(e)}`;
+      this._msgOk = false;
+    }
+  }
 
   get _totalFiles() { return 3; }
   get _filledCount() {
@@ -107,14 +143,31 @@ export class HermesMemoryPage extends LitElement {
   }
 
   _saveEdit() {
-    if (!this._editing) return;
-    const words = this._editContent.trim() ? this._editContent.trim().split(/\s+/).length : 0;
-    this._memories = {
-      ...this._memories,
-      [this._editing]: { content: this._editContent, words },
-    };
+    if (!this._editing || this._saving) return;
+    const key = this._editing;
+    const content = this._editContent;
+    const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+    this._memories = { ...this._memories, [key]: { content, words, mtime: new Date().toISOString() } };
     this._editing = null;
     this._editContent = '';
+    // 写回真实文件（记忆快照在新会话注入）
+    this._saving = true;
+    this._msg = '';
+    fetch(`${this._sidecarBase}/api/hermes/memories`, {
+      method: 'POST',
+      headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ key, content }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        this._msg = `✓ ${L('hermesMemory.savedNote')}`;
+        this._msgOk = true;
+      })
+      .catch(e => {
+        this._msg = `✗ ${e instanceof Error ? e.message : String(e)}`;
+        this._msgOk = false;
+      })
+      .finally(() => { this._saving = false; });
   }
 
   render() {
@@ -122,7 +175,7 @@ export class HermesMemoryPage extends LitElement {
 
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}>
-        <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);" @click=${() => this.requestUpdate()}>
+        <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);" @click=${() => this._load()}>
           ${L('common.refresh', '刷新')}
         </button>
       </page-header>
@@ -150,10 +203,20 @@ export class HermesMemoryPage extends LitElement {
             </div>
             <div class="hm-stat">
               <div class="hm-stat__label">${L('hermesMemory.lastUpdated', '最近更新')}</div>
-              <div class="hm-stat__value">—</div>
+              <div class="hm-stat__value">${(() => {
+                const times = Object.values(this._memories).map(m => m.mtime).filter(Boolean) as string[];
+                if (!times.length) return '—';
+                return new Date(times.sort().reverse()[0]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+              })()}</div>
             </div>
           </div>
         </div>
+
+        ${this._msg ? html`
+          <div style="margin:0 0 12px;padding:8px 12px;border-radius:var(--radius-md);font-size:12px;border:1px solid ${this._msgOk ? 'var(--success)' : 'var(--danger)'};color:${this._msgOk ? 'var(--success)' : 'var(--danger)'};">
+            ${this._msg}
+          </div>
+        ` : ''}
 
         <!-- Memory sections -->
         ${this._sections.map(sec => {
@@ -168,7 +231,7 @@ export class HermesMemoryPage extends LitElement {
                   ${L(sec.titleKey)}
                 </div>
                 <div style="display:flex;align-items:center;gap:12px;">
-                  <span class="hm-card__meta">${mem.words} ${L('hermesMemory.words', '词')} · 0 ${L('hermesMemory.chars', '字符')}</span>
+                  <span class="hm-card__meta">${mem.words} ${L('hermesMemory.words', '词')} · ${mem.content.length} ${L('hermesMemory.chars', '字符')}</span>
                   <button class="hm-card__edit" @click=${() => isEditing ? this._saveEdit() : this._startEdit(sec.key)}>
                     ${icons['edit']} ${isEditing ? L('common.save', '保存') : L('hermesMemory.edit', '编辑')}
                   </button>

@@ -1,7 +1,10 @@
 import { LitElement, html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, i18n } from '../i18n/index.js';
+
+/** 列表分隔符：中文「、」/ 英文 ", " */
+const enumSep = () => (i18n.locale.startsWith('zh') ? '、' : ', ');
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
 import { fetchTimeout } from '../utils/net.js';
@@ -425,12 +428,9 @@ export class ChannelsPage extends LitElement {
   @state() _activeTab = 'channels'; // 'channels' | 'agents'
   @state() _dialogChannel = ''; // '' = closed, otherwise channel id
 
-  // QQ form state
-  @state() _qqAppId = '';
-  @state() _qqClientSecret = '';
+  // QQ form state（字段值统一走 _formValues['qqbot']）
   @state() _qqShowSecret = false;
-  @state() _qqAccountId = '';
-  @state() _qqAgent = 'main';
+  @state() _qqAgent = '';
 
   // WeChat form state
   @state() _wechatStepsOpen = true;
@@ -582,7 +582,7 @@ export class ChannelsPage extends LitElement {
       this._newBindChannel = '';
       this._newBindAccount = '';
     } catch (e: any) {
-      alert('绑定失败: ' + (e?.message || e));
+      alert(L('channels.bindFailed') + (e?.message || e));
     } finally {
       this._bindSaving = false;
     }
@@ -597,7 +597,7 @@ export class ChannelsPage extends LitElement {
         return (x.match.accountId || '') !== accountId;
       }));
     } catch (e: any) {
-      alert('解绑失败: ' + (e?.message || e));
+      alert(L('channels.unbindFailed') + (e?.message || e));
     } finally {
       this._bindSaving = false;
     }
@@ -606,7 +606,7 @@ export class ChannelsPage extends LitElement {
   _startWeixinLogin() {
     this._stopWeixinLogin();
     this._wxStatus = 'starting';
-    this._wxMsg = '正在启动微信登录…';
+    this._wxMsg = L('channels.wxStarting');
     this._wxQr = '';
     this._wxUrl = '';
     const host = window.location.hostname || '127.0.0.1';
@@ -615,7 +615,7 @@ export class ChannelsPage extends LitElement {
       ws = new WebSocket(`ws://${host}:7889/ws/weixin-login`);
     } catch {
       this._wxStatus = 'error';
-      this._wxMsg = '无法连接登录服务';
+      this._wxMsg = L('channels.wxConnFailed');
       return;
     }
     this._wxWs = ws;
@@ -623,18 +623,33 @@ export class ChannelsPage extends LitElement {
     ws.addEventListener('message', (e) => {
       try {
         const snap = JSON.parse(String(e.data));
-        if (snap.status) this._wxStatus = snap.status;
-        if (snap.message) this._wxMsg = snap.message;
+        if (snap.status) {
+          this._wxStatus = snap.status;
+          // 后端消息为中文；按状态码映射本地化文案，error 时后端原文作为详情
+          this._wxMsg = this._wxText(snap.status, snap.message);
+        }
         if (snap.qrDataUrl) this._wxQr = snap.qrDataUrl;
         if (snap.url) this._wxUrl = snap.url;
-        if (snap.status === 'success') this._wxMsg = '登录成功！凭证已保存，重启 OpenClaw 网关后微信渠道即上线。';
       } catch { /* ignore */ }
     });
     ws.addEventListener('error', () => {
       this._wxStatus = 'error';
-      this._wxMsg = '无法连接登录服务（请确认 Python gateway 已在 :7889 启动）';
+      this._wxMsg = L('channels.wxConnFailedHint');
     });
     ws.addEventListener('close', () => { this._wxWs = null; });
+  }
+
+  /** 微信登录状态码 → 本地化文案（后端原文仅 error 时作为详情附上） */
+  _wxText(status: string, raw?: string): string {
+    switch (status) {
+      case 'starting': return L('channels.wxStarting');
+      case 'qr_ready': return L('channels.wxQrReady');
+      case 'waiting_scan': return L('channels.wxWaitingScan');
+      case 'success': return L('channels.wxSuccessFull');
+      case 'idle': return L('channels.wxCancelled');
+      case 'error': return `${L('channels.wxErrorPrefix')}${raw ? ' ' + raw : ''}`;
+      default: return raw || '';
+    }
   }
 
   _stopWeixinLogin() {
@@ -677,6 +692,10 @@ export class ChannelsPage extends LitElement {
   @state() _formVisible: Record<string, boolean> = {};
   @state() _formCopied: Record<string, boolean> = {};
   _copyTimer: ReturnType<typeof setTimeout> | null = null;
+  // QQ 弹框：步骤展开 / 命令复制反馈 / 诊断结果（真实 channels.status）
+  @state() _qqStepsOpen = false;
+  @state() _qqCopied = false;
+  @state() _qqDiagMsg = '';
 
   _onFormField(channel: string, key: string, value: string) {
     this._formValues = { ...this._formValues, [channel]: { ...(this._formValues[channel] || {}), [key]: value } };
@@ -694,7 +713,7 @@ export class ChannelsPage extends LitElement {
     this._formResult = {
       ...this._formResult,
       [channel]: missing.length
-        ? { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join('、') }), cls: 'err' }
+        ? { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join(enumSep()) }), cls: 'err' }
         : { text: L('channelsForm.fieldsOk'), cls: 'ok' },
     };
   }
@@ -706,7 +725,7 @@ export class ChannelsPage extends LitElement {
     if (missing.length) {
       this._formResult = {
         ...this._formResult,
-        [channel]: { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join('、') }), cls: 'err' },
+        [channel]: { text: L('channelsForm.fieldsMissing', { fields: missing.map(f => L(f.labelKey)).join(enumSep()) }), cls: 'err' },
       };
       return;
     }
@@ -806,12 +825,12 @@ export class ChannelsPage extends LitElement {
 
   _renderRemoveButton(realId: string) {
     return html`
-      <button class="btn-remove-danger" ?disabled=${this._removing}
+      <oc-btn size="lg" variant="danger" ?disabled=${this._removing}
         @click=${() => this._removeChannel(realId)}>
         ${this._removing ? L('channels.removing')
           : this._confirmRemove === realId ? L('channels.removeConfirm')
           : L('channels.removeChannel')}
-      </button>
+      </oc-btn>
       ${this._removeMsg ? html`<span class="remove-err">${this._removeMsg}</span>` : ''}
     `;
   }
@@ -864,23 +883,50 @@ export class ChannelsPage extends LitElement {
     return iconMap[iconName] || iconMap['chat-bubble'];
   }
 
+  async _copyQQCmd() {
+    try { await navigator.clipboard.writeText('openclaw plugins install @tencent-connect/openclaw-qqbot@latest'); } catch { /* 剪贴板不可用时忽略 */ }
+    this._qqCopied = true;
+    if (this._copyTimer) clearTimeout(this._copyTimer);
+    this._copyTimer = setTimeout(() => { this._qqCopied = false; }, 2000);
+  }
+
+  /** 诊断：刷新并展示网关 channels.status 里 QQ 插件的真实状态 */
+  async _qqDiagnostics() {
+    this._qqDiagMsg = '';
+    await this._loadBindings();
+    const st = (this._liveChannels as any)['qqbot'] || (this._liveChannels as any)['qq'];
+    this._qqDiagMsg = st
+      ? (st.running ? L('channels.diagRunning') : L('channels.diagConfigured'))
+      : L('channels.diagNotConfigured');
+  }
+
   _renderQQDialog() {
+    const qqSpec = CHANNEL_FORMS['qqbot'];
+    const qqVals = (this._formValues['qqbot'] || {}) as Record<string, string>;
+    const qqResult = this._formResult['qqbot'];
     return html`
       <oc-dialog .open=${this._dialogChannel === 'qq'} @close=${this._closeDialog}>
         <span slot="title">${L('channels.connecting')} ${L('channels.qqBot')}</span>
         <div class="channel-dialog">
           <!-- Steps toggle -->
-          <div class="steps-toggle" @click=${() => {}}>
-            <span class="chevron">${icons['chevron-right']}</span>
+          <div class="steps-toggle" @click=${() => { this._qqStepsOpen = !this._qqStepsOpen; }}>
+            <span class="chevron" style="transform:rotate(${this._qqStepsOpen ? 90 : 0}deg);transition:transform var(--duration-fast);">${icons['chevron-right']}</span>
             ${L('channels.steps')}
           </div>
+          ${this._qqStepsOpen ? html`
+            <ol style="margin:0 0 12px 18px;padding:0;font-size:12px;color:var(--text-soft);line-height:1.8;">
+              <li>${L('channels.qqStep1')}</li>
+              <li>${L('channels.qqStep2')}</li>
+              <li>${L('channels.qqStep3')}</li>
+            </ol>
+          ` : ''}
 
           <!-- AppID -->
           <div class="form-group">
             <label class="form-label">${L('channels.appId')} <span class="required">*</span></label>
-            <input class="form-input" type="text" .value=${this._qqAppId}
+            <input class="form-input" type="text" .value=${qqVals.appId || ''}
               placeholder=${L('channels.appId')}
-              @input=${(e: Event) => { this._qqAppId = (e.target as HTMLInputElement).value; }}
+              @input=${(e: Event) => this._onFormField('qqbot', 'appId', (e.target as HTMLInputElement).value)}
             />
           </div>
 
@@ -888,9 +934,9 @@ export class ChannelsPage extends LitElement {
           <div class="form-group">
             <label class="form-label">${L('channels.clientSecret')} <span class="required">*</span></label>
             <div class="form-row">
-              <input class="form-input" .type=${this._qqShowSecret ? 'text' : 'password'} .value=${this._qqClientSecret}
+              <input class="form-input" .type=${this._qqShowSecret ? 'text' : 'password'} .value=${qqVals.clientSecret || ''}
                 placeholder=${L('channels.clientSecret')}
-                @input=${(e: Event) => { this._qqClientSecret = (e.target as HTMLInputElement).value; }}
+                @input=${(e: Event) => this._onFormField('qqbot', 'clientSecret', (e.target as HTMLInputElement).value)}
               />
               <button @click=${() => { this._qqShowSecret = !this._qqShowSecret; }}>${L('channels.show')}</button>
             </div>
@@ -899,9 +945,9 @@ export class ChannelsPage extends LitElement {
           <!-- Account ID -->
           <div class="form-group">
             <label class="form-label">${L('channels.accountId')}</label>
-            <input class="form-input" type="text" .value=${this._qqAccountId}
+            <input class="form-input" type="text" .value=${qqVals.account || ''}
               placeholder=${L('channels.accountIdPlaceholder')}
-              @input=${(e: Event) => { this._qqAccountId = (e.target as HTMLInputElement).value; }}
+              @input=${(e: Event) => this._onFormField('qqbot', 'account', (e.target as HTMLInputElement).value)}
             />
             <div class="form-hint">${L('channels.accountIdHint')}</div>
           </div>
@@ -909,12 +955,12 @@ export class ChannelsPage extends LitElement {
           <!-- Bind Agent -->
           <div class="form-group">
             <label class="form-label">${L('channels.bindAgent')}</label>
-            <select class="form-input" .value=${this._qqAgent}
+            <select class="form-input" .value=${this._qqAgent || this._bindDefaultId}
               @change=${(e: Event) => { this._qqAgent = (e.target as HTMLSelectElement).value; }}
             >
               ${this._bindAgents.length
                 ? this._bindAgents.map((a: any) => html`<option value=${a.id}>${a.id}${a.id === this._bindDefaultId ? ' (' + L('agents.default') + ')' : ''}</option>`)
-                : html`<option value="main">main</option>`}
+                : html`<option value="" disabled>${L('channels.noAgents')}</option>`}
             </select>
             <div class="form-hint">${L('channels.bindAgentHint')}</div>
           </div>
@@ -925,24 +971,35 @@ export class ChannelsPage extends LitElement {
             <div class="command-box__desc">${L('channels.manualCmdDesc')}</div>
             <div class="command-box__code">
               <code>openclaw plugins install @tencent-connect/openclaw-qqbot@latest</code>
-              <button @click=${() => {}}>${L('channels.copy')}</button>
+              <button @click=${this._copyQQCmd}>${this._qqCopied ? L('channels.copied') : L('channels.copy')}</button>
             </div>
             <div class="form-hint" style="margin-top:6px;">${L('channels.installHint')}</div>
           </div>
 
-          <!-- Diagnostics -->
-          <button class="btn-diag">
+          <!-- Diagnostics：展示网关 channels.status 的真实状态 -->
+          <button class="btn-diag" @click=${this._qqDiagnostics}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             ${L('channels.diagnostics')}
           </button>
+          ${this._qqDiagMsg ? html`<div class="form-hint" style="color:var(--accent);">${this._qqDiagMsg}</div>` : ''}
           <div class="form-hint">
             ${unsafeHTML(L('channels.diagHint'))}
           </div>
+          ${qqResult ? html`
+            <div class="form-result ${qqResult.cls}" style="margin-top:10px;">
+              <pre style="white-space:pre-wrap;margin:0;font-family:var(--font-mono);font-size:12px;">${qqResult.text}</pre>
+              ${qqResult.cls === 'ok' ? html`
+                <button style="margin-top:6px;" @click=${() => this._copyFormResult('qqbot')}>
+                  ${this._formCopied['qqbot'] ? L('channels.copied') : L('channels.copy')}
+                </button>
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
         <div slot="footer">
           <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
-          <oc-btn size="lg">${L('channels.verify')}</oc-btn>
-          <oc-btn size="lg" variant="accent">${L('common.confirm')}</oc-btn>
+          <oc-btn size="lg" @click=${() => this._verifyForm('qqbot', qqSpec)}>${L('channels.verify')}</oc-btn>
+          <oc-btn size="lg" variant="accent" @click=${() => this._generateConnect('qqbot', qqSpec)}>${L('channelsForm.generateCmd')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -1014,7 +1071,7 @@ export class ChannelsPage extends LitElement {
                   <a class="wx-qr-link" href=${this._wxUrl} target="_blank" rel="noopener">二维码无法显示？在手机打开此链接</a>
                 ` : ''}
                 ${this._wxStatus !== 'success' ? html`
-                  <button class="btn-cancel-scan" @click=${this._stopWeixinLogin}>${L('channels.cancel')}</button>
+                  <oc-btn @click=${this._stopWeixinLogin}>${L('channels.cancel')}</oc-btn>
                 ` : ''}
               </div>
             `}
@@ -1022,7 +1079,7 @@ export class ChannelsPage extends LitElement {
         </div>
         <div slot="footer">
           ${this._renderRemoveButton('openclaw-weixin')}
-          <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>
+          <oc-btn size="lg" @click=${this._closeDialog}>${L('channels.close')}</oc-btn>
         </div>
       </oc-dialog>
     `;
@@ -1110,7 +1167,7 @@ export class ChannelsPage extends LitElement {
             <oc-btn size="lg" variant="accent" @click=${() => this._generateConnect(realId, spec)}>${L('channelsForm.generateCmd')}</oc-btn>
           ` : html`
             ${live ? this._renderRemoveButton(realId) : ''}
-            <button class="btn-cancel" @click=${this._closeDialog}>${L('channels.close')}</button>
+            <oc-btn size="lg" @click=${this._closeDialog}>${L('channels.close')}</oc-btn>
           `}
         </div>
       </oc-dialog>

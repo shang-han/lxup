@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import '../components/page-header.js';
 import '../components/oc-card.js';
 import '../components/oc-btn.js';
@@ -14,17 +14,76 @@ export class MemoryPage extends LitElement {
 
   @state() _search = '';
   @state() _filterType = '';
-  @state() _memories = [
-    { id:'m1', name:'user-profile', type:'user', content:'User prefers concise answers. Works as a senior backend engineer.', words:14, updated:'2026-07-14 15:30' },
-    { id:'m2', name:'project-context', type:'note', content:'This project uses Tauri v2 for desktop shell, FastAPI for gateway, and Lit for frontend Web Components.', words:18, updated:'2026-07-13 10:15' },
-    { id:'m3', name:'codex-config', type:'note', content:'Codex CLI is configured with --sandbox landlock and uses gpt-4.2 as default model. Workspace is at ~/projects/lxup.', words:20, updated:'2026-07-15 08:00' },
-    { id:'m4', name:'agent-personality', type:'soul', content:'You are a helpful, concise coding assistant. You prefer direct answers over long explanations.', words:15, updated:'2026-07-12 22:45' },
-    { id:'m5', name:'api-endpoints', type:'note', content:'Gateway REST API: GET /health, GET /api/sessions, POST /api/config, WS /ws/chat. Auth via Bearer token.', words:22, updated:'2026-07-11 14:20' },
-    { id:'m6', name:'deployment-notes', type:'note', content:'Build pipeline: pyinstaller → nexe → tauri build. Sign with codesign (macOS) / signtool (Windows).', words:16, updated:'2026-07-10 09:00' },
-  ];
+  /** 真实数据：workspace 的 MEMORY/USER/SOUL.md + memory/*.md（经 Sidecar） */
+  @state() _memories: any[] = [];
+  @state() _loadMsg = '';
+  @state() _busy = false;
 
   @state() _editing: any = null;
   @state() _editContent = '';
+
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    void this._load();
+  }
+
+  _typeOfFile(file: string): string {
+    if (file === 'USER.md') return 'user';
+    if (file === 'SOUL.md') return 'soul';
+    return 'note';
+  }
+
+  async _load() {
+    this._loadMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/memories`, { headers: sidecarHeaders() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = (await r.json()) as { entries?: Array<{ file: string; content: string; mtime?: string | null }> };
+      this._memories = (d.entries || []).map(e => {
+        const content = e.content || '';
+        return {
+          id: e.file,
+          file: e.file,
+          name: e.file.replace(/^memory\//, '').replace(/\.md$/, ''),
+          type: this._typeOfFile(e.file),
+          content,
+          words: content.trim() ? content.trim().split(/\s+/).length : 0,
+          updated: e.mtime ? new Date(e.mtime).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—',
+        };
+      });
+    } catch (e) {
+      this._loadMsg = `${L('common.memLoadFailed')}${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  /** 创建记忆：今日日志 memory/YYYY-MM-DD.md，已存在则直接打开编辑 */
+  async _create() {
+    const file = `memory/${new Date().toISOString().slice(0, 10)}.md`;
+    const existing = this._memories.find(m => m.file === file);
+    if (existing) { this._startEdit(existing); return; }
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/memories`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ file, content: '' }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      await this._load();
+      const created = this._memories.find(m => m.file === file);
+      if (created) this._startEdit(created);
+    } catch (e) {
+      this._loadMsg = `${L('common.memSaveFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._busy = false;
+    }
+  }
 
   get _filtered() {
     let list = this._memories;
@@ -49,18 +108,44 @@ export class MemoryPage extends LitElement {
     this._editContent = m.content;
   }
 
-  _saveEdit() {
-    if (!this._editing) return;
-    const words = this._editContent.trim().split(/\s+/).filter(Boolean).length;
-    this._memories = this._memories.map(m =>
-      m.id === this._editing.id ? { ...m, content: this._editContent, words, updated: new Date().toISOString().replace('T',' ').slice(0,16) } : m
-    );
-    this._editing = null;
-    this._editContent = '';
+  async _saveEdit() {
+    if (!this._editing || this._busy) return;
+    const file = this._editing.file as string;
+    const content = this._editContent;
+    this._busy = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/memories`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ file, content }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      this._editing = null;
+      this._editContent = '';
+      await this._load();
+    } catch (e) {
+      this._loadMsg = `${L('common.memSaveFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._busy = false;
+    }
   }
 
-  _delete(id: string) {
-    this._memories = this._memories.filter(m => m.id !== id);
+  async _delete(m: any) {
+    if (this._busy) return;
+    if (!window.confirm(L('common.memDeleteConfirm', { name: m.name }))) return;
+    this._busy = true;
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/gateway/memories?file=${encodeURIComponent(m.file)}`, {
+        method: 'DELETE',
+        headers: sidecarHeaders(),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
+      await this._load();
+    } catch (e) {
+      this._loadMsg = `${L('common.memSaveFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._busy = false;
+    }
   }
 
   render() {
@@ -79,8 +164,12 @@ export class MemoryPage extends LitElement {
             <option value="soul">${L('common.typeSoul')}</option>
           </select>
         </div>
-        <button class="btn-sm">+ ${L('common.createMemory')}</button>
+        <button class="btn-sm" ?disabled=${this._busy} @click=${this._create}>+ ${L('common.createMemory')}</button>
       </div>
+
+      ${this._loadMsg ? html`
+        <div style="margin:0 0 12px;padding:8px 12px;border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-md);font-size:12px;">${this._loadMsg}</div>
+      ` : ''}
 
       ${this._editing ? html`
         <oc-card heading="${L('common.edit')}: ${this._editing.name}" style="margin-bottom:16px;">
@@ -89,7 +178,7 @@ export class MemoryPage extends LitElement {
           </div>
           <div class="page-actions">
             <button class="btn-sm" @click=${this._saveEdit}>${L('common.save')}</button>
-            <button class="btn-sm ghost" @click=${() => { this._editing = null; this._editContent = ''; }}>Cancel</button>
+            <button class="btn-sm ghost" @click=${() => { this._editing = null; this._editContent = ''; }}>${L('common.cancel')}</button>
           </div>
         </oc-card>
       ` : ''}
@@ -110,7 +199,7 @@ export class MemoryPage extends LitElement {
               <span>${m.words} ${L('common.wordCount')} · ${m.updated}</span>
               <div class="page-actions">
                 <button class="btn-sm ghost" @click=${() => this._startEdit(m)}>${L('common.edit')}</button>
-                <button class="btn-sm ghost" style="color:var(--danger);" @click=${() => this._delete(m.id)}>${L('common.delete')}</button>
+                <button class="btn-sm ghost" style="color:var(--danger);" ?disabled=${this._busy} @click=${() => this._delete(m)}>${L('common.delete')}</button>
               </div>
             </div>
           </div>

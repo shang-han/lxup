@@ -23,9 +23,11 @@ OpenClaw 网关进程。
 
 import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from ..i18n import tr, ui_lang
 from ..services import preinstalled_skills, skill_packs
@@ -188,6 +190,76 @@ async def gateway_skill_pack_uninstall(request: Request, pack_id: str) -> dict:
         raise HTTPException(status_code=404, detail=tr(ui_lang(request), "pack_not_found", id=pack_id))
     except OSError as e:
         raise HTTPException(status_code=500, detail=tr(ui_lang(request), "uninstall_failed", e=e))
+
+
+# ── OpenClaw workspace 记忆文件（MEMORY.md + memory/*.md）──
+
+
+_MEMORY_TOP_FILES = ("MEMORY.md", "USER.md", "SOUL.md")
+
+
+def _memory_file_rel(file: str) -> str:
+    """安全校验：只允许 MEMORY/USER/SOUL.md 或 memory/<单层>.md，拒绝任何路径穿越"""
+    f = (file or "").replace("\\", "/")
+    if f in _MEMORY_TOP_FILES:
+        return f
+    rest = f[len("memory/"):]
+    if f.startswith("memory/") and rest and "/" not in rest and rest.endswith(".md"):
+        return f
+    raise LookupError(file)
+
+
+@router.get("/memories")
+async def gateway_memories(request: Request) -> dict:
+    """读取 workspace 记忆文件列表（MEMORY/USER/SOUL.md + memory/*.md，含 mtime）"""
+    ws = preinstalled_skills.workspace_dir()
+    candidates: list[Path] = [ws / n for n in _MEMORY_TOP_FILES if (ws / n).is_file()]
+    mdir = ws / "memory"
+    if mdir.is_dir():
+        candidates += sorted(p for p in mdir.glob("*.md") if p.is_file())
+    entries = []
+    for p in candidates:
+        try:
+            entries.append({
+                "file": p.relative_to(ws).as_posix(),
+                "content": p.read_text(encoding="utf-8", errors="replace"),
+                "mtime": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds"),
+            })
+        except OSError:
+            continue
+    return {"entries": entries, "workspace": str(ws)}
+
+
+class GatewayMemoryWriteRequest(BaseModel):
+    """写单个记忆文件（整文件覆盖）"""
+
+    file: str
+    content: str = ""
+
+
+@router.post("/memories")
+async def gateway_memory_write(request: Request, body: GatewayMemoryWriteRequest) -> dict:
+    try:
+        rel = _memory_file_rel(body.file)
+    except LookupError:
+        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=body.file))
+    p = preinstalled_skills.workspace_dir() / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body.content, encoding="utf-8")
+    logger.info("OpenClaw 记忆已保存: %s (%d 字符)", rel, len(body.content))
+    return {"ok": True, "file": rel}
+
+
+@router.delete("/memories")
+async def gateway_memory_delete(request: Request, file: str = Query(...)) -> dict:
+    try:
+        rel = _memory_file_rel(file)
+    except LookupError:
+        raise HTTPException(status_code=400, detail=tr(ui_lang(request), "mem_invalid_file", file=file))
+    p = preinstalled_skills.workspace_dir() / rel
+    if p.is_file():
+        p.unlink()
+    return {"ok": True, "file": rel}
 
 
 @router.delete("/channels/{channel}")

@@ -266,6 +266,16 @@ export class HermesDashboardPage extends LitElement {
     return `http://${host}:7889`;
   }
 
+  /** 当前生效的 Hermes 连接地址（自定义目标优先），解析失败回退 — */
+  get _connHostPort(): { host: string; port: string } {
+    try {
+      const u = new URL(hermesUrl());
+      return { host: u.hostname || '—', port: u.port || (u.protocol === 'https:' ? '443' : '80') };
+    } catch {
+      return { host: '—', port: '—' };
+    }
+  }
+
   connectedCallback() {
     super.connectedCallback();
     const stored = getStoredHermesUrl();
@@ -331,7 +341,8 @@ export class HermesDashboardPage extends LitElement {
   /** 点击服务商预设 → 填充 Base URL 与默认模型 */
   _applyPreset(p: { name: string; baseUrl: string; model?: string }) {
     this._selectedPreset = p.name;
-    this._apiBase = p.baseUrl;
+    // 无公开端点的预设不清空已填的 Base URL
+    if (p.baseUrl) this._apiBase = p.baseUrl;
     if (p.model) this._model = p.model;
     this._modelList = [];
     this._saveMsg = '';
@@ -427,7 +438,7 @@ export class HermesDashboardPage extends LitElement {
 
   render() {
     return html`
-      <page-header title=${this.title} subtitle=${`127.0.0.1:8642 · ${L('hermesDashboard.subtitle')} · v0.11.0`}>
+      <page-header title=${this.title} subtitle=${`${this._connHostPort.host}:${this._connHostPort.port} · ${L('hermesDashboard.subtitle')}${this._hermesVersion ? ' · v' + this._hermesVersion : ''}`}>
         <div style="display:flex;gap:8px;align-items:center;">
           <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);display:inline-flex;align-items:center;gap:6px;"
                   @click=${() => this._refreshAll()}>
@@ -465,9 +476,9 @@ export class HermesDashboardPage extends LitElement {
           </div>
           <div class="hermes-status-card">
             <div class="hermes-status-card__label">${L('hermesDashboard.apiAddress')}</div>
-            <div class="hermes-status-card__value" style="font-size:13px;">127.0.0.1</div>
+            <div class="hermes-status-card__value" style="font-size:13px;">${this._connHostPort.host}</div>
             <div class="hermes-status-card__sub">
-              <span style="font-size:12px;padding:2px 6px;background:var(--bg-muted);border-radius:var(--radius-sm);color:var(--muted);">:8642/v1</span>
+              <span style="font-size:12px;padding:2px 6px;background:var(--bg-muted);border-radius:var(--radius-sm);color:var(--muted);">:${this._connHostPort.port}/v1</span>
             </div>
           </div>
           <div class="hermes-status-card" style="cursor:pointer;" @click=${() => this.onNavigate('chat')}>

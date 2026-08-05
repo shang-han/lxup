@@ -645,7 +645,8 @@ export class ModelsPage extends LitElement {
   _selectPreset(preset: any) {
     this._formSelectedPreset = preset.name;
     this._formProviderName = preset.name;
-    this._formBaseUrl = preset.baseUrl;
+    // 无公开端点的预设（如中转）不清空已填的 Base URL，需用户自行填写
+    if (preset.baseUrl) this._formBaseUrl = preset.baseUrl;
     this._formModels = [...preset.models];
   }
 

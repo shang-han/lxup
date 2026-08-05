@@ -4,6 +4,7 @@ import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import '../components/oc-markdown.js';
 import { getSharedStore } from '../store/shared.js';
+import * as codex from '../services/codex-client.js';
 import { listModels, getActiveModel, setSelectedModel, gatewayModelsFromConfig, type ResolvedModel } from '../utils/model-config.js';
 import {
   createChatEngine,
