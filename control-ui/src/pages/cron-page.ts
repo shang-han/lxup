@@ -200,7 +200,9 @@ export class CronPage extends LitElement {
     this._loading = true;
     try {
       const [listRes, statusRes] = await Promise.all([
-        store.request<any>('cron.list', {}),
+        // includeDisabled: 网关默认只返回启用任务，禁用的会直接从列表消失，
+        // 不传这个参数就再也无法重新启用它们
+        store.request<any>('cron.list', { includeDisabled: true }),
         store.request<any>('cron.status', {}).catch(() => null),
       ]);
       this._jobs = (listRes?.jobs || []) as CronJob[];
@@ -249,7 +251,8 @@ export class CronPage extends LitElement {
     };
     try {
       if (this._editingId) {
-        await store.request('cron.update', { id: this._editingId, ...payload });
+        // 网关 schema 要求 {jobId, patch}；旧形态 {id, ...fields} 一律 400
+        await store.request('cron.update', { jobId: this._editingId, patch: payload });
       } else {
         await store.request('cron.add', payload);
       }
@@ -265,7 +268,7 @@ export class CronPage extends LitElement {
 
   async _toggleEnabled(job: CronJob) {
     await this._runJobAction(job.id, () =>
-      getSharedStore().request('cron.update', { id: job.id, enabled: !job.enabled }));
+      getSharedStore().request('cron.update', { jobId: job.id, patch: { enabled: !job.enabled } }));
   }
 
   async _runNow(job: CronJob) {
