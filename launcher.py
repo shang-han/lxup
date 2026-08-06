@@ -136,6 +136,14 @@ def preflight():
             "便携 node.exe 缺失(runtime/data/node.exe), "
             "请先运行 bootstrap-openclaw.bat")
 
+    # 跨实例端口冲突: 五个服务端口若已被另一份 LXUP/OpenClaw 占用,
+    # 照拉会静默串到对方实例(Hermes 端口被占时尤其隐蔽), 直接判致命
+    for port in (SIDECAR_PORT, 18789, 8642, 8080, 5173):
+        if port_open(port):
+            fatals.append(
+                f"端口 {port} 已被占用: 另一个 LXUP/OpenClaw 实例正在运行, "
+                "请先 stop-all.bat 或关掉其窗口再启动")
+
     for name, path in (("OpenClaw 入口", OPENCLAW_ENTRY),
                        ("前端 vite", VITE_JS),
                        ("AI 助手 server.js", AI_SERVER_JS)):

@@ -36,6 +36,26 @@ REM resolve to the bundled interpreter with the preinstalled libraries,
 REM not the system python (which may not exist or lack the deps).
 set "PATH=%PYDIR%;%PATH%"
 
+REM ------------------------------------------------------------
+REM Port pre-check: if another LXUP/OpenClaw copy already holds a
+REM service port, starting anyway would silently cross-wire the
+REM stacks (UI/sidecar talking to the OTHER instance's gateway,
+REM especially Hermes which fails softly on a busy port). Refuse.
+REM ------------------------------------------------------------
+echo Checking service ports (7889 18789 8642 8080 5173)...
+set "CONFLICT=0"
+for %%P in (7889 18789 8642 8080 5173) do (
+  netstat -ano | findstr /R /C:":%%P " | findstr /C:"LISTENING" >nul && (
+    echo [ERROR] Port %%P is already in use - another LXUP/OpenClaw instance is running.
+    echo         Run stop-all.bat there (or close its windows^), then retry.
+    set "CONFLICT=1"
+  )
+)
+if "%CONFLICT%"=="1" (
+  pause
+  exit /b 1
+)
+
 echo [1/5] Starting LXUP Sidecar (7889)...
 start "LXUP-Sidecar-7889" cmd /k "cd /d "%ROOT%" && "%PYTHON%" -m sidecar.main --db-path "%ROOT%runtime\data\gateway.db" --port 7889"
 

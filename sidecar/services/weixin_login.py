@@ -19,6 +19,8 @@ import re
 
 import qrcode
 
+from . import preinstalled_skills
+
 logger = logging.getLogger(__name__)
 
 # 登录输出里的微信授权链接（二维码编码的就是它）
@@ -26,6 +28,16 @@ _URL_RE = re.compile(r"https://liteapp\.weixin\.qq\.com/\S+")
 
 # 判定登录成功的关键词（CLI 保存凭证后的提示）
 _SUCCESS_KEYWORDS = ("登录成功", "保存成功", "凭证已保存", "logged in", "login success", "授权成功")
+
+
+def _weixin_plugin_missing() -> bool:
+    """状态目录里是否缺微信插件（换机解压丢文件/状态目录指错时常见）"""
+    projects = preinstalled_skills._state_dir() / "npm" / "projects"
+    if not projects.is_dir():
+        return True
+    return not list(projects.glob(
+        "tencent-weixin-openclaw-weixin-*/node_modules/@tencent-weixin/openclaw-weixin/package.json"
+    ))
 
 
 def make_qr_data_url(url: str) -> str:
@@ -88,6 +100,15 @@ class WeixinLoginSession:
         """
         if self.proc and self.proc.returncode is None:
             return  # 已在运行
+        if _weixin_plugin_missing():
+            # 换机分发高频故障：解压丢深层文件，或启动入口没设 OPENCLAW_STATE_DIR
+            self._set(
+                "error",
+                "微信插件未安装（换机解压可能丢了深层文件）。有网时跑一次 bootstrap-openclaw.bat 自动补装；"
+                "或手动：openclaw plugins install --force @tencent-weixin/openclaw-weixin@2.4.6。"
+                "若确认已安装，检查启动入口是否把 OPENCLAW_STATE_DIR 指向包内 runtime\\openclaw-home。",
+            )
+            return
         if not argv:
             argv = ["openclaw", "channels", "login", "--channel", "openclaw-weixin"]
         self.url = None
