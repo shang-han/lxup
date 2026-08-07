@@ -56,24 +56,40 @@ const STORAGE_KEY = 'openclaw.models.config';
  */
 const PENDING_KEY = 'openclaw.models.pending-sync';
 
+/** key=稳定标识（选中态比较/无 labelKey 时即显示名）；labelKey=本地化显示名（自动填充也用本地化名）。
+ *  专属名称用官方英文品牌：Volcano Engine / Zhipu AI / Alibaba Cloud Model Studio。 */
 const PROVIDER_PRESETS = [
-  { name: 'GPT+Claude推荐中转', baseUrl: '', models: ['gpt-4o', 'claude-sonnet-4-5'] },
-  { name: '火山引擎', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-1-5-pro-32k', 'deepseek-v3-250324'] },
-  { name: '火山引擎 Coding', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-seed-code-preview-251028'] },
-  { name: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
-  { name: '智谱 AI', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
-  { name: 'MiniMax', baseUrl: 'https://api.minimax.chat/v1', models: ['MiniMax-Text-01'] },
-  { name: 'Moonshot / Kimi', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k'] },
-  { name: 'OpenAI 官方', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'] },
-  { name: 'Anthropic 官方', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-5', 'claude-opus-4-1'] },
-  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-  { name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-2.0-flash', 'gemini-1.5-pro'] },
-  { name: 'xAI (Grok)', baseUrl: 'https://api.x.ai/v1', models: ['grok-3', 'grok-3-mini'] },
-  { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile'] },
-  { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'] },
-  { name: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', models: ['meta/llama-3.1-70b-instruct'] },
-  { name: 'Ollama (本地)', baseUrl: 'http://127.0.0.1:11434/v1', models: ['llama3.1', 'qwen2.5'] },
+  { key: 'relay', labelKey: 'presetRelay', baseUrl: '', models: ['gpt-4o', 'claude-sonnet-4-5'] },
+  { key: 'volcengine', labelKey: 'presetVolcengine', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-1-5-pro-32k', 'deepseek-v3-250324'] },
+  { key: 'volcengine-coding', labelKey: 'presetVolcengineCoding', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-seed-code-preview-251028'] },
+  { key: 'bailian', labelKey: 'presetBailian', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
+  { key: 'zhipu', labelKey: 'presetZhipu', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
+  { key: 'MiniMax', baseUrl: 'https://api.minimax.chat/v1', models: ['MiniMax-Text-01'] },
+  { key: 'Moonshot / Kimi', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k'] },
+  { key: 'openai-official', labelKey: 'presetOpenAIOfficial', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'] },
+  { key: 'anthropic-official', labelKey: 'presetAnthropicOfficial', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-5', 'claude-opus-4-1'] },
+  { key: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
+  { key: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-2.0-flash', 'gemini-1.5-pro'] },
+  { key: 'xAI (Grok)', baseUrl: 'https://api.x.ai/v1', models: ['grok-3', 'grok-3-mini'] },
+  { key: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile'] },
+  { key: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'] },
+  { key: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', models: ['meta/llama-3.1-70b-instruct'] },
+  { key: 'ollama-local', labelKey: 'presetOllamaLocal', baseUrl: 'http://127.0.0.1:11434/v1', models: ['llama3.1', 'qwen2.5'] },
 ];
+
+/** 弹框「接口类型」→ 网关 provider.api 标识（openai/ollama 走 OpenAI 兼容，openclaw 默认） */
+const API_TYPE_TO_GATEWAY: Record<string, string> = {
+  openai: 'openai-completions',
+  anthropic: 'anthropic-messages',
+  google: 'google-generative-ai',
+  ollama: 'openai-completions',
+};
+function apiTypeFromRaw(raw: any): string {
+  const api = String(raw?.api ?? '');
+  if (api === 'anthropic-messages') return 'anthropic';
+  if (api.startsWith('google-')) return 'google';
+  return 'openai';
+}
 
 /** 主模型星标 SVG（icons.ts 中没有 star） */
 const starSvg = (filled: boolean) => html`
@@ -326,6 +342,7 @@ export class ModelsPage extends LitElement {
   @state() _dialogOpen = false;
   @state() _editingId: string | null = null;
   @state() _formProviderName = '';
+  @state() _formApiType = 'openai';
   @state() _formBaseUrl = '';
   @state() _formApiKey = '';
   @state() _formSelectedPreset = '';
@@ -421,6 +438,7 @@ export class ModelsPage extends LitElement {
           name: id,
           baseUrl: String(raw.baseUrl ?? ''),
           apiKey: String(raw.apiKey ?? ''),
+          apiType: apiTypeFromRaw(raw),
           models,
         });
       }
@@ -467,7 +485,7 @@ export class ModelsPage extends LitElement {
   _mirrorToLS() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        providers: this._providers.map(p => ({ ...p, apiType: 'openai' })),
+        providers: this._providers.map(p => ({ ...p, apiType: p.apiType || 'openai' })),
       }));
     } catch { /* localStorage 不可用时静默 */ }
   }
@@ -564,6 +582,7 @@ export class ModelsPage extends LitElement {
           ...orig,
           ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
           ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+          api: API_TYPE_TO_GATEWAY[p.apiType] || 'openai-completions',
           models: p.models.map(m => metas[m.id] || { id: m.id, name: m.id }),
         };
         replacePaths.push(`models.providers.${p.id}.models`);
@@ -617,6 +636,7 @@ export class ModelsPage extends LitElement {
     // 离线也允许配置（先落本地，网关连上后自动同步），不强制网关启动
     this._editingId = null;
     this._formProviderName = '';
+    this._formApiType = 'openai';
     this._formBaseUrl = '';
     this._formApiKey = '';
     this._formSelectedPreset = '';
@@ -630,6 +650,7 @@ export class ModelsPage extends LitElement {
     if (!p) return;
     this._editingId = id;
     this._formProviderName = p.name;
+    this._formApiType = p.apiType || 'openai';
     this._formBaseUrl = p.baseUrl;
     this._formApiKey = p.apiKey;
     this._formSelectedPreset = '';
@@ -642,9 +663,14 @@ export class ModelsPage extends LitElement {
     this._dialogOpen = false;
   }
 
+  /** 预设显示名：有 labelKey 走本地化，否则用 key（英文专有名词两种语言一致） */
+  _presetLabel(preset: any): string {
+    return preset.labelKey ? L(`models.${preset.labelKey}`) : preset.key;
+  }
+
   _selectPreset(preset: any) {
-    this._formSelectedPreset = preset.name;
-    this._formProviderName = preset.name;
+    this._formSelectedPreset = preset.key;
+    this._formProviderName = this._presetLabel(preset);
     // 无公开端点的预设（如中转）不清空已填的 Base URL，需用户自行填写
     if (preset.baseUrl) this._formBaseUrl = preset.baseUrl;
     this._formModels = [...preset.models];
@@ -693,6 +719,7 @@ export class ModelsPage extends LitElement {
           ...p,
           baseUrl: this._formBaseUrl.trim(),
           apiKey: this._formApiKey.trim(),
+          apiType: this._formApiType,
           models,
         };
       });
@@ -706,6 +733,7 @@ export class ModelsPage extends LitElement {
         id, name: id,
         baseUrl: this._formBaseUrl.trim(),
         apiKey: this._formApiKey.trim(),
+        apiType: this._formApiType,
         models,
       }];
       this._expanded = { ...this._expanded, [id]: true };
@@ -943,9 +971,9 @@ export class ModelsPage extends LitElement {
             <div class="quick-picks">
               ${PROVIDER_PRESETS.map(p => html`
                 <button
-                  style="${this._formSelectedPreset === p.name ? 'background:var(--accent-subtle);color:var(--accent);border-color:var(--accent);' : ''}"
+                  style="${this._formSelectedPreset === p.key ? 'background:var(--accent-subtle);color:var(--accent);border-color:var(--accent);' : ''}"
                   @click=${() => this._selectPreset(p)}
-                >${p.name}</button>
+                >${this._presetLabel(p)}</button>
               `)}
             </div>
             <div class="form-hint" style="margin-bottom:12px;">${L('models.quickSelectHint')}</div>
@@ -955,7 +983,7 @@ export class ModelsPage extends LitElement {
           <div class="form-group">
             <label class="form-label">${L('models.providerName')}</label>
             <input class="form-input" type="text" .value=${this._formProviderName}
-              placeholder="如 deepseek" ?disabled=${isEdit}
+              placeholder=${L('models.providerNamePlaceholder')} ?disabled=${isEdit}
               @input=${(e: Event) => { this._formProviderName = (e.target as HTMLInputElement).value; this._formSelectedPreset = ''; }}
             />
             <div class="form-hint">${isEdit ? L('models.providerIdLocked') : L('models.providerNameHint')}</div>
@@ -969,6 +997,19 @@ export class ModelsPage extends LitElement {
               @input=${(e: Event) => { this._formBaseUrl = (e.target as HTMLInputElement).value; }}
             />
             <div class="form-hint">${L('models.apiUrlHint')}</div>
+          </div>
+
+          <!-- 接口类型（写入网关 provider.api；OpenAI 兼容为默认） -->
+          <div class="form-group">
+            <label class="form-label">${L('models.apiType')}</label>
+            <select class="form-input" .value=${this._formApiType}
+              @change=${(e: Event) => { this._formApiType = (e.target as HTMLSelectElement).value; }}>
+              <option value="openai">${L('models.apiTypeOpenAI')}</option>
+              <option value="anthropic">${L('models.apiTypeAnthropic')}</option>
+              <option value="google">${L('models.apiTypeGoogle')}</option>
+              <option value="ollama">${L('models.apiTypeOllama')}</option>
+            </select>
+            <div class="form-hint">${L('models.apiTypeHint')}</div>
           </div>
 
           <!-- API Key -->

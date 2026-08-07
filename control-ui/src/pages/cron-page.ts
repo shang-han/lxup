@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
 import { getSharedStore } from '../store/shared.js';
+import { hermesJson } from '../services/hermes-client.js';
 import '../components/page-header.js';
 import '../components/oc-btn.js';
 
@@ -156,6 +157,7 @@ export class CronPage extends LitElement {
   `;
 
   @property({ type: String }) title = '';
+  @property({ type: String }) engine = 'openclaw';
 
   @state() _jobs: CronJob[] = [];
   @state() _loading = false;
@@ -177,6 +179,18 @@ export class CronPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // Hermes 走自己的 :8642 cron API，与 OpenClaw 网关 WS 无关，不等 store 连接
+    if (this.engine === 'hermes') {
+      void this._load();
+      return;
+    }
+    this._bindStore();
+  }
+
+  /** OpenClaw：订阅网关连接状态，连上即拉任务列表 */
+  _bindStore() {
+    this._storeUnsub?.();
+    this._storeUnsub = null;
     const store = getSharedStore();
     this._storeUnsub = store.subscribe(snap => {
       const was = this._offline;
@@ -187,6 +201,20 @@ export class CronPage extends LitElement {
     if (store.connected) this._load();
   }
 
+  updated(changed: Map<string, unknown>) {
+    // 引擎切换 → 数据源不同，清空重拉（OpenClaw 走网关 WS，Hermes 走 :8642 HTTP）
+    if (changed.has('engine')) {
+      this._jobs = [];
+      if (this.engine === 'hermes') {
+        this._storeUnsub?.();
+        this._storeUnsub = null;
+        void this._load();
+      } else {
+        this._bindStore();
+      }
+    }
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback();
     this._storeUnsub?.();
@@ -195,6 +223,10 @@ export class CronPage extends LitElement {
   // ── 数据 ──────────────────────────────────────────
 
   async _load() {
+    if (this.engine === 'hermes') {
+      await this._loadHermes();
+      return;
+    }
     const store = getSharedStore();
     if (!store.connected) { this._offline = true; return; }
     this._loading = true;
@@ -210,6 +242,31 @@ export class CronPage extends LitElement {
       this._offline = false;
       this._error = '';
     } catch (e) {
+      this._error = e instanceof Error ? e.message : String(e);
+    } finally {
+      this._loading = false;
+    }
+  }
+
+  /** Hermes：任务列表来自其网关 :8642 /api/jobs（与聊天 Agent 读同一存储，不再串引擎） */
+  async _loadHermes() {
+    this._loading = true;
+    try {
+      const res = await hermesJson<any>('/api/jobs?include_disabled=true');
+      const raw: any[] = Array.isArray(res) ? res : (res?.jobs || []);
+      this._jobs = raw.map((j) => ({
+        id: String(j.id ?? ''),
+        name: String(j.name ?? ''),
+        enabled: j.enabled !== false && j.state !== 'paused',
+        schedule: { kind: 'cron', expr: j.schedule?.expr || (typeof j.schedule === 'string' ? j.schedule : '') },
+        payload: { kind: 'systemEvent', text: String(j.prompt ?? '') },
+        nextRunAtMs: j.next_run_at ? Date.parse(j.next_run_at) : null,
+      }));
+      this._schedulerEnabled = null;
+      this._offline = false;
+      this._error = '';
+    } catch (e) {
+      this._offline = true;
       this._error = e instanceof Error ? e.message : String(e);
     } finally {
       this._loading = false;
@@ -242,6 +299,10 @@ export class CronPage extends LitElement {
     const name = this._formName.trim();
     const expr = this._formExpr.trim();
     if (!name || !expr) return;
+    if (this.engine === 'hermes') {
+      await this._submitDialogHermes(name, expr);
+      return;
+    }
     const store = getSharedStore();
     const payload = {
       name,
@@ -264,14 +325,55 @@ export class CronPage extends LitElement {
     }
   }
 
+  /** Hermes：POST /api/jobs 创建；PATCH 扁平字段编辑；启停走 pause/resume */
+  async _submitDialogHermes(name: string, expr: string) {
+    const prompt = this._formText.trim() || name;
+    try {
+      if (this._editingId) {
+        await hermesJson(`/api/jobs/${this._editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, schedule: expr, prompt }),
+        });
+        const job = this._jobs.find(j => j.id === this._editingId);
+        if (job && job.enabled !== this._formEnabled) {
+          await hermesJson(`/api/jobs/${this._editingId}/${this._formEnabled ? 'resume' : 'pause'}`, { method: 'POST' });
+        }
+      } else {
+        const created = await hermesJson<any>('/api/jobs', {
+          method: 'POST',
+          body: JSON.stringify({ name, schedule: expr, prompt, deliver: 'local' }),
+        });
+        if (!this._formEnabled) {
+          const id = created?.id ?? created?.job?.id;
+          if (id) await hermesJson(`/api/jobs/${id}/pause`, { method: 'POST' });
+        }
+      }
+      this._dialogOpen = false;
+      this._error = '';
+      await this._load();
+    } catch (e) {
+      this._error = this._errMsg(e);
+    }
+  }
+
   // ── 任务操作 ──────────────────────────────────────
 
   async _toggleEnabled(job: CronJob) {
+    if (this.engine === 'hermes') {
+      await this._runJobAction(job.id, () =>
+        hermesJson(`/api/jobs/${job.id}/${job.enabled ? 'pause' : 'resume'}`, { method: 'POST' }));
+      return;
+    }
     await this._runJobAction(job.id, () =>
       getSharedStore().request('cron.update', { jobId: job.id, patch: { enabled: !job.enabled } }));
   }
 
   async _runNow(job: CronJob) {
+    if (this.engine === 'hermes') {
+      await this._runJobAction(job.id, () =>
+        hermesJson(`/api/jobs/${job.id}/run`, { method: 'POST' }));
+      return;
+    }
     await this._runJobAction(job.id, () =>
       getSharedStore().request('cron.run', { id: job.id }));
   }
@@ -281,6 +383,11 @@ export class CronPage extends LitElement {
       title: L('cron.deleteTitle'),
       message: L('cron.deleteConfirm', { name: job.name }),
       onConfirm: async () => {
+        if (this.engine === 'hermes') {
+          await this._runJobAction(job.id, () =>
+            hermesJson(`/api/jobs/${job.id}`, { method: 'DELETE' }));
+          return;
+        }
         await this._runJobAction(job.id, () =>
           getSharedStore().request('cron.remove', { id: job.id }));
       },

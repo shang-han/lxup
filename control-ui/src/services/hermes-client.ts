@@ -101,6 +101,17 @@ export async function health(): Promise<boolean> {
   return res.ok;
 }
 
+/** Hermes 网关通用 JSON 请求（定时任务等仪表盘 API），非 2xx 抛带 detail 的错 */
+export async function hermesJson<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${hermesUrl()}${path}`, { headers: authHeaders(), ...init });
+  if (!res.ok) {
+    const d = await res.json().catch(() => null);
+    const msg = typeof d?.detail === 'string' ? d.detail : typeof d?.error === 'string' ? d.error : d?.message;
+    throw new Error(msg || `Hermes HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function listSessions(limit = 100): Promise<HermesSession[]> {
   const d = await getJson<{ data?: HermesSession[] }>(`/api/sessions?limit=${limit}`);
   return d.data || [];

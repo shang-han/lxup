@@ -232,7 +232,7 @@ export class OpenClawApp extends LitElement {
       case 'memory':
         if (this._engine === 'hermes') return html`<hermes-memory-page title=${title('memory')} subtitle=${sub('memory')}></hermes-memory-page>`;
         return html`<memory-page title=${title('memory')} subtitle=${sub('memory')}></memory-page>`;
-      case 'cron': return html`<cron-page title=${title('cron')}></cron-page>`;
+      case 'cron': return html`<cron-page title=${title('cron')} .engine=${this._engine}></cron-page>`;
       case 'extensions': return html`<extensions-page title=${title('extensions')}></extensions-page>`;
       case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')}></ai-page>`;
       case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
