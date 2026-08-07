@@ -9,7 +9,6 @@ import './pages/init-page.js';
 import './pages/dashboard-page.js';
 import './pages/chat-page.js';
 import './pages/logs-page.js';
-import './pages/skills-page.js';
 import './pages/skills-v2-page.js';
 import './pages/memory-page.js';
 import './pages/cron-page.js';
@@ -33,7 +32,7 @@ import './pages/ai-page.js';
 
 const TAB_ICONS: Record<string, string> = {
   dashboard:'layout-dashboard', chat:'message-square', logs:'scroll-text',
-  skills:'puzzle', skills2:'sparkles', memory:'database', cron:'clock',
+  skills2:'sparkles', memory:'database', cron:'clock',
   extensions:'palette', ai:'bot', settings:'settings',
   models:'cpu', agents:'users', gateway:'antenna',
   channels:'share-2', diagnostics:'stethoscope', browser:'globe',
@@ -52,15 +51,14 @@ function buildRoutes(): Record<string, { label: string; icon: string; subtitle: 
 }
 
 // 侧边栏隐藏的入口:页面组件与路由都保留,仅菜单不展示(恢复时从集合中删掉对应项即可)
-// skills(旧技能页)隐藏,由 skills2(新版)替代;需要对比时移除 'skills' 即可恢复
-const HIDDEN_TABS = new Set(['logs', 'services', 'gateway', 'settings', 'extensions', 'skills']);
+const HIDDEN_TABS = new Set(['logs', 'services', 'gateway', 'settings', 'extensions']);
 
 function buildSections(engine: string): Array<{ heading: string | null; tabs: string[] }> {
   let sections: Array<{ heading: string | null; tabs: string[] }>;
   if (engine === 'hermes') {
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
-      { heading: L('sections.Extensions'), tabs: ['skills','skills2','memory','cron','extensions','settings'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','extensions','settings'] },
     ];
     // hermes 引擎的技能页（skills2）由页面自身按 engine 切换数据源
   } else if (engine === 'codex') {
@@ -73,7 +71,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
       { heading: L('sections.Config'), tabs: ['models','agents','gateway','browser','channels'] },
-      { heading: L('sections.Extensions'), tabs: ['skills','skills2','settings','diagnostics'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','settings','diagnostics'] },
     ];
   }
   return sections
@@ -201,7 +199,6 @@ export class OpenClawApp extends LitElement {
       if (raw) {
         const s = JSON.parse(raw);
         if (s.page && TAB_ICONS[s.page]) this._page = s.page;
-        if (this._page === 'skills') this._page = 'skills2'; // 旧技能页已隐藏,恢复状态时落到新版
         if (s.engine && (s.engine==='openclaw'||s.engine==='hermes'||s.engine==='codex')) this._engine = s.engine;
         // codex 引擎没有 dashboard/models/logs/skills/memory 等页，恢复状态时回落到 codex 配置页
         if (this._engine === 'codex' && !['ai','chat','codex','sandbox','settings'].includes(this._page)) this._page = 'codex';
@@ -231,7 +228,6 @@ export class OpenClawApp extends LitElement {
       case 'logs':
         if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
         return html`<logs-page title=${title('logs')} subtitle=${sub('logs')}></logs-page>`;
-      case 'skills': return html`<skills-page title=${title('skills')} subtitle=${sub('skills')}></skills-page>`;
       case 'skills2': return html`<skills-v2-page title=${title('skills2')} subtitle=${sub('skills2')} .engine=${this._engine} .onNavigate=${(p:string)=>this._navigate(p)}></skills-v2-page>`;
       case 'memory':
         if (this._engine === 'hermes') return html`<hermes-memory-page title=${title('memory')} subtitle=${sub('memory')}></hermes-memory-page>`;

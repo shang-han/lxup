@@ -7,7 +7,7 @@ import '../components/page-header.js';
 import '../components/skillshop-panel.js';
 
 /**
- * 技能页（新版方案，与旧版 skills-page 并存供选择）。
+ * 技能页（旧版 skills-page 已删除，本页为唯一技能页，路由键 skills2）。
  *
  * 信息架构原则：
  *   1. 主列表只放「此刻真能用」的技能；缺依赖/已停用各有独立车道；
