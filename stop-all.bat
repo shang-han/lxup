@@ -2,25 +2,17 @@
 REM ============================================================
 REM  LXUP - stop all services
 REM  Stops each service by the port it listens on (and its whole
-REM  process tree), so it will NOT kill unrelated python/node
-REM  programs on this machine. Requires Administrator.
+REM  process tree). If a target port belongs to another Windows
+REM  account, rerun this script as Administrator.
 REM
 REM  NOTE: keep this file ASCII-only on purpose. Saving Chinese
 REM  text as UTF-8 + "chcp 65001" makes cmd.exe mis-parse batch
 REM  lines (splits one line into several commands). ASCII is safe
 REM  under every code page and every way of launching the file.
 REM ============================================================
-setlocal enabledelayedexpansion
-
-REM --- privilege check: fail loudly instead of silently ---
-net session >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Administrator privileges are required to stop the services.
-    echo         Right-click this file -^> "Run as administrator", then retry.
-    echo.
-    pause
-    exit /b 1
-)
+setlocal EnableExtensions DisableDelayedExpansion
+set "NO_PAUSE="
+if /i "%~1"=="--no-pause" set "NO_PAUSE=1"
 
 echo Stopping all LXUP services...
 echo.
@@ -35,6 +27,7 @@ for %%P in (%PORTS%) do (
         set "FOUND=1"
         echo  -^> port %%P   PID %%a   stopping...
         taskkill /F /T /PID %%a
+        if errorlevel 1 echo     [WARN] Could not stop PID %%a. If it belongs to another Windows account, rerun as Administrator.
     )
     if not defined KILLED (
         echo  -^> port %%P   not running, skipped.
@@ -48,5 +41,5 @@ if defined FOUND (
     echo No running LXUP services detected.
 )
 echo.
-pause
+if not defined NO_PAUSE pause
 endlocal

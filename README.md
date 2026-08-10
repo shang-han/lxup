@@ -6,7 +6,7 @@
 ## 项目结构
 
 ```
-D:\lxup\
+.\
 ├── control-ui/        控制台前端（Lit + Vite，:5173）
 ├── ai-assistant/      独立 AI 助手 JS 服务（对话 + 命令行工具，不经过网关，:8080）
 ├── sidecar/           Python 伴侣服务（授权客户端 + 微信扫码登录桥接，:7889）
@@ -59,7 +59,7 @@ Agent 由各引擎网关自行管理，Sidecar 负责产品层能力（授权、
 **即搬即用（引擎运行时都在项目内，不依赖全局安装）**：
 - **OpenClaw**：打包的 npm 包 `runtime/openclaw` + 便携 `runtime/data/node.exe`（v24）运行；
   Sidecar 的 `GatewayManager` 用它启停（`openclaw_node`/`openclaw_entry` 可覆盖，未打包时回退全局 `openclaw` 命令）。
-  状态仍在 `~/.openclaw`（OpenClaw 自身设计）。
+  状态固定在项目内 `runtime/openclaw-home`，不会写入客户电脑的用户目录。
 - **Hermes**：PyPI 包 `hermes-agent`（装进 `runtime/hermes-libs`）+ 便携 Python（见下，不需源码）。
 - **Codex**：npm 包 `@openai/codex`（装进 `runtime/codex`，内含预编译原生二进制，无需 Rust），
   家目录固定 `runtime/codex-home`（`CODEX_HOME` 由 Sidecar 注入，不受全局环境影响）。
@@ -114,13 +114,22 @@ item.completed / turn.completed …）归一化成与 Hermes 一致的 SSE 词�
 
 ## 启动
 
-**一键启动**（推荐）：双击运行 `start-all.bat`，会在 6 个独立窗口启动全部服务（含 Hermes 网关），
-关闭窗口即停止对应服务。停止全部服务用 `stop-all.bat`。首次使用需先跑 `bootstrap-openclaw.bat`、`bootstrap-hermes.bat`（用 Codex 引擎再加跑 `bootstrap-codex.bat`）。
+## 便携包使用
+
+解压到任意本地目录后，进入**包含 `LXUP-Launcher.exe` 的那一层目录**，直接双击 `LXUP-Launcher.exe` 或 `start-all.bat`。两种启动方式都只按当前解压目录寻找运行时，不依赖原电脑的盘符、全局 Node.js 或全局 Python。
+
+建议把最终目录放在某个盘符根目录下的短路径，不要放在多层桌面/下载目录，也不要重复套成 `长目录\LXUP\LXUP`。压缩包文件名可以任意，但运行根目录必须是启动器所在目录；路径过长时 Windows 解压工具可能先丢失深层依赖文件。
+
+停止服务请运行 `stop-all.bat`。它按 LXUP 使用的端口终止进程树；若端口进程属于其他 Windows 账户，需要以管理员身份运行。
+
+便携包不含本机 API Key、Codex/OpenClaw 登录态、聊天会话、日志或本机激活状态。首次启动后按控制台页面完成自己的模型配置和激活即可。
+
+**一键启动**（推荐）：双击运行 `start-all.bat`，它和 `LXUP-Launcher.exe` 使用同一套单实例启动逻辑，会逐个等待服务端口就绪；重复点击不会再叠加一批进程。服务日志写入 `runtime\logs`，停止全部服务用 `stop-all.bat`。本发行包已经内置 Node、Python、Hermes、OpenClaw、Codex、前端和插件依赖，正常使用不需要联网运行 bootstrap 脚本；bootstrap 脚本仅用于开发者重新构建运行时。
 
 手动启动（每个服务一个终端）：
 
 ```bash
-# 1. OpenClaw 网关（状态在 ~/.openclaw，workspace 指向 runtime/workspace）
+# 1. OpenClaw 网关（状态在 runtime/openclaw-home，workspace 指向 runtime/workspace）
 openclaw gateway --port 18789 --force
 
 # 2. Hermes 网关（便携 Python + vendored 源码，api_server :8642；需先 bootstrap）

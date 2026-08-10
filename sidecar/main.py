@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 
 from .config import GatewayConfig
 from .database import close_database, init_database
-from .routes import browser, codex, gateway_routes, health, hermes, license, weixin_login_routes
+from .routes import browser, codex, gateway_routes, health, hermes, license, models_auth, weixin_login_routes
 from .services.codex_manager import CodexManager
 from .services.gateway_manager import GatewayManager
 from .services.hermes_manager import HermesManager
@@ -163,6 +163,7 @@ def create_app(config: GatewayConfig) -> FastAPI:
     app.include_router(gateway_routes.router)
     app.include_router(hermes.router)
     app.include_router(codex.router)
+    app.include_router(models_auth.router)
     app.include_router(browser.router)
 
     return app

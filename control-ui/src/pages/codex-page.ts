@@ -131,7 +131,7 @@ export class CodexPage extends LitElement {
             <p style="font-size:12px;color:var(--text-soft);margin:0 0 16px;line-height:1.6;">${L('common.codexConfigHint')}</p>
             <div class="form-group">
               <label class="form-label">${L('common.workspaceDir')}</label>
-              <input class="form-input" .value=${this._config.workspace} placeholder="C:\my-project" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+              <input class="form-input" .value=${this._config.workspace} placeholder=".\workspace" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
             </div>
             <div class="form-group">
               <label class="form-label">${L('common.apiKey')}</label>
