@@ -264,7 +264,11 @@ export class HermesChatEngine implements ChatEngine {
           sid = s.id;
         }
       } catch (e: unknown) {
-        onEvent({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+        let errMsg = e instanceof Error ? e.message : String(e);
+        if (/api.?key|apikey|unauthorized|401|403|invalid.*key|认证|密钥|授权/i.test(errMsg)) {
+          errMsg += ' — ' + L('chat.hermesCheckApiKey');
+        }
+        onEvent({ type: 'error', message: errMsg });
         onEvent({ type: 'final' });
         return;
       }
@@ -316,9 +320,15 @@ export class HermesChatEngine implements ChatEngine {
             }
             break;
           }
-          case 'error':
-            onEvent({ type: 'error', message: String(d.message ?? L('common.hermesErrorPlain')) });
+          case 'error': {
+            let msg = String(d.message ?? L('common.hermesErrorPlain'));
+            // 检测 API Key / 模型配置相关错误 → 提示用户检查仪表盘
+            if (/api.?key|apikey|unauthorized|401|403|invalid.*key|认证|密钥|授权|api.?key.*config/i.test(msg)) {
+              msg += ' — ' + L('chat.hermesCheckApiKey');
+            }
+            onEvent({ type: 'error', message: msg });
             break;
+          }
           case 'done':
             onEvent({ type: 'final' });
             break;

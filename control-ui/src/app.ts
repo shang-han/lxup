@@ -58,7 +58,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
   if (engine === 'hermes') {
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','extensions','settings'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','channels','extensions','settings'] },
     ];
     // hermes 引擎的技能页（skills2）由页面自身按 engine 切换数据源
   } else if (engine === 'codex') {
@@ -237,7 +237,7 @@ export class OpenClawApp extends LitElement {
       case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')}></ai-page>`;
       case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
       case 'settings': return html`<settings-page title=${title('settings')} subtitle=${sub('settings')} .theme=${this._theme} .themeMode=${this._themeMode} .snapshot=${this._snapshot} @set-theme=${(e:CustomEvent)=>this._setTheme(e.detail.value)} @set-mode=${(e:CustomEvent)=>this._setThemeMode(e.detail.value)}></settings-page>`;
-      case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')}></channels-page>`;
+      case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')} .engine=${this._engine}></channels-page>`;
       case 'models': return html`<models-page title=${title('models')} subtitle=${sub('models')}></models-page>`;
       case 'gateway': return html`<gateway-page title=${title('gateway')} subtitle=${sub('gateway')}></gateway-page>`;
       case 'diagnostics': return html`<diagnostics-page title=${title('diagnostics')} subtitle=${sub('diagnostics')}></diagnostics-page>`;

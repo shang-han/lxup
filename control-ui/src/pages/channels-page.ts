@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { property, state } from 'lit/decorators.js';
-import { L, i18n } from '../i18n/index.js';
+import { L, i18n, sidecarHeaders } from '../i18n/index.js';
 
 /** 列表分隔符：中文「、」/ 英文 ", " */
 const enumSep = () => (i18n.locale.startsWith('zh') ? '、' : ', ');
@@ -424,6 +424,7 @@ export class ChannelsPage extends LitElement {
 
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
+  @property({ type: String }) engine = 'openclaw';
 
   @state() _activeTab = 'channels'; // 'channels' | 'agents'
   @state() _dialogChannel = ''; // '' = closed, otherwise channel id
@@ -464,6 +465,21 @@ export class ChannelsPage extends LitElement {
   @state() _bindSaving = false;
   _storeUnsub: (() => void) | null = null;
 
+  // ── Hermes 渠道状态 ──
+  @state() _hermesBuiltin: any[] = [];
+  @state() _hermesPlugins: any[] = [];
+  @state() _hermesChannelDialog: string = '';  // 当前打开配置的渠道 id
+  @state() _hermesConfigForm: Record<string, string> = {};
+  @state() _hermesSaving = false;
+  @state() _hermesSaveMsg = '';
+  @state() _hermesSaveKind: '' | 'ok' | 'err' = '';
+  // Hermes 微信扫码（复用 openclaw 的 WS 桥接模式）
+  @state() _hWxStatus = 'idle';
+  @state() _hWxQr = '';
+  @state() _hWxMsg = '';
+  @state() _hWxUrl = '';
+  _hWxWs: WebSocket | null = null;
+
   connectedCallback() {
     super.connectedCallback();
     const store = getSharedStore();
@@ -472,13 +488,148 @@ export class ChannelsPage extends LitElement {
       this._bindConnected = snap.connected;
       if (snap.connected && !was) this._loadBindingData();
     });
+    if (this.engine === 'hermes') {
+      this._loadHermesChannels();
+    }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._storeUnsub?.();
     this._stopWeixinLogin();
+    this._stopHermesWeixinLogin();
     if (this._wechatCopyTimer) clearTimeout(this._wechatCopyTimer);
+  }
+
+  // ── Hermes 渠道加载 ──
+  async _loadHermesChannels() {
+    try {
+      const host = window.location.hostname || '127.0.0.1';
+      const r = await fetch(`http://${host}:7889/api/hermes/channels`, { headers: sidecarHeaders() });
+      if (!r.ok) return;
+      const d = await r.json() as { builtin?: any[]; plugins?: any[] };
+      this._hermesBuiltin = d.builtin || [];
+      this._hermesPlugins = d.plugins || [];
+    } catch { /* sidecar 离线 */ }
+  }
+
+  async _hermesEnableChannel(platformId: string) {
+    try {
+      const host = window.location.hostname || '127.0.0.1';
+      await fetch(`http://${host}:7889/api/hermes/channels/${platformId}/enable`, {
+        method: 'POST', headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+      });
+      await this._loadHermesChannels();
+    } catch { /* ignore */ }
+  }
+
+  async _hermesDisableChannel(platformId: string) {
+    try {
+      const host = window.location.hostname || '127.0.0.1';
+      await fetch(`http://${host}:7889/api/hermes/channels/${platformId}/disable`, {
+        method: 'POST', headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+      });
+      await this._loadHermesChannels();
+    } catch { /* ignore */ }
+  }
+
+  async _hermesDeleteChannel(platformId: string) {
+    try {
+      const host = window.location.hostname || '127.0.0.1';
+      await fetch(`http://${host}:7889/api/hermes/channels/${platformId}`, {
+        method: 'DELETE', headers: sidecarHeaders(),
+      });
+      await this._loadHermesChannels();
+    } catch { /* ignore */ }
+  }
+
+  _openHermesChannelDialog(platformId: string) {
+    this._hermesChannelDialog = platformId;
+    this._hermesConfigForm = {};
+    this._hermesSaveMsg = '';
+    // 从现有配置中预填
+    const ch = this._hermesBuiltin.find(c => c.id === platformId);
+    if (ch) {
+      (ch.fields || []).forEach((f: string) => { this._hermesConfigForm[f] = ''; });
+    }
+  }
+
+  _closeHermesDialog() {
+    this._hermesChannelDialog = '';
+    this._hermesConfigForm = {};
+    this._hermesSaveMsg = '';
+  }
+
+  async _hermesSaveConfig(platformId: string) {
+    this._hermesSaving = true;
+    this._hermesSaveMsg = '';
+    try {
+      const host = window.location.hostname || '127.0.0.1';
+      // 将表单字段映射到 token + extra
+      const form = this._hermesConfigForm;
+      const token = form.token || form.botToken || form.apiKey || '';
+      const extra: Record<string, string> = {};
+      for (const [k, v] of Object.entries(form)) {
+        if (k !== 'token' && k !== 'botToken' && k !== 'apiKey' && v) {
+          extra[k] = v;
+        }
+      }
+      const r = await fetch(`http://${host}:7889/api/hermes/channels/${platformId}/config`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ enabled: true, token, extra }),
+      });
+      const d = await r.json() as { success?: boolean };
+      if (d.success) {
+        this._hermesSaveMsg = L('common.configSaved');
+        this._hermesSaveKind = 'ok';
+        await this._loadHermesChannels();
+      } else {
+        this._hermesSaveMsg = L('common.configSaveFailed');
+        this._hermesSaveKind = 'err';
+      }
+    } catch {
+      this._hermesSaveMsg = L('common.configSaveFailed');
+      this._hermesSaveKind = 'err';
+    }
+    this._hermesSaving = false;
+  }
+
+  // ── Hermes 微信扫码登录 ──
+  _startHermesWeixinLogin() {
+    if (this._hWxWs) return;
+    const host = window.location.hostname || '127.0.0.1';
+    const ws = new WebSocket(`ws://${host}:7889/api/hermes/ws/weixin-login`);
+    this._hWxWs = ws;
+    ws.onmessage = (ev) => {
+      try {
+        const snap = JSON.parse(ev.data);
+        this._hWxStatus = snap.status || 'idle';
+        this._hWxMsg = snap.message || '';
+        this._hWxQr = snap.qrDataUrl || '';
+        this._hWxUrl = snap.url || '';
+        if (snap.status === 'success') {
+          // 登录成功后刷新渠道列表
+          setTimeout(() => this._loadHermesChannels(), 1500);
+        }
+      } catch { /* ignore */ }
+    };
+    ws.onclose = () => { this._hWxWs = null; };
+    ws.onerror = () => { this._hWxWs = null; };
+    // 连接后自动启动
+    ws.onopen = () => { ws.send(JSON.stringify({ action: 'start' })); };
+  }
+
+  _stopHermesWeixinLogin() {
+    if (this._hWxWs) {
+      try { this._hWxWs.send(JSON.stringify({ action: 'stop' })); } catch { /* ignore */ }
+      this._hWxWs.close();
+      this._hWxWs = null;
+    }
+    this._hWxStatus = 'idle';
+    this._hWxQr = '';
+    this._hWxMsg = '';
+    this._hWxUrl = '';
   }
 
   async _loadBindingData() {
@@ -1175,6 +1326,9 @@ export class ChannelsPage extends LitElement {
   }
 
   render() {
+    if (this.engine === 'hermes') {
+      return this._renderHermes();
+    }
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
       <div class="channels-page">
@@ -1303,6 +1457,202 @@ export class ChannelsPage extends LitElement {
 
       </div>
     `;
+  }
+
+  // ── Hermes 渠道页面渲染 ──
+  _renderHermes() {
+    const enabled = this._hermesBuiltin.filter(c => c.enabled);
+    const available = this._hermesBuiltin.filter(c => !c.enabled);
+
+    return html`
+      <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
+      <div class="channels-page">
+        ${enabled.length ? html`
+          <div class="channels-section" style="margin-bottom:12px;">
+            <div class="channels-section__title">${L('hermesChannels.activeChannels')}</div>
+            <div class="channel-grid">
+              ${enabled.map(ch => this._renderHermesChannelCard(ch, true))}
+            </div>
+          </div>
+        ` : html`
+          <div class="channels-section" style="margin-bottom:12px;">
+            <div style="font-size:12px;color:var(--muted);padding:12px 0;">
+              ${L('hermesChannels.noActiveChannels')}
+            </div>
+          </div>
+        `}
+
+        ${available.length ? html`
+          <div class="channels-section" style="margin-bottom:12px;">
+            <div class="channels-section__title">${L('hermesChannels.availableChannels')}</div>
+            <div class="channel-grid">
+              ${available.map(ch => this._renderHermesChannelCard(ch, false))}
+            </div>
+          </div>
+        ` : ''}
+
+        ${this._hermesPlugins.length ? html`
+          <div class="channels-section">
+            <div class="channels-section__title">${L('hermesChannels.pluginChannels')}</div>
+            <div class="channel-grid">
+              ${this._hermesPlugins.map(p => this._renderHermesPluginCard(p))}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Hermes 渠道配置对话框 -->
+        ${this._hermesChannelDialog ? this._renderHermesChannelDialog() : ''}
+      </div>
+    `;
+  }
+
+  _renderHermesChannelCard(ch: any, isEnabled: boolean) {
+    const iconName = ch.icon || 'hash';
+    const statusClass = isEnabled ? '' : 'offline';
+    const statusText = isEnabled
+      ? (ch.configured ? L('hermesChannels.running') : L('hermesChannels.stopped'))
+      : L('hermesChannels.disabled');
+
+    return html`
+      <div class="channel-card" @click=${() => this._openHermesChannelDialog(ch.id)}>
+        <div class="channel-card__icon">${icons[iconName] || icons.hash}</div>
+        <div class="channel-card__name">${ch.label}</div>
+        <div class="channel-card__desc">${ch.desc}</div>
+        <div class="channel-card__badge ${statusClass}">
+          ${isEnabled ? L('hermesChannels.enabled') : L('hermesChannels.builtin')}
+        </div>
+      </div>
+    `;
+  }
+
+  _renderHermesPluginCard(p: any) {
+    return html`
+      <div class="channel-card" style="opacity:0.7;">
+        <div class="channel-card__icon">${icons[p.icon] || icons.hash}</div>
+        <div class="channel-card__name">${p.label}</div>
+        <div class="channel-card__desc">${p.desc}</div>
+        <div class="channel-card__badge offline">${L('hermesChannels.needPlugin')}</div>
+        <div style="margin-top:6px;font-size:10px;color:var(--muted);font-family:var(--font-mono);">
+          ${p.install_hint}
+        </div>
+      </div>
+    `;
+  }
+
+  _renderHermesChannelDialog() {
+    const platformId = this._hermesChannelDialog;
+    const ch = this._hermesBuiltin.find(c => c.id === platformId);
+    if (!ch) return '';
+
+    // 微信特殊处理：扫码登录
+    if (platformId === 'weixin') {
+      return this._renderHermesWeixinDialog(ch);
+    }
+
+    // 其他渠道：配置表单
+    const fields = ch.fields || [];
+    return html`
+      <oc-dialog .open=${true} @close=${() => this._closeHermesDialog()}>
+        <span slot="title">${ch.label} — ${L('hermesChannels.configure')}</span>
+        <div class="channel-dialog">
+          <div class="info-box" style="margin-bottom:14px;">
+            <div class="info-box__title">${ch.label}</div>
+            <div class="info-box__desc">${ch.desc}</div>
+          </div>
+
+          ${fields.map((f: string) => html`
+            <div class="form-group">
+              <label class="form-label">${this._hermesFieldLabel(f)}</label>
+              <input class="form-input"
+                type=${f === 'token' || f === 'password' || f === 'client_secret' || f === 'api_key' ? 'password' : 'text'}
+                placeholder=${this._hermesFieldPlaceholder(f)}
+                .value=${this._hermesConfigForm[f] || ''}
+                @input=${(e: Event) => { this._hermesConfigForm = { ...this._hermesConfigForm, [f]: (e.target as HTMLInputElement).value }; }}
+              />
+            </div>
+          `)}
+
+          ${this._hermesSaveMsg ? html`<div class="form-result ${this._hermesSaveKind}">${this._hermesSaveMsg}</div>` : ''}
+
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            <oc-btn size="lg" @click=${() => this._hermesSaveConfig(platformId)} ?disabled=${this._hermesSaving}>
+              ${this._hermesSaving ? L('common.loading') : L('hermesChannels.saveConfig')}
+            </oc-btn>
+            <oc-btn size="lg" @click=${() => this._closeHermesDialog()}>${L('common.cancel')}</oc-btn>
+          </div>
+        </div>
+      </oc-dialog>
+    `;
+  }
+
+  _renderHermesWeixinDialog(ch: any) {
+    return html`
+      <oc-dialog .open=${true} @close=${() => { this._closeHermesDialog(); this._stopHermesWeixinLogin(); }}>
+        <span slot="title">${L('hermesChannels.weixinLogin')}</span>
+        <div class="channel-dialog">
+          <div class="info-box" style="margin-bottom:14px;">
+            <div class="info-box__title">${L('hermesChannels.weixinLogin')}</div>
+            <div class="info-box__desc">${L('hermesChannels.weixinLoginDesc')}</div>
+          </div>
+
+          ${ch.enabled ? html`
+            <div style="margin-bottom:12px;font-size:12px;color:var(--success);">
+              ✓ ${L('hermesChannels.enabled')}
+            </div>
+          ` : ''}
+
+          <div class="wx-qr-area">
+            ${this._hWxQr
+              ? html`<img class="wx-qr-img" src=${this._hWxQr} alt="WeChat QR" />`
+              : html`<div class="wx-qr-placeholder">${this._hWxStatus === 'starting' ? '…' : ''}</div>`}
+            <div class="wx-qr-status ${this._hWxStatus}">${this._hWxMsg || L('hermesChannels.weixinWaiting')}</div>
+            ${this._hWxUrl ? html`
+              <a class="wx-qr-link" href=${this._hWxUrl} target="_blank" rel="noopener">${L('hermesChannels.weixinQrLink')}</a>
+            ` : ''}
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            ${this._hWxStatus === 'idle' || this._hWxStatus === 'error' ? html`
+              <oc-btn size="lg" @click=${() => this._startHermesWeixinLogin()}>${L('hermesChannels.scanToLogin')}</oc-btn>
+            ` : ''}
+            ${this._hWxStatus !== 'idle' ? html`
+              <oc-btn size="lg" @click=${() => this._stopHermesWeixinLogin()}>${L('common.stop')}</oc-btn>
+            ` : ''}
+            <oc-btn size="lg" @click=${() => { this._closeHermesDialog(); this._stopHermesWeixinLogin(); }}>
+              ${L('channels.close')}
+            </oc-btn>
+          </div>
+        </div>
+      </oc-dialog>
+    `;
+  }
+
+  _hermesFieldLabel(f: string): string {
+    const map: Record<string, string> = {
+      token: L('hermesChannels.tokenField'),
+      api_key: L('hermesChannels.apiKeyField'),
+      account_id: L('hermesChannels.accountIdField'),
+      base_url: L('hermesChannels.baseUrlField'),
+      app_id: 'App ID',
+      client_secret: 'Client Secret',
+      phone_number_id: 'Phone Number ID',
+      number: 'Phone Number',
+      server_url: 'Server URL',
+      password: 'Password',
+    };
+    return map[f] || f;
+  }
+
+  _hermesFieldPlaceholder(f: string): string {
+    const map: Record<string, string> = {
+      token: 'Enter token...',
+      api_key: 'sk-...',
+      account_id: 'Account ID',
+      base_url: 'https://...',
+      app_id: 'App ID',
+      client_secret: 'Client Secret',
+    };
+    return map[f] || '';
   }
 }
 

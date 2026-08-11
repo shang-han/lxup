@@ -49,7 +49,7 @@ class AuthMiddleware:
     /health 端点免认证（供 Tauri 健康检查轮询使用）。
     """
 
-    EXEMPT_PATHS = {"/health", "/ws/weixin-login"}  # WebSocket 的认证在握手阶段处理
+    EXEMPT_PATHS = {"/health", "/ws/weixin-login", "/api/hermes/ws/weixin-login"}  # WebSocket 的认证在握手阶段处理
 
     def __init__(self, app: FastAPI, token: str):
         self.app = app
