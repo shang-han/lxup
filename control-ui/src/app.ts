@@ -71,7 +71,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
       { heading: L('sections.Config'), tabs: ['models','agents','gateway','browser','channels'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','settings','diagnostics'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','cron','settings','diagnostics'] },
     ];
   }
   return sections

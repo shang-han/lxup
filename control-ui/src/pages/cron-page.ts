@@ -9,13 +9,9 @@ import '../components/oc-btn.js';
 /**
  * CronPage — AGENT 定时任务页
  *
- * 全部接网关真实 cron RPC（WS）：
- *   - cron.list    列表
- *   - cron.add     新建（name + schedule{kind:'cron',expr} + payload{kind:'systemEvent',text}）
- *   - cron.update  编辑 / 启停
- *   - cron.remove  删除
- *   - cron.run     立即触发一次
- *   - cron.status  调度器状态
+ * 按当前引擎接真实定时任务后端：
+ *   - OpenClaw：WS cron.list/add/update/remove/run/status
+ *   - Hermes：HTTP /api/jobs（列表、新建、PATCH、pause/resume、run、删除）
  */
 
 type CronJob = {
