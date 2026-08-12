@@ -115,6 +115,7 @@ export class AgentsPage extends LitElement {
       transition: border-color var(--duration-fast);
     }
     .channel-dialog .form-input:focus { border-color: var(--accent); }
+    .channel-dialog .form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 
     /* === detail view === */
     .agent-detail { width: 100%; padding-top: 20px; }
@@ -442,10 +443,11 @@ export class AgentsPage extends LitElement {
         if (this._formWorkspace.trim()) payload.workspace = this._formWorkspace.trim();
         await store.request('agents.update', payload);
       } else {
-        // agents.create 的网关 schema 要求 name；id 由网关根据 name 生成。
+        // agents.create 的网关 schema 要求 name + workspace；留空时自动落到
+        // runtime/workspace/agents/<名称>（相对网关 cwd=项目根解析，与 main 同级）
         const payload: any = { name: this._formName.trim() };
         if (this._formModel.trim()) payload.model = this._formModel.trim();
-        if (this._formWorkspace.trim()) payload.workspace = this._formWorkspace.trim();
+        payload.workspace = this._formWorkspace.trim() || `runtime/workspace/agents/${this._formName.trim()}`;
         await store.request('agents.create', payload);
       }
       this._closeDialog();
@@ -558,6 +560,7 @@ export class AgentsPage extends LitElement {
               placeholder=${L('agents.workspacePlaceholder')}
               @input=${(e: Event) => { this._formWorkspace = (e.target as HTMLInputElement).value; }}
             />
+            <div class="form-hint">${L('agents.workspaceDefaultHint')}</div>
           </div>
         </div>
         <div slot="footer">
