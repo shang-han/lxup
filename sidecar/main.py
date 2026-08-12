@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 
 from .config import GatewayConfig
 from .database import close_database, init_database
-from .routes import browser, codex, gateway_routes, health, hermes, license, weixin_login_routes
+from .routes import browser, codex, gateway_routes, health, hermes, license, models_auth, weixin_login_routes
 from .services.codex_manager import CodexManager
 from .services.gateway_manager import GatewayManager
 from .services.hermes_manager import HermesManager
@@ -49,7 +49,7 @@ class AuthMiddleware:
     /health 端点免认证（供 Tauri 健康检查轮询使用）。
     """
 
-    EXEMPT_PATHS = {"/health", "/ws/weixin-login"}  # WebSocket 的认证在握手阶段处理
+    EXEMPT_PATHS = {"/health", "/ws/weixin-login", "/api/hermes/ws/weixin-login"}  # WebSocket 的认证在握手阶段处理
 
     def __init__(self, app: FastAPI, token: str):
         self.app = app
@@ -163,6 +163,7 @@ def create_app(config: GatewayConfig) -> FastAPI:
     app.include_router(gateway_routes.router)
     app.include_router(hermes.router)
     app.include_router(codex.router)
+    app.include_router(models_auth.router)
     app.include_router(browser.router)
 
     return app

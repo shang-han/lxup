@@ -3,7 +3,7 @@
 独立于 OpenClaw / Hermes 网关的轻量 AI 助手服务。**不经过网关**，直接对接 OpenAI
 兼容的 LLM 接口，自带命令行执行能力、设置页面与多会话管理。
 
-参考自 `D:\yangping\龙虾+爱马仕合体智能`（server.js），精简为纯净版：
+参考既有助手实现（`server.js`），精简为纯净版：
 去掉双智能体、多服务商硬编码、技能库、License/USB 绑定、全权限等。
 
 ## 功能
@@ -11,7 +11,7 @@
 - 与 LLM 多轮对话（OpenAI 兼容接口）
 - **Function calling 工具环**：模型可调用 `run_command` 在本地执行命令行
   （Windows 用 cmd，macOS/Linux 用 bash），执行结果回填给模型继续推理
-- **设置页面**：API Key / Base URL / 模型 / 工具轮次 直接在网页左下角「⚙ 模型设置」
+- **设置页面**：API Key / Base URL / 模型 / 工具轮次直接在网页右上角「⚙ 设置」
   里配置，支持一键测试连通性。Key 仅保存在本机 `data/config.json`。
 - **多会话管理**：左侧栏真实会话列表，可新建 / 切换 / 重命名 / 删除，消息与工具
   调用记录持久化在 `data/conversations/`（每会话一个 JSON）。
@@ -26,7 +26,7 @@ cd ai-assistant
 node server.js            # 或双击 start.bat（Windows）
 ```
 
-浏览器打开 http://localhost:8080/ → 左下角「⚙ 模型设置」填入 API Key → 保存即可开聊。
+浏览器打开 http://localhost:8080/ → 右上角「⚙ 设置」选择已配置模型 → 保存即可开聊。
 
 ## 配置
 

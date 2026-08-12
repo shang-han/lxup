@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 import yaml
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from ..i18n import tr, ui_lang
@@ -575,3 +575,251 @@ async def log_content(request: Request, file: str, lines: int = 200):
         all_lines = []
     n = max(1, min(int(lines or 200), 5000))
     return {"name": p.name, "lines": all_lines[-n:]}
+
+
+# ── 渠道管理（Hermes 平台适配器）──
+
+# 内置平台适配器清单（已在 hermes-libs/gateway/platforms/ 中实现）
+HERMES_BUILTIN_PLATFORMS = {
+    "weixin": {
+        "label": "微信", "icon": "message-circle", "prebuilt": True,
+        "desc": "通过微信扫码接入个人微信",
+        "fields": ["account_id", "token", "base_url"],
+    },
+    "qqbot": {
+        "label": "QQ Bot", "icon": "chat-bubble", "prebuilt": False,
+        "desc": "QQ 官方机器人接口",
+        "fields": ["app_id", "client_secret"],
+    },
+    "whatsapp": {
+        "label": "WhatsApp", "icon": "phone", "prebuilt": False,
+        "desc": "WhatsApp Cloud API",
+        "fields": ["token", "phone_number_id"],
+    },
+    "signal": {
+        "label": "Signal", "icon": "shield", "prebuilt": False,
+        "desc": "Signal 消息平台",
+        "fields": ["number"],
+    },
+    "bluebubbles": {
+        "label": "iMessage", "icon": "message-square", "prebuilt": False,
+        "desc": "通过 BlueBubbles 接入 iMessage",
+        "fields": ["server_url", "password"],
+    },
+    "yuanbao": {
+        "label": "元宝", "icon": "coins", "prebuilt": False,
+        "desc": "腾讯元宝接入",
+        "fields": ["token"],
+    },
+}
+
+# 需要插件的渠道（内置在 hermes-libs/plugins/platforms/ 但未默认启用）
+HERMES_PLUGIN_PLATFORMS = {
+    "telegram": {
+        "label": "Telegram", "icon": "send",
+        "desc": "Telegram Bot API",
+        "install_hint": "hermes plugin install telegram",
+    },
+    "discord": {
+        "label": "Discord", "icon": "hash",
+        "desc": "Discord Bot",
+        "install_hint": "hermes plugin install discord",
+    },
+    "slack": {
+        "label": "Slack", "icon": "hash",
+        "desc": "Slack Bot (Socket Mode)",
+        "install_hint": "hermes plugin install slack",
+    },
+    "feishu": {
+        "label": "飞书", "icon": "hash",
+        "desc": "飞书企业自建应用",
+        "install_hint": "hermes plugin install feishu",
+    },
+    "dingtalk": {
+        "label": "钉钉", "icon": "hash",
+        "desc": "钉钉企业内部应用",
+        "install_hint": "hermes plugin install dingtalk",
+    },
+    "teams": {
+        "label": "MS Teams", "icon": "users",
+        "desc": "Microsoft Teams Bot",
+        "install_hint": "hermes plugin install teams",
+    },
+    "matrix": {
+        "label": "Matrix", "icon": "globe",
+        "desc": "Matrix 开放协议",
+        "install_hint": "hermes plugin install matrix",
+    },
+}
+
+
+@router.get("/channels")
+async def get_channels(request: Request):
+    """获取 Hermes 渠道状态：内置 + 插件 + 当前配置"""
+    cfg = _load_config(_config_path(request))
+    platforms_cfg = cfg.get("platforms") or {}
+    if not isinstance(platforms_cfg, dict):
+        platforms_cfg = {}
+
+    builtin_list = []
+    for name, meta in HERMES_BUILTIN_PLATFORMS.items():
+        plat_cfg = platforms_cfg.get(name) or {}
+        enabled = bool(plat_cfg.get("enabled"))
+        builtin_list.append({
+            "id": name,
+            "label": meta["label"],
+            "icon": meta["icon"],
+            "desc": meta["desc"],
+            "prebuilt": meta["prebuilt"],
+            "enabled": enabled,
+            "configured": bool(plat_cfg.get("token") or plat_cfg.get("extra")),
+            "fields": meta["fields"],
+        })
+
+    plugin_list = []
+    for name, meta in HERMES_PLUGIN_PLATFORMS.items():
+        plugin_list.append({
+            "id": name,
+            "label": meta["label"],
+            "icon": meta["icon"],
+            "desc": meta["desc"],
+            "install_hint": meta["install_hint"],
+        })
+
+    return {
+        "builtin": builtin_list,
+        "plugins": plugin_list,
+    }
+
+
+class HermesChannelConfigRequest(BaseModel):
+    """保存渠道配置"""
+    enabled: bool = True
+    token: str = ""
+    extra: dict = Field(default_factory=dict)
+
+
+@router.post("/channels/{platform}/config")
+async def set_channel_config(request: Request, platform: str, body: HermesChannelConfigRequest):
+    """保存渠道配置（写 config.yaml platforms.{name} 段）"""
+    if platform not in HERMES_BUILTIN_PLATFORMS:
+        raise HTTPException(status_code=404, detail=f"Unknown platform: {platform}")
+    path = _config_path(request)
+    cfg = _load_config(path)
+    platforms = cfg.setdefault("platforms", {})
+    plat_cfg: dict = platforms.setdefault(platform, {})
+    plat_cfg["enabled"] = body.enabled
+    if body.token:
+        plat_cfg["token"] = body.token
+    if body.extra:
+        plat_cfg.setdefault("extra", {}).update(body.extra)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    logger.info("Hermes 渠道配置已更新: %s (enabled=%s)", platform, body.enabled)
+    return {"success": True, "platform": platform, "enabled": body.enabled}
+
+
+@router.post("/channels/{platform}/enable")
+async def enable_channel(request: Request, platform: str):
+    """启用渠道"""
+    if platform not in HERMES_BUILTIN_PLATFORMS:
+        raise HTTPException(status_code=404, detail=f"Unknown platform: {platform}")
+    path = _config_path(request)
+    cfg = _load_config(path)
+    platforms = cfg.setdefault("platforms", {})
+    plat_cfg: dict = platforms.setdefault(platform, {})
+    plat_cfg["enabled"] = True
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    logger.info("Hermes 渠道已启用: %s", platform)
+    return {"success": True, "platform": platform, "enabled": True}
+
+
+@router.post("/channels/{platform}/disable")
+async def disable_channel(request: Request, platform: str):
+    """停用渠道"""
+    path = _config_path(request)
+    cfg = _load_config(path)
+    platforms = cfg.get("platforms") or {}
+    if platform in platforms:
+        platforms[platform]["enabled"] = False
+        cfg["platforms"] = platforms
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        logger.info("Hermes 渠道已停用: %s", platform)
+    return {"success": True, "platform": platform, "enabled": False}
+
+
+@router.delete("/channels/{platform}")
+async def delete_channel(request: Request, platform: str):
+    """删除渠道配置"""
+    path = _config_path(request)
+    cfg = _load_config(path)
+    platforms = cfg.get("platforms") or {}
+    if platform in platforms:
+        del platforms[platform]
+        cfg["platforms"] = platforms
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        logger.info("Hermes 渠道配置已删除: %s", platform)
+    return {"success": True, "platform": platform}
+
+
+# ── 微信扫码登录 WebSocket ──
+
+
+@router.websocket("/ws/weixin-login")
+async def hermes_weixin_login_ws(ws: WebSocket) -> None:
+    """Hermes 微信扫码登录 WebSocket 端点
+
+    前端「消息渠道 → 微信 → 扫码登录」连接此端点：
+      客户端 → {"action":"start"}   启动登录
+      客户端 → {"action":"stop"}    取消
+      服务端 → {"status","message","url","qrDataUrl"}  状态推送
+
+    状态机: idle → starting → qr_ready(带二维码) → waiting_scan → success/error
+    """
+    await ws.accept()
+    from ..services.hermes_weixin_login import get_session
+    session = get_session()
+
+    async def push(snapshot: dict) -> None:
+        try:
+            await ws.send_json(snapshot)
+        except Exception:
+            pass
+
+    session.add_listener(push)
+    # 连接即推送当前状态
+    await push(session.snapshot())
+
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            action = msg.get("action")
+            if action == "start":
+                await session.start()
+            elif action == "stop":
+                await session.stop()
+    except WebSocketDisconnect:
+        logger.info("hermes weixin-login WebSocket 断开")
+    except Exception:
+        logger.exception("hermes weixin-login WebSocket 异常")
+    finally:
+        session.remove_listener(push)

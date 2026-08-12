@@ -41,6 +41,8 @@ class GatewayManager:
         self.config = config
         self.port = config.openclaw_port
         self.cmd = config.openclaw_cmd
+        # Prevent concurrent UI requests from killing/restarting the same gateway.
+        self._operation_lock = asyncio.Lock()
         # 便携运行：项目内 node.exe + 打包的 openclaw（留空用默认路径）
         self._node_exe = config.openclaw_node or os.path.join(
             PROJECT_ROOT, "runtime", "data", "node.exe"
@@ -84,7 +86,9 @@ class GatewayManager:
 
     async def _is_reachable(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=3) as client:
+            # The desktop environment may provide a system proxy. Gateway health
+            # checks are local and must bypass it, otherwise 127.0.0.1 can return 502.
+            async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
                 r = await client.get(f"http://127.0.0.1:{self.port}/health")
                 return r.status_code == 200
         except Exception:
@@ -93,6 +97,10 @@ class GatewayManager:
     # ── 停止 ──────────────────────────────────────────
 
     async def stop(self) -> dict:
+        async with self._operation_lock:
+            return await self._stop_unlocked()
+
+    async def _stop_unlocked(self) -> dict:
         """结束监听网关端口的进程"""
         pid = await self._find_pid_on_port(self.port)
         if pid is None:
@@ -109,6 +117,33 @@ class GatewayManager:
     # ── 启动 ──────────────────────────────────────────
 
     async def start(self) -> dict:
+        async with self._operation_lock:
+            return await self._start_unlocked()
+
+    async def _start_unlocked(self) -> dict:
+        # Status polling can briefly see 502 while an existing gateway is booting.
+        # Never use --force against a healthy/almost-ready instance.
+        if await self._is_reachable():
+            pid = await self._find_pid_on_port(self.port)
+            logger.info("网关已在运行，忽略重复启动 (pid=%s)", pid)
+            return {"started": True, "already_running": True, "pid": pid,
+                    "message": "网关已在运行"}
+
+        existing_pid = await self._find_pid_on_port(self.port)
+        if existing_pid is not None:
+            for _ in range(30):
+                await asyncio.sleep(0.5)
+                if await self._is_reachable():
+                    pid = await self._find_pid_on_port(self.port)
+                    logger.info("网关启动中，已就绪，忽略重复启动 (pid=%s)", pid)
+                    return {"started": True, "already_running": True, "pid": pid,
+                            "message": "网关已在运行"}
+                if await self._find_pid_on_port(self.port) is None:
+                    break
+            else:
+                return {"started": False, "reason": "port_in_use", "pid": existing_pid,
+                        "message": f"网关端口 {self.port} 正被进程 PID {existing_pid} 占用"}
+
         """以分离进程启动网关（--force 会接管已有端口）"""
         os.makedirs(os.path.dirname(self._log_path), exist_ok=True)
         log_file = open(self._log_path, "a", encoding="utf-8")
@@ -127,7 +162,7 @@ class GatewayManager:
             return {"started": False, "message": f"启动失败: {e}"}
 
         # 等待网关就绪
-        for _ in range(30):
+        for _ in range(120):
             await asyncio.sleep(1)
             if await self._is_reachable():
                 pid = await self._find_pid_on_port(self.port)
@@ -139,10 +174,11 @@ class GatewayManager:
 
     async def restart(self) -> dict:
         """重启 = 停止后启动"""
-        await self.stop()
-        result = await self.start()
-        result["restarted"] = result.get("started", False)
-        return result
+        async with self._operation_lock:
+            await self._stop_unlocked()
+            result = await self._start_unlocked()
+            result["restarted"] = result.get("started", False)
+            return result
 
     # ── 进程工具（Windows）────────────────────────────
 

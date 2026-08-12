@@ -46,12 +46,22 @@ NODE = os.path.join(RUNTIME, "data", "node.exe")
 OPENCLAW_ENTRY = os.path.join(
     RUNTIME, "openclaw", "node_modules", "openclaw", "openclaw.mjs")
 VITE_JS = os.path.join(ROOT, "control-ui", "node_modules", "vite", "bin", "vite.js")
+VITE_CLI_JS = os.path.join(
+    ROOT, "control-ui", "node_modules", "vite", "dist", "node", "cli.js")
 AI_SERVER_JS = os.path.join(ROOT, "ai-assistant", "server.js")
 
 FRONTEND_PORT = 5173
 SIDECAR_PORT = 7889
 LOCK_PORT = 47889           # 单实例锁端口(仅 bind, 不通信)
 FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
+
+SERVICE_PORTS = {
+    "sidecar": SIDECAR_PORT,
+    "openclaw": 18789,
+    "hermes": 8642,
+    "ai-assistant": 8080,
+    "frontend": FRONTEND_PORT,
+}
 
 # Windows 进程标志: 无控制台窗口 + 新进程组。分离运行, 父进程(启动器)
 # 退出后子进程继续存活; 且不弹黑框。
@@ -112,12 +122,43 @@ def portable_python():
     return None
 
 
+def path_health():
+    """检查 Windows 长路径余量，跳过明确的用户状态目录。"""
+    longest = ROOT
+    skipped = (os.path.join(RUNTIME, "openclaw-home"),
+               os.path.join(RUNTIME, "codex-home"),
+               os.path.join(RUNTIME, "hermes-home"),
+               LOG_DIR)
+    try:
+        for base, dirs, files in os.walk(ROOT):
+            dirs[:] = [d for d in dirs
+                       if not any(os.path.join(base, d).startswith(p)
+                                  for p in skipped)]
+            for name in files:
+                full = os.path.join(base, name)
+                if len(full) > len(longest):
+                    longest = full
+    except OSError as exc:
+        return None, f"扫描目录长度失败: {exc}"
+    if len(longest) >= 235:
+        return ("当前解压目录路径过长(最长路径 {} 个字符): {}。"
+                "请把整个 LXUP 文件夹移动到某个盘符根目录下的短目录后重试。"
+                .format(len(longest), longest)), None
+    return None, None
+
+
 def preflight():
     """前置检查。返回 (python_exe, fatal_errors, warnings)。
 
     fatal_errors 非空时一个服务都不允许拉起。
     """
     fatals, warns = [], []
+
+    path_error, path_warning = path_health()
+    if path_error:
+        fatals.append(path_error)
+    if path_warning:
+        warns.append(path_warning)
 
     py = portable_python()
     if py is None:
@@ -136,28 +177,25 @@ def preflight():
             "便携 node.exe 缺失(runtime/data/node.exe), "
             "请先运行 bootstrap-openclaw.bat")
 
-    # 跨实例端口冲突: 五个服务端口若已被另一份 LXUP/OpenClaw 占用,
-    # 照拉会静默串到对方实例(Hermes 端口被占时尤其隐蔽), 直接判致命
-    for port in (SIDECAR_PORT, 18789, 8642, 8080, 5173):
-        if port_open(port):
-            fatals.append(
-                f"端口 {port} 已被占用: 另一个 LXUP/OpenClaw 实例正在运行, "
-                "请先 stop-all.bat 或关掉其窗口再启动")
-
-    for name, path in (("OpenClaw 入口", OPENCLAW_ENTRY),
-                       ("前端 vite", VITE_JS),
-                       ("AI 助手 server.js", AI_SERVER_JS)):
+    for name, path in (
+        ("Sidecar 入口", os.path.join(ROOT, "sidecar", "main.py")),
+        ("Hermes 入口", os.path.join(RUNTIME, "hermes-libs", "hermes_cli", "main.py")),
+        ("OpenClaw 入口", OPENCLAW_ENTRY),
+        ("前端 vite 启动脚本", VITE_JS),
+        ("前端 vite CLI", VITE_CLI_JS),
+        ("AI 助手 server.js", AI_SERVER_JS),
+    ):
         if not os.path.isfile(path):
-            warns.append(f"{name} 不存在({path}), 将跳过该服务")
+            fatals.append(f"{name} 不存在({path})。压包不完整，请重新解压完整 ZIP。")
 
     return py, fatals, warns
 
 
 def spawn(name: str, argv: list, cwd: str, env: dict = None,
-          logfile: str = None, dry_run: bool = False) -> None:
+          logfile: str = None, dry_run: bool = False):
     if dry_run:
         log(f"[dry-run] {name}: cwd={cwd}  {' '.join(argv)}")
-        return
+        return None
     out = subprocess.DEVNULL
     if logfile:
         try:
@@ -168,20 +206,16 @@ def spawn(name: str, argv: list, cwd: str, env: dict = None,
     if env:
         full_env.update(env)
     try:
-        subprocess.Popen(
+        process = subprocess.Popen(
             argv, cwd=cwd, env=full_env,
             stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-            creationflags=DETACHED, close_fds=True,
+            creationflags=DETACHED,
         )
         log(f"已拉起 {name}")
+        return process
     except Exception as e:  # noqa: BLE001
         log(f"[ERROR] 拉起 {name} 失败: {e}")
-    finally:
-        if out is not subprocess.DEVNULL:
-            try:
-                out.close()
-            except Exception:
-                pass
+        return None
 
 
 def base_env() -> dict:
@@ -192,27 +226,88 @@ def base_env() -> dict:
     }
 
 
-def start_services(py: str, dry_run: bool = False) -> None:
+def wait_for_port(port: int, process=None, timeout: int = 60) -> bool:
+    """等待一个服务真正监听端口；进程提前退出时立即失败。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if port_open(port):
+            return True
+        if process is not None and process.poll() is not None:
+            return False
+        time.sleep(1)
+    return port_open(port)
+
+
+def stop_started(processes: list) -> None:
+    """启动失败时只回收本次启动的进程树，避免留下半套服务。"""
+    for process in reversed(processes):
+        if process is None or process.poll() is not None:
+            continue
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False, creationflags=CREATE_NO_WINDOW,
+            )
+        except Exception:
+            pass
+
+
+def start_services(py: str, dry_run: bool = False) -> bool:
     os.makedirs(LOG_DIR, exist_ok=True)
     env = base_env()
 
+    if not dry_run:
+        for state_dir, patterns in (
+            (os.path.join(RUNTIME, "openclaw-home", "state"), ("*.sqlite-wal", "*.sqlite-shm")),
+        ):
+            if os.path.isdir(state_dir):
+                for pattern in patterns:
+                    import glob as _glob
+                    for stale in _glob.glob(os.path.join(state_dir, pattern)):
+                        try:
+                            os.remove(stale)
+                            log(f"已清理崩溃残留文件: {stale}")
+                        except OSError:
+                            pass
+
+    started = []
+
+    def launch(name, argv, cwd, service_env, logfile, port, timeout=60):
+        process = spawn(name, argv, cwd=cwd, env=service_env,
+                        logfile=logfile, dry_run=dry_run)
+        if dry_run:
+            return True
+        if process is None or not wait_for_port(port, process=process, timeout=timeout):
+            log(f"[ERROR] {name} 未在预期时间内监听 {port}，请查看 runtime/logs/{logfile}")
+            stop_started(started + ([process] if process else []))
+            return False
+        log(f"{name} 已就绪: 127.0.0.1:{port}")
+        started.append(process)
+        return True
+
     # 1. Sidecar(:7889)授权 + 微信登录桥接
-    spawn("sidecar",
-          [py, "-m", "sidecar.main",
-           "--db-path", os.path.join(RUNTIME, "data", "gateway.db"),
-           "--port", str(SIDECAR_PORT)],
-          cwd=ROOT, env=env, logfile="sidecar.log", dry_run=dry_run)
+    if not launch(
+        "sidecar",
+        [py, "-m", "sidecar.main",
+         "--db-path", os.path.join(RUNTIME, "data", "gateway.db"),
+         "--port", str(SIDECAR_PORT)],
+        cwd=ROOT, service_env=env, logfile="sidecar.log", port=SIDECAR_PORT,
+    ):
+        return False
 
     # 2. OpenClaw 网关(:18789)—— 便携 Python 置顶 PATH,
     #    agent 命令里的裸 `python`(通用工具技能脚本)即解析到便携解释器
     if os.path.isfile(OPENCLAW_ENTRY) and os.path.isfile(NODE):
         gw_env = dict(env)
         gw_env["PATH"] = os.path.dirname(py) + os.pathsep + gw_env.get("PATH", os.environ.get("PATH", ""))
-        spawn("openclaw",
-              [NODE, OPENCLAW_ENTRY, "gateway", "--port", "18789", "--force"],
-              cwd=ROOT, env=gw_env, logfile="openclaw-gateway.log", dry_run=dry_run)
-    else:
-        log("[SKIP] openclaw: 入口或 node.exe 缺失")
+        if not launch(
+            "openclaw",
+            [NODE, OPENCLAW_ENTRY, "gateway", "--port", "18789", "--force"],
+            cwd=ROOT, service_env=gw_env, logfile="openclaw-gateway.log", port=18789,
+            timeout=120,
+        ):
+            return False
 
     # 3. Hermes 网关(:8642)— 对齐 start-hermes.bat 的环境变量
     hermes_home = os.path.join(RUNTIME, "hermes-home")
@@ -229,27 +324,31 @@ def start_services(py: str, dry_run: bool = False) -> None:
         "API_SERVER_KEY": "lxup-hermes-dev-2026",
         "API_SERVER_CORS_ORIGINS": "*",
     })
-    spawn("hermes",
-          [py, "-m", "hermes_cli.main", "gateway", "run"],
-          cwd=ROOT, env=hermes_env, logfile="hermes-gateway.log", dry_run=dry_run)
+    if not launch(
+        "hermes",
+        [py, "-m", "hermes_cli.main", "gateway", "run", "--replace"],
+        cwd=ROOT, service_env=hermes_env, logfile="hermes-gateway.log", port=8642,
+    ):
+        return False
 
     # 4. AI 助手(:8080)
-    if os.path.isfile(AI_SERVER_JS) and os.path.isfile(NODE):
-        spawn("ai-assistant",
-              [NODE, "server.js"],
-              cwd=os.path.join(ROOT, "ai-assistant"), env=env,
-              logfile="ai-assistant.log", dry_run=dry_run)
-    else:
-        log("[SKIP] ai-assistant: server.js 或 node.exe 缺失")
+    if not launch(
+        "ai-assistant",
+        [NODE, "server.js"],
+        cwd=os.path.join(ROOT, "ai-assistant"), service_env=env,
+        logfile="ai-assistant.log", port=8080,
+    ):
+        return False
 
     # 5. 控制台前端(:5173)
-    if os.path.isfile(VITE_JS) and os.path.isfile(NODE):
-        spawn("frontend",
-              [NODE, os.path.join("node_modules", "vite", "bin", "vite.js")],
-              cwd=os.path.join(ROOT, "control-ui"), env=env,
-              logfile="frontend.log", dry_run=dry_run)
-    else:
-        log("[SKIP] frontend: vite 或 node.exe 缺失")
+    if not launch(
+        "frontend",
+        [NODE, VITE_JS],
+        cwd=os.path.join(ROOT, "control-ui"), service_env=env,
+        logfile="frontend.log", port=FRONTEND_PORT,
+    ):
+        return False
+    return True
 
 
 def wait_for_frontend(timeout: int = 90) -> bool:
@@ -283,10 +382,15 @@ def main() -> int:
         if not acquire_lock():
             log(f"另一个启动器实例正在运行(端口 {LOCK_PORT} 已被占用), 本次直接退出")
             return 0
-        if port_open(SIDECAR_PORT) and port_open(FRONTEND_PORT):
-            log("检测到服务已在运行, 直接打开浏览器")
+        running = [name for name, port in SERVICE_PORTS.items() if port_open(port)]
+        if len(running) == len(SERVICE_PORTS):
+            log("检测到全部服务已在运行, 直接打开浏览器")
             open_browser()
             return 0
+        if running:
+            log("[ERROR] 检测到部分服务已经运行: " + ", ".join(running))
+            log("[ERROR] 为避免重复进程，本次不再启动。请先运行 stop-all.bat，再重新启动。")
+            return 2
 
     py, fatals, warns = preflight()
     for w in warns:
@@ -297,7 +401,9 @@ def main() -> int:
         log("[FATAL] 前置条件不满足, 未启动任何服务。修复后重试。")
         return 1
 
-    start_services(py, dry_run=dry_run)
+    if not start_services(py, dry_run=dry_run):
+        log("[FATAL] 服务启动失败，已回收本次已启动的进程。")
+        return 1
     if dry_run:
         return 0
 

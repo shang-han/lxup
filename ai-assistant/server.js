@@ -41,6 +41,7 @@ const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const CONV_DIR = path.join(DATA_DIR, 'conversations');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+const OPENCLAW_CONFIG_PATH = path.join(ROOT, '..', 'runtime', 'openclaw-home', 'openclaw.json');
 const isWindows = process.platform === 'win32';
 
 function ensureDirs() {
@@ -83,6 +84,48 @@ function readConfigJson() {
   }
 }
 
+function readOpenClawConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8'));
+  } catch (e) {
+    return {};
+  }
+}
+
+function isSecretPlaceholder(value) {
+  const text = String(value || '');
+  return !text || text.includes('__OPENCLAW_REDACTED__') || text.includes('****');
+}
+
+/** AI 助手与 OpenClaw 独立运行，但可复用项目模型配置中的真实凭据。 */
+function getOpenClawModelConfig(model) {
+  const oc = readOpenClawConfig();
+  const providers = oc?.models?.providers;
+  if (!providers || typeof providers !== 'object') return null;
+  const primary = String(oc?.agents?.defaults?.model || '');
+  const modelId = String(model || '').trim();
+  const candidates = [];
+  for (const [id, provider] of Object.entries(providers)) {
+    const models = Array.isArray(provider?.models) ? provider.models : [];
+    const ids = models.map((entry) => String(entry?.id || entry?.name || entry || ''));
+    const ref = `${id}/${modelId}`;
+    const matchesModel = modelId && ids.includes(modelId);
+    const matchesPrimary = primary === ref;
+    if (matchesModel || matchesPrimary) candidates.unshift({ id, provider, ids });
+    else candidates.push({ id, provider, ids });
+  }
+  const selected = candidates.find(({ provider }) => !isSecretPlaceholder(provider?.apiKey));
+  if (!selected) return null;
+  const selectedModel = modelId && selected.ids.includes(modelId)
+    ? modelId
+    : (selected.ids[0] || modelId);
+  return {
+    apiKey: String(selected.provider.apiKey),
+    baseUrl: String(selected.provider.baseUrl || ''),
+    model: selectedModel,
+  };
+}
+
 /** 合并配置：默认 < .env < 系统环境变量 < config.json（设置页面） */
 function getConfig() {
   const c = { ...DEFAULTS };
@@ -97,6 +140,14 @@ function getConfig() {
   const cj = readConfigJson();
   for (const k of ['apiKey', 'baseUrl', 'model', 'maxToolRounds']) {
     if (cj[k] !== undefined && cj[k] !== null && cj[k] !== '') c[k] = cj[k];
+  }
+  if (isSecretPlaceholder(c.apiKey)) {
+    const fallback = getOpenClawModelConfig(c.model);
+    if (fallback) {
+      c.apiKey = fallback.apiKey;
+      if (c.baseUrl === DEFAULTS.baseUrl && fallback.baseUrl) c.baseUrl = fallback.baseUrl;
+      if (c.model === DEFAULTS.model && fallback.model) c.model = fallback.model;
+    }
   }
   c.baseUrl = String(c.baseUrl).replace(/\/+$/, '');
   c.maxToolRounds = parseInt(c.maxToolRounds, 10) || DEFAULTS.maxToolRounds;
@@ -335,7 +386,7 @@ async function handleChat(body, res) {
   };
 
   if (!cfg.apiKey) {
-    send({ error: '尚未配置 API Key，请先打开左下角「设置」填写后再试。' });
+    send({ error: '尚未配置 API Key，请先打开右上角「设置」选择已配置模型后再试。' });
     return finish();
   }
 
@@ -571,7 +622,7 @@ server.listen(PORT, () => {
   console.log(`   端口   : ${PORT}`);
   console.log(`   模型   : ${cfg.model}`);
   console.log(`   后端   : ${cfg.baseUrl}`);
-  console.log(`   APIKey : ${cfg.apiKey ? '已配置' : '⚠ 未配置（打开网页左下角「设置」填写）'}`);
+  console.log(`   APIKey : ${cfg.apiKey ? '已配置' : '⚠ 未配置（打开网页右上角「设置」选择模型）'}`);
   console.log(`   页面   : http://localhost:${PORT}/`);
   console.log(line);
 });

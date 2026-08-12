@@ -211,5 +211,5 @@ export function getDefaultGatewayToken(): string | undefined {
     const stored = localStorage.getItem('openclaw.gateway.token');
     if (stored) return stored;
   } catch {}
-  return 'dev-local-token-2026';
+  return 'dev-local-token';
 }

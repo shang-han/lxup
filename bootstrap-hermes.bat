@@ -34,7 +34,8 @@ uv python install %PYVER% --install-dir "%ROOT%\runtime\python"
 if errorlevel 1 ( echo [ERROR] Python download failed & pause & exit /b 1 )
 
 set "PYDIR="
-for /d %%D in ("%ROOT%\runtime\python\cpython-*") do set "PYDIR=%%D"
+for /f "delims=" %%D in ('dir /b /ad /o-n "%ROOT%\runtime\python\cpython-3.11.*-windows-*" 2^>nul') do if not defined PYDIR set "PYDIR=%ROOT%\runtime\python\%%D"
+if not defined PYDIR for /f "delims=" %%D in ('dir /b /ad /o-n "%ROOT%\runtime\python\cpython-*-windows-*" 2^>nul') do if not defined PYDIR set "PYDIR=%ROOT%\runtime\python\%%D"
 if not defined PYDIR ( echo [ERROR] Python install dir not found & pause & exit /b 1 )
 set "PYTHON=%PYDIR%\python.exe"
 echo       Python: %PYTHON%

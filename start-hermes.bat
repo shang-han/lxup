@@ -11,7 +11,8 @@ cd /d "%~dp0"
 set "ROOT=%CD%"
 
 set "PYDIR="
-for /d %%D in ("%ROOT%\runtime\python\cpython-*") do set "PYDIR=%%D"
+for /f "delims=" %%D in ('dir /b /ad /o-n "%ROOT%\runtime\python\cpython-3.11.*-windows-*" 2^>nul') do if not defined PYDIR set "PYDIR=%ROOT%\runtime\python\%%D"
+if not defined PYDIR for /f "delims=" %%D in ('dir /b /ad /o-n "%ROOT%\runtime\python\cpython-*-windows-*" 2^>nul') do if not defined PYDIR set "PYDIR=%ROOT%\runtime\python\%%D"
 if not defined PYDIR (
   echo [ERROR] Portable Python not found. Run bootstrap-hermes.bat first.
   pause
@@ -40,5 +41,5 @@ echo ============================================================
 echo  Starting Hermes gateway  http://127.0.0.1:8642
 echo  HERMES_HOME: %HERMES_HOME%
 echo ============================================================
-"%PYTHON%" -m hermes_cli.main gateway run
+"%PYTHON%" -m hermes_cli.main gateway run --replace
 pause

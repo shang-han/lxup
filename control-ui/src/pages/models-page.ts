@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
 import '../components/oc-dialog.js';
@@ -48,6 +48,13 @@ type ConfirmState = {
 
 /** localStorage 镜像 key（与 utils/model-config.ts 共用） */
 const STORAGE_KEY = 'openclaw.models.config';
+
+/** 网关 config.get 会用此占位符隐藏密钥，不能把它当作真实凭据保存或转发。 */
+const REDACTED_SECRET = '__OPENCLAW_REDACTED__';
+function isRedactedSecret(value: unknown): boolean {
+  const text = String(value ?? '');
+  return text.includes(REDACTED_SECRET) || text.includes('****');
+}
 
 /**
  * 离线「待同步」标记 key：网关未连接时的改动先落本地，
@@ -313,6 +320,26 @@ export class ModelsPage extends LitElement {
     }
     .common-models button:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
 
+    /* === fetch models button & status === */
+    .btn-fetch-models {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 10px; border-radius: var(--radius-sm); font-size: 11px;
+      font-weight: 500; border: 1px solid var(--border); cursor: pointer;
+      background: transparent; color: var(--accent);
+      transition: all var(--duration-fast); white-space: nowrap;
+    }
+    .btn-fetch-models:hover:not(:disabled) { background: var(--accent-subtle); border-color: var(--accent); }
+    .btn-fetch-models:disabled { opacity: 0.6; cursor: not-allowed; }
+    .fetch-spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: fetch-spin 0.6s linear infinite;
+    }
+    @keyframes fetch-spin { to { transform: rotate(360deg); } }
+    .fetch-msg { font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    .fetch-msg-ok { color: var(--success); }
+    .fetch-msg-err { color: var(--danger); }
+
     /* === confirm dialog === */
     .confirm-msg { font-size: 13px; color: var(--text); line-height: 1.7; padding: 4px 0; }
     .btn-danger {
@@ -348,6 +375,10 @@ export class ModelsPage extends LitElement {
   @state() _formSelectedPreset = '';
   @state() _formModels: string[] = [];
   @state() _formModelInput = '';
+
+  // 获取模型列表状态
+  @state() _formFetchingModels = false;
+  @state() _formFetchError = '';
 
   // 确认对话框状态
   @state() _confirm: ConfirmState | null = null;
@@ -423,6 +454,8 @@ export class ModelsPage extends LitElement {
       const list: ProviderConfig[] = [];
       for (const [id, rawAny] of Object.entries(provs)) {
         const raw = (rawAny || {}) as any;
+        const previous = this._providers.find(p => p.id === id);
+        const returnedKey = String(raw.apiKey ?? '');
         rawProviders[id] = raw;
         const metas: Record<string, any> = {};
         const models: ModelEntry[] = [];
@@ -437,7 +470,11 @@ export class ModelsPage extends LitElement {
           id,
           name: id,
           baseUrl: String(raw.baseUrl ?? ''),
-          apiKey: String(raw.apiKey ?? ''),
+          // config.get redacts secrets; retain an in-memory real key after save,
+          // otherwise the following auth sync would overwrite it with the sentinel.
+          apiKey: isRedactedSecret(returnedKey)
+            ? (previous && !isRedactedSecret(previous.apiKey) ? previous.apiKey : '')
+            : returnedKey,
           apiType: apiTypeFromRaw(raw),
           models,
         });
@@ -485,7 +522,11 @@ export class ModelsPage extends LitElement {
   _mirrorToLS() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        providers: this._providers.map(p => ({ ...p, apiType: p.apiType || 'openai' })),
+        providers: this._providers.map(p => ({
+          ...p,
+          apiKey: isRedactedSecret(p.apiKey) ? '' : p.apiKey,
+          apiType: p.apiType || 'openai',
+        })),
       }));
     } catch { /* localStorage 不可用时静默 */ }
   }
@@ -499,6 +540,20 @@ export class ModelsPage extends LitElement {
     else this._saveToLocal();
   }
 
+  /** 将非空 API Key 同步写入 Agent 认证仓库（Sidecar 跑 openclaw paste-api-key） */
+  _syncAuthKeys() {
+    const host = (typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1';
+    for (const p of this._providers) {
+      const key = (p.apiKey || '').trim();
+      if (!key || isRedactedSecret(key)) continue;
+      fetch(`http://${host}:7889/api/models/auth/set-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: p.id, apiKey: key }),
+      }).catch(() => { /* 静默，不影响主流程 */ });
+    }
+  }
+
   /** 离线保存：写 localStorage 镜像 + 记录待同步标记 */
   _saveToLocal() {
     this._mirrorToLS();
@@ -507,6 +562,7 @@ export class ModelsPage extends LitElement {
     this._saveFlash = true;
     if (this._saveTimer) clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
+    this._syncAuthKeys();
   }
 
   /** 轻量提示（3 秒自动消失） */
@@ -576,12 +632,15 @@ export class ModelsPage extends LitElement {
 
       // 新增/更新项：合并回原始条目字段；模型数组显式声明替换意图
       for (const p of this._providers) {
-        const orig = this._rawProviders[p.id] || {};
+        const orig = { ...(this._rawProviders[p.id] || {}) };
+        // Never include the gateway's redacted value in a patch. Omitting the
+        // field preserves the existing secret under merge-patch semantics.
+        if (isRedactedSecret(orig.apiKey)) delete orig.apiKey;
         const metas = this._rawModels[p.id] || {};
         providersPatch[p.id] = {
           ...orig,
           ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
-          ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+          ...(p.apiKey && !isRedactedSecret(p.apiKey) ? { apiKey: p.apiKey } : {}),
           api: API_TYPE_TO_GATEWAY[p.apiType] || 'openai-completions',
           models: p.models.map(m => metas[m.id] || { id: m.id, name: m.id }),
         };
@@ -613,6 +672,8 @@ export class ModelsPage extends LitElement {
       this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
       // 以网关归一化后的配置为准（刷新 hash 与元数据缓存）
       await this._loadFromGateway();
+      // 将 API Key 同步写入 Agent 认证仓库（OpenClaw Agent 读的 openclaw-agent.sqlite）
+      this._syncAuthKeys();
     } catch (e) {
       this._saveError = this._errMsg(e);
     } finally {
@@ -642,6 +703,8 @@ export class ModelsPage extends LitElement {
     this._formSelectedPreset = '';
     this._formModels = [];
     this._formModelInput = '';
+    this._formFetchingModels = false;
+    this._formFetchError = '';
     this._dialogOpen = true;
   }
 
@@ -663,6 +726,55 @@ export class ModelsPage extends LitElement {
     this._dialogOpen = false;
   }
 
+  /** Sidecar HTTP 基址 */
+  get _sidecarBase(): string {
+    const host = (typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
+
+  /** 通过 Sidecar 代理探测 OpenAI 兼容端点，获取模型列表 */
+  async _fetchModels() {
+    const baseUrl = this._formBaseUrl.trim();
+    if (!baseUrl) {
+      this._formFetchError = `✗ ${L('models.fetchModelsNeedUrl')}`;
+      return;
+    }
+    this._formFetchingModels = true;
+    this._formFetchError = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model/probe`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ baseUrl, apiKey: this._formApiKey.trim() }),
+      });
+      const text = await r.text().catch(() => '');
+      let d: { ok?: boolean; error?: string; models?: string[] } = {};
+      try { d = JSON.parse(text); } catch { /* non-JSON response from sidecar auth middleware */ }
+      // Sidecar 自身认证失败（JSONResponse 带 detail 字段）
+      if (!d.ok && !d.error && (r.status === 401 || r.status === 403)) {
+        throw new Error(`Sidecar ${r.status} — ${text}`);
+      }
+      if (!d.ok) {
+        const err = d.error || '';
+        if (err.includes('401') || err.includes('403')) {
+          throw new Error(L('models.fetchModelsNeedApiKey'));
+        }
+        throw new Error(err || `HTTP ${r.status}`);
+      }
+      const models = d.models || [];
+      if (!models.length) {
+        this._formFetchError = `✗ ${L('models.fetchModelsNoModels')}`;
+        return;
+      }
+      this._formModels = models;
+      this._formFetchError = `✓ ${L('models.fetchModelsOk', { n: models.length })}`;
+    } catch (e) {
+      this._formFetchError = `✗ ${L('models.fetchModelsFailed')}${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      this._formFetchingModels = false;
+    }
+  }
+
   /** 预设显示名：有 labelKey 走本地化，否则用 key（英文专有名词两种语言一致） */
   _presetLabel(preset: any): string {
     return preset.labelKey ? L(`models.${preset.labelKey}`) : preset.key;
@@ -671,20 +783,29 @@ export class ModelsPage extends LitElement {
   _selectPreset(preset: any) {
     this._formSelectedPreset = preset.key;
     this._formProviderName = this._presetLabel(preset);
-    // 无公开端点的预设（如中转）不清空已填的 Base URL，需用户自行填写
     if (preset.baseUrl) this._formBaseUrl = preset.baseUrl;
-    this._formModels = [...preset.models];
+    this._formModels = [];
+    this._formFetchError = '';
+    // 仅当用户已填写 API Key 时才自动获取模型列表
+    if (preset.baseUrl && this._formApiKey.trim()) {
+      this._formFetchingModels = true;
+      this.requestUpdate();
+      this._fetchModels().finally(() => { this._formFetchingModels = false; this.requestUpdate(); });
+    }
   }
 
   // ── 对话框：模型 chips ──────────────────────────────
 
   _addFormModel() {
-    const parts = this._formModelInput.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+    const raw = this._formModelInput;
+    if (!raw) return;
+    const parts = raw.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
     if (!parts.length) return;
     const merged = [...this._formModels];
     for (const p of parts) if (!merged.includes(p)) merged.push(p);
     this._formModels = merged;
     this._formModelInput = '';
+    this.requestUpdate();
   }
 
   _onFormModelKeydown(e: KeyboardEvent) {
@@ -740,6 +861,7 @@ export class ModelsPage extends LitElement {
     }
 
     this._dialogOpen = false;
+    this.requestUpdate();
     this._save();
   }
 
@@ -799,6 +921,7 @@ export class ModelsPage extends LitElement {
         ...x, models: x.models.map((m, i) => ({ ...m, isPrimary: i === 0 })),
       });
     }
+    this.requestUpdate();
     this._save();
   }
 
@@ -809,6 +932,7 @@ export class ModelsPage extends LitElement {
       const models = p.models.filter(m => m.id !== modelId);
       return { ...p, models };
     });
+    this.requestUpdate();
     this._save();
   }
 
@@ -1024,7 +1148,19 @@ export class ModelsPage extends LitElement {
 
           <!-- 模型列表 -->
           <div class="form-group">
-            <label class="form-label">${L('models.modelList')}</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <label class="form-label" style="margin-bottom:0;">${L('models.modelList')}</label>
+              <button class="btn-fetch-models"
+                ?disabled=${this._formFetchingModels}
+                @click=${this._fetchModels}>
+                ${this._formFetchingModels
+                  ? html`<span class="fetch-spinner"></span> ${L('models.fetchingModels')}`
+                  : html`${icons['refresh-cw']} ${L('models.fetchModelsBtn')}`}
+              </button>
+            </div>
+            ${this._formFetchError ? html`
+              <div class="fetch-msg ${this._formFetchError.startsWith('✓') ? 'fetch-msg-ok' : 'fetch-msg-err'}">${this._formFetchError}</div>
+            ` : ''}
             <div class="model-input-row">
               <input class="form-input" type="text" .value=${this._formModelInput}
                 placeholder=${L('models.modelPlaceholder')}
