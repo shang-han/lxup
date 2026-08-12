@@ -597,6 +597,7 @@ const en = {
     namePlaceholder: 'e.g.: main, assistant, coder',
     modelPlaceholder: 'e.g.: gpt-4o, claude-sonnet-5',
     workspacePlaceholder: 'Workspace directory path',
+    workspaceDefaultHint: 'Leave empty to use runtime/workspace/agents/<name>.',
     notSet: 'Not set',
   },
   sections: { Config: 'Config', Extensions: 'Extensions', Monitor: 'Monitor', Agents: 'Agents' },
@@ -1708,6 +1709,7 @@ const zhCN = {
     namePlaceholder: '例如: main, assistant, coder',
     modelPlaceholder: '例如: gpt-4o, claude-sonnet-5',
     workspacePlaceholder: '工作区目录路径',
+    workspaceDefaultHint: '留空自动使用 runtime/workspace/agents/<名称>。',
     notSet: '未设置',
   },
   skills: {

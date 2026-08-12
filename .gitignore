@@ -1,2 +1,17 @@
+# 运行时标记文件
 .sidecar.ready
 runtime/
+LXUP/
+
+# JS产物依赖
+control-ui/node_modules/
+control-ui/dist/
+
+# Python字节码
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 系统
+.DS_Store
+Thumbs.db
