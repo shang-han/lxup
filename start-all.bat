@@ -26,7 +26,7 @@ if not exist "%PYDIR%\python.exe" (
   exit /b 1
 )
 
-"%PYDIR%\python.exe" "%ROOT%\launcher.py" %*
+"%PYDIR%\python.exe" "%ROOT%\launcher_gui.py" %*
 set "CODE=%ERRORLEVEL%"
 if not "%CODE%"=="0" pause
 exit /b %CODE%

@@ -2,10 +2,42 @@
 # -*- coding: utf-8 -*-
 """LXUP Launcher - Tkinter GUI v3"""
 
-import hashlib, json, os, shutil, socket, subprocess, sys, tempfile, threading, time, zipfile
+import hashlib, json, os, shutil, socket, stat, subprocess, sys, tempfile, threading, time, zipfile
 from datetime import datetime
 from tkinter import Tk, Frame, Label, Button, Text, Canvas, Scrollbar, messagebox, ttk
-import requests
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
+
+class HttpResponse:
+    def __init__(self, response):
+        self._response = response
+        self.status_code = getattr(response, "status", 200)
+        self.headers = response.headers
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def json(self):
+        return json.loads(self._response.read().decode("utf-8"))
+
+    def iter_content(self, chunk_size=8192):
+        while True:
+            chunk = self._response.read(chunk_size)
+            if not chunk: break
+            yield chunk
+
+    def close(self):
+        self._response.close()
+
+
+def http_get(url, timeout, headers=None, stream=False):
+    request = Request(url, headers=headers or {}, method="GET")
+    try:
+        return HttpResponse(urlopen(request, timeout=timeout))
+    except HTTPError as exc:
+        return HttpResponse(exc)
 
 def root_dir():
     if getattr(sys, "frozen", False): return os.path.dirname(os.path.abspath(sys.executable))
@@ -89,16 +121,46 @@ class ServiceManager:
             if process is not None and process.poll() is not None: return False
             time.sleep(1)
         return port_open(port)
+    @staticmethod
+    def listening_pids():
+        pids = set()
+        try:
+            result = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True,
+                                    text=True, errors="replace", check=False, creationflags=CNW)
+            ports = {str(svc["port"]) for svc in SERVICES}
+            for line in result.stdout.splitlines():
+                fields = line.split()
+                if len(fields) < 5 or fields[0].upper() != "TCP": continue
+                if fields[3].upper() != "LISTENING": continue
+                endpoint = fields[1].strip("[]")
+                if ":" not in endpoint: continue
+                port = endpoint.rsplit(":", 1)[-1]
+                if port in ports and fields[4].isdigit(): pids.add(int(fields[4]))
+        except Exception:
+            pass
+        return pids
+
     def stop_all(self):
+        tracked = {proc.pid for proc in self.processes if proc is not None and proc.poll() is None}
+        found = self.listening_pids()
+        for pid in sorted(found - tracked): self.log(f"  🔎 发现运行中的服务 PID {pid}")
+        pids = tracked | found
         stopped = 0
-        for proc in reversed(self.processes):
-            if proc is None or proc.poll() is not None: continue
+        for pid in sorted(pids, reverse=True):
             try:
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               check=False, creationflags=CNW); stopped += 1
-                self.log(f"  ⏹ 已停止 PID {proc.pid}")
-            except Exception as e: self.log(f"  ⚠️ 停止 PID {proc.pid} 失败: {e}")
+                result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        check=False, creationflags=CNW)
+                if result.returncode == 0:
+                    stopped += 1; self.log(f"  ⏹ 已停止 PID {pid}")
+                else:
+                    self.log(f"  ⚠️ 停止 PID {pid} 失败（返回码 {result.returncode}）")
+            except Exception as e:
+                self.log(f"  ⚠️ 停止 PID {pid} 失败: {e}")
+        deadline = time.time() + 10
+        while time.time() < deadline and self.listening_pids(): time.sleep(0.25)
+        remaining = self.listening_pids()
+        if remaining: self.log(f"  ⚠️ 仍有服务端口被占用（PID {', '.join(map(str, sorted(remaining)))})")
         self.processes.clear()
         self.log(f"  共停止 {stopped} 个进程" if stopped else "  没有运行中的进程")
     def start_all(self, py):
@@ -159,7 +221,7 @@ class UpdateManager:
     def check_update(self):
         self.log("🔍 正在检查更新...")
         try:
-            r = requests.get(UPDATE_URL, timeout=15, headers={"User-Agent": f"LXUP/{self.cv}"})
+            r = http_get(UPDATE_URL, timeout=15, headers={"User-Agent": f"LXUP/{self.cv}"})
             if r.status_code != 200: self.log(f"  ⚠️ 服务器返回 {r.status_code}"); return None
             data = r.json(); sv = data.get("version", "")
             if not sv: self.log("  ⚠️ 服务器未返回版本信息"); return None
@@ -177,45 +239,102 @@ class UpdateManager:
             if x > y: return 1
             if x < y: return -1
         return (len(pa) > len(pb)) - (len(pa) < len(pb))
-    def download_file(self, url, sha256=""):
+    def download_file(self, url, sha256="", expected_size=0):
         td = tempfile.mkdtemp(prefix="lxup_update_"); tf = os.path.join(td, "update.zip")
-        self.log("   正在下载...")
+        self.log("  正在下载...")
+        response = None
+        keep_download = False
         try:
-            r = requests.get(url, stream=True, timeout=300, headers={"User-Agent": f"LXUP/{self.cv}"})
-            r.raise_for_status(); total = int(r.headers.get("content-length", 0)); dl = 0
+            response = http_get(url, stream=True, timeout=300,
+                                    headers={"User-Agent": f"LXUP/{self.cv}"})
+            response.raise_for_status()
+            try: total = int(response.headers.get("content-length", 0))
+            except (TypeError, ValueError): total = 0
+            if total <= 0:
+                try: total = int(expected_size or 0)
+                except (TypeError, ValueError): total = 0
+            dl = 0
+            self.prog(0 if total else None, "准备下载..." if total else "下载中（正在计算大小）...")
             with open(tf, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1024 * 64):
+                    if not chunk: continue
                     f.write(chunk); dl += len(chunk)
-                    if total > 0: self.prog(int(dl * 100 / total), f"下载中 {dl // 1024}KB / {total // 1024}KB")
+                    if total > 0:
+                        self.prog(min(100, int(dl * 100 / total)),
+                                  f"下载中 {dl // 1024}KB / {total // 1024}KB")
+                    else:
+                        self.prog(None, f"下载中 {dl / 1024 / 1024:.1f}MB")
+            if total > 0:
+                self.prog(100, f"下载完成 {dl // 1024}KB")
+            else:
+                self.prog(100, f"下载完成 {dl / 1024 / 1024:.1f}MB")
             if sha256:
                 actual = sha256_file(tf)
-                if actual.lower() != sha256.lower(): self.log("  ❌ SHA256 校验失败"); os.remove(tf); return None
+                if actual.lower() != sha256.lower():
+                    self.log("  ❌ SHA256 校验失败"); return None
                 self.log("  ✅ 文件校验通过")
+            keep_download = True
             return tf
         except Exception as e:
-            self.log(f"  ❌ 下载失败: {e}")
-            if os.path.isfile(tf): os.remove(tf)
-            return None
+            self.log(f"  ❌ 下载失败: {e}"); return None
+        finally:
+            if response is not None:
+                try: response.close()
+                except Exception: pass
+            if not keep_download:
+                try: shutil.rmtree(td)
+                except Exception: pass
+
     def apply_update(self, zp, full=True):
         self.log("  📦 正在解压更新包..."); self.prog(0, "解压中...")
-        preserve = {os.path.join(RUNTIME, "openclaw-home"), os.path.join(RUNTIME, "hermes-home"),
-                    os.path.join(RUNTIME, "codex-home"), LOG_DIR}
+        preserve = {"runtime/openclaw-home", "runtime/hermes-home", "runtime/codex-home", "runtime/logs"}
+        root_real = os.path.realpath(ROOT)
+        active_exe = os.path.realpath(sys.executable) if getattr(sys, "frozen", False) else ""
         try:
             with zipfile.ZipFile(zp, "r") as zf:
-                members = zf.namelist(); total = len(members)
-                for i, m in enumerate(members):
-                    if any(os.path.join(ROOT, m).startswith(p) for p in preserve): continue
-                    target = os.path.join(ROOT, m)
-                    if m.endswith("/"): os.makedirs(target, exist_ok=True)
+                infos = zf.infolist(); total = len(infos)
+                wrapper = all((info.filename.replace("\\", "/").split("/", 1)[0] == "LXUP")
+                              for info in infos if info.filename.replace("\\", "/").strip("/"))
+                for i, info in enumerate(infos):
+                    raw = info.filename.replace("\\", "/")
+                    parts = raw.split("/")
+                    if wrapper and parts and parts[0] == "LXUP": parts = parts[1:]
+                    rel = "/".join(parts).strip("/")
+                    if not rel or "\x00" in rel or rel.startswith(("/", "\\")) or ":" in rel.split("/", 1)[0]:
+                        raise ValueError(f"非法更新路径: {info.filename}")
+                    if any(part in ("", ".", "..") for part in rel.split("/")):
+                        raise ValueError(f"非法更新路径: {info.filename}")
+                    target = os.path.abspath(os.path.join(ROOT, *rel.split("/")))
+                    try:
+                        if os.path.commonpath((root_real, os.path.realpath(os.path.dirname(target)))) != root_real:
+                            raise ValueError(f"更新路径越界: {info.filename}")
+                    except ValueError:
+                        raise ValueError(f"更新路径越界: {info.filename}")
+                    rel_key = rel.lower()
+                    preserve_hit = any(rel_key == p or rel_key.startswith(p + "/") for p in preserve)
+                    current_exe = active_exe and os.path.normcase(os.path.realpath(target)) == os.path.normcase(active_exe)
+                    current_exe = current_exe or (rel_key == "lxup启动器.exe" and os.path.normcase(target) == os.path.normcase(os.path.join(ROOT, "LXUP启动器.exe")))
+                    if stat.S_ISLNK(info.external_attr >> 16):
+                        raise ValueError(f"不支持符号链接: {info.filename}")
+                    if info.is_dir() or raw.endswith("/"):
+                        if not preserve_hit and not current_exe: os.makedirs(target, exist_ok=True)
+                    elif preserve_hit:
+                        self.log(f"  ⏭ 跳过用户数据: {rel}")
+                    elif current_exe:
+                        self.log("  ⏭ 跳过正在运行的 LXUP启动器.exe")
                     else:
                         os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with zf.open(m) as src, open(target, "wb") as dst: dst.write(src.read())
+                        with zf.open(info) as src, open(target, "wb") as dst:
+                            shutil.copyfileobj(src, dst, length=1024 * 1024)
                     self.prog(int((i + 1) * 100 / total) if total else 100, f"解压中 {i + 1}/{total}")
+            self.prog(100, "解压完成")
             self.log("  ✅ 更新包解压完成")
-            try: shutil.rmtree(os.path.dirname(zp))
-            except: pass
             return True
-        except Exception as e: self.log(f"  ❌ 解压更新包失败: {e}"); return False
+        except Exception as e:
+            self.log(f"  ❌ 解压更新包失败: {e}"); return False
+        finally:
+            try: shutil.rmtree(os.path.dirname(zp))
+            except Exception: pass
 
 class LauncherApp:
     def __init__(self):
@@ -328,22 +447,30 @@ class LauncherApp:
         def _do():
             um = UpdateManager(self.vi, self._log, self._prog)
             data = um.check_update()
-            self.root.after(0, lambda: self._bu.configure(state="normal", text="🔄 检查更新"))
-            if not data: return
-            sv = data.get("version", ""); cl = data.get("changelog", ""); mv = data.get("min_version", "0.0.0")
-            pkgs = data.get("packages", {}); dp = pkgs.get("patch", {}); pc = pkgs.get("patch_chain", [])
-            if UpdateManager._vcmp(self.vs, mv) < 0: ut = "full"
-            elif dp and dp.get("from") == self.vs: ut = "patch"
-            elif pc and pc[0].get("from") == self.vs and len(pc) <= 3: ut = "chain"
-            else: ut = "full"
-            mm = {"full": "全量下载", "patch": "增量更新", "chain": f"增量链（{len(pc)} 步）"}
-            msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}"
-            if messagebox.askyesno("发现新版本", msg, parent=self.root):
-                self._do_update(ut, data)
+            def _review():
+                self._bu.configure(state="normal", text="🔄 检查更新")
+                if not data: return
+                sv = data.get("version", ""); cl = data.get("changelog", ""); mv = data.get("min_version", "0.0.0")
+                pkgs = data.get("packages", {}); dp = pkgs.get("patch", {}); pc = pkgs.get("patch_chain", [])
+                if UpdateManager._vcmp(self.vs, mv) < 0: ut = "full"
+                elif dp and dp.get("from") == self.vs: ut = "patch"
+                elif pc and pc[0].get("from") == self.vs and len(pc) <= 3: ut = "chain"
+                else: ut = "full"
+                mm = {"full": "全量下载", "patch": "增量更新", "chain": f"增量链（{len(pc)} 步）"}
+                msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}"
+                if messagebox.askyesno("发现新版本", msg, parent=self.root): self._do_update(ut, data)
+            self.root.after(0, _review)
         threading.Thread(target=_do, daemon=True).start()
 
     def _prog(self, pct, msg):
-        def _do(): self._pf.pack(fill="x", padx=20); self._pb["value"] = pct; self._pl.configure(text=msg)
+        def _do():
+            self._pf.pack(fill="x", padx=20)
+            if pct is None:
+                if str(self._pb["mode"]) != "indeterminate": self._pb.configure(mode="indeterminate")
+                self._pb.start(10)
+            else:
+                self._pb.stop(); self._pb.configure(mode="determinate"); self._pb["value"] = pct
+            self._pl.configure(text=msg)
         self.root.after(0, _do)
 
     def _do_update(self, ut, data):
@@ -357,7 +484,7 @@ class LauncherApp:
                 for step in pkgs.get("patch_chain", []):
                     url = step.get("url", ""); sha = step.get("sha256", "")
                     self._log(f"  📦 正在应用补丁 {step.get('from')} → {step.get('to')}...")
-                    tmp = um.download_file(url, sha)
+                    tmp = um.download_file(url, sha, step.get("size", 0))
                     if not tmp: self._log("  ❌ 补丁下载失败"); self.root.after(0, self._restore); return
                     if not um.apply_update(tmp, False): self._log("  ❌ 补丁应用失败"); self.root.after(0, self._restore); return
                     self._log(f"  ✅ 补丁 {step.get('from')} → {step.get('to')} 已应用")
@@ -366,7 +493,7 @@ class LauncherApp:
             else:
                 pkg = pkgs.get("full", {}); url = pkg.get("url", ""); sha = pkg.get("sha256", "")
             if not url: self._log("  ❌ 未找到更新包地址"); self.root.after(0, self._restore); return
-            tmp = um.download_file(url, sha)
+            tmp = um.download_file(url, sha, pkg.get("size", 0))
             if not tmp: self._log("  ❌ 下载失败"); self.root.after(0, self._restore); return
             if um.apply_update(tmp, True):
                 self._save_ver(data.get("version", ""))
@@ -383,6 +510,7 @@ class LauncherApp:
         except Exception as e: self._log(f"  ⚠️ 保存版本号失败：{e}")
 
     def _restore(self):
+        self._pb.stop(); self._pb.configure(mode="determinate", value=0)
         self._bs.configure(state="normal", text="▶ 启动全部")
         self._bk.configure(state="normal"); self._bu.configure(state="normal", text="🔄 检查更新")
         self._pf.pack_forget()
