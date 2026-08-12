@@ -72,6 +72,8 @@ export class AgentsPage extends LitElement {
       background: transparent; color: var(--text-soft);
     }
     .agent-card__actions .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+    .agent-card__actions .btn-danger { color: var(--danger); border-color: var(--danger); }
+    .agent-card__actions .btn-danger:hover { background: var(--danger); color: #fff; }
 
     .agent-card__fields { display: flex; flex-direction: column; gap: 6px; }
     .agent-card__field {
@@ -278,6 +280,10 @@ export class AgentsPage extends LitElement {
   @state() _formName = '';
   @state() _formModel = '';
   @state() _formWorkspace = '';
+  @state() _editingAgentId: string | null = null;
+  @state() _deleteAgent: any = null;
+  @state() _deleteBusy = false;
+  @state() _agentActionError = '';
 
   // Detail view state
   @state() _detailView = false;
@@ -357,6 +363,10 @@ export class AgentsPage extends LitElement {
       .map(([id]) => id);
   }
 
+  _agentDisplayName(agent: any): string {
+    return String(agent?.name || agent?.id || '');
+  }
+
   _agentModel(agent: any): string {
     const m = agent?.model;
     if (!m) return L('agents.defaultModel');
@@ -365,29 +375,83 @@ export class AgentsPage extends LitElement {
   }
 
   _openNewAgent() {
+    this._editingAgentId = null;
     this._formName = '';
     this._formModel = '';
     this._formWorkspace = '';
     this._dialogOpen = true;
   }
 
+  _openEditAgent(agent: any) {
+    this._editingAgentId = agent.id;
+    this._formName = agent.name || agent.id || '';
+    this._formModel = this._agentModel(agent) === L('agents.defaultModel') ? '' : this._agentModel(agent);
+    this._formWorkspace = agent.workspace || '';
+    this._dialogOpen = true;
+  }
+
   _closeDialog() {
     this._dialogOpen = false;
+    this._editingAgentId = null;
+  }
+
+  _askDeleteAgent(agent: any) {
+    if (agent.id === 'main' || agent.id === this._defaultId) return;
+    this._agentActionError = '';
+    this._deleteAgent = agent;
+  }
+
+  _closeDeleteDialog() {
+    if (this._deleteBusy) return;
+    this._deleteAgent = null;
+  }
+
+  async _deleteAgentWithFiles(deleteFiles: boolean) {
+    const agent = this._deleteAgent;
+    if (!agent || this._deleteBusy) return;
+    this._deleteBusy = true;
+    this._agentActionError = '';
+    try {
+      await getSharedStore().request('agents.delete', { agentId: agent.id, deleteFiles });
+      this._deleteAgent = null;
+      this._detailView = false;
+      this._detailAgent = null;
+      await this._loadAgents();
+    } catch (e: any) {
+      this._agentActionError = e?.message || String(e);
+    } finally {
+      this._deleteBusy = false;
+    }
   }
 
   async _createAgent() {
-    if (!this._formName.trim()) return;
+    const name = this._formName.trim();
+    if (!name) return;
+    const editingId = this._editingAgentId;
+    const duplicate = this._agents.some(a => a.id !== editingId && this._agentDisplayName(a).trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      alert(L('agents.duplicateName'));
+      return;
+    }
     const store = getSharedStore();
-    const id = this._formName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const payload: any = { id };
-    if (this._formModel.trim()) payload.model = this._formModel.trim();
-    if (this._formWorkspace.trim()) payload.workspace = this._formWorkspace.trim();
     try {
-      await store.request('agents.create', payload);
-      this._dialogOpen = false;
+      if (editingId) {
+        const payload: any = { agentId: editingId };
+        if (this._formName.trim()) payload.name = this._formName.trim();
+        if (this._formModel.trim()) payload.model = this._formModel.trim();
+        if (this._formWorkspace.trim()) payload.workspace = this._formWorkspace.trim();
+        await store.request('agents.update', payload);
+      } else {
+        // agents.create 的网关 schema 要求 name；id 由网关根据 name 生成。
+        const payload: any = { name: this._formName.trim() };
+        if (this._formModel.trim()) payload.model = this._formModel.trim();
+        if (this._formWorkspace.trim()) payload.workspace = this._formWorkspace.trim();
+        await store.request('agents.create', payload);
+      }
+      this._closeDialog();
       await this._loadAgents();
     } catch (e: any) {
-      alert('创建失败: ' + (e?.message || e));
+      alert(`${this._editingAgentId ? '保存失败' : '创建失败'}: ` + (e?.message || e));
     }
   }
 
@@ -469,9 +533,10 @@ export class AgentsPage extends LitElement {
   }
 
   _renderNewAgentDialog() {
+    const editing = !!this._editingAgentId;
     return html`
       <oc-dialog .open=${this._dialogOpen} @close=${this._closeDialog}>
-        <span slot="title">${L('common.newAgent')}</span>
+        <span slot="title">${editing ? L('agents.editAgent') : L('common.newAgent')}</span>
         <div class="channel-dialog">
           <div class="form-group">
             <label class="form-label">${L('agents.agentName')} <span class="required">*</span></label>
@@ -503,6 +568,28 @@ export class AgentsPage extends LitElement {
     `;
   }
 
+  _renderDeleteDialog() {
+    const agent = this._deleteAgent;
+    if (!agent) return '';
+    return html`
+      <oc-dialog .open=${true} @close=${this._closeDeleteDialog}>
+        <span slot="title">${L('agents.deleteAgent')}</span>
+        <div style="margin:0 10px;">
+          <p>${L('agents.deleteConfirm', { name: this._agentDisplayName(agent) })}</p>
+          <div class="warn-box" style="padding:10px;margin:10px 0;border:1px solid var(--warning);border-radius:var(--radius-sm);color:var(--warning);">
+            ${L('agents.deleteWarning')}
+          </div>
+          ${this._agentActionError ? html`<div style="color:var(--danger);font-size:12px;">${this._agentActionError}</div>` : ''}
+        </div>
+        <div slot="footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+          <oc-btn size="lg" @click=${this._closeDeleteDialog}>${L('common.cancel')}</oc-btn>
+          <oc-btn size="lg" @click=${() => this._deleteAgentWithFiles(false)} ?disabled=${this._deleteBusy}>${L('agents.deleteConfigOnly')}</oc-btn>
+          <oc-btn size="lg" variant="danger" @click=${() => this._deleteAgentWithFiles(true)} ?disabled=${this._deleteBusy}>${L('agents.deleteConfigAndFiles')}</oc-btn>
+        </div>
+      </oc-dialog>
+    `;
+  }
+
   _renderDetailView() {
     const agent = this._detailAgent;
     if (!agent) return '';
@@ -516,7 +603,7 @@ export class AgentsPage extends LitElement {
 
         <!-- Title -->
         <div class="agent-detail__title">
-          <span class="agent-detail__name">${agent.id}</span>
+          <span class="agent-detail__name">${this._agentDisplayName(agent)}</span>
           ${agent.id === this._defaultId ? html`<span class="agent-card__badge">${L('agents.defaultAgent')}</span>` : ''}
         </div>
 
@@ -823,11 +910,15 @@ export class AgentsPage extends LitElement {
           <div class="agent-card" @click=${() => this._openDetail(agent)}>
             <div class="agent-card__header">
               <div class="agent-card__left">
-                <span class="agent-card__name">${agent.id}</span>
+                <span class="agent-card__name">${this._agentDisplayName(agent)}</span>
                 ${agent.id === this._defaultId ? html`<span class="agent-card__badge">${L('agents.default')}</span>` : ''}
               </div>
               <div class="agent-card__actions">
                 <button class="btn-detail" @click=${(e: Event) => { e.stopPropagation(); this._openDetail(agent); }}>${L('agents.detail')}</button>
+                <button class="btn-ghost" @click=${(e: Event) => { e.stopPropagation(); this._openEditAgent(agent); }}>${L('agents.editAgent')}</button>
+                ${agent.id !== 'main' && agent.id !== this._defaultId ? html`
+                  <button class="btn-danger" @click=${(e: Event) => { e.stopPropagation(); this._askDeleteAgent(agent); }}>${L('agents.deleteAgent')}</button>
+                ` : ''}
               </div>
             </div>
             <div class="agent-card__fields">
@@ -848,8 +939,9 @@ export class AgentsPage extends LitElement {
         `;
           })}
 
-        <!-- New Agent Dialog -->
+        <!-- New/Edit Agent Dialog -->
         ${this._renderNewAgentDialog()}
+        ${this._renderDeleteDialog()}
 
       </div>
     `;
