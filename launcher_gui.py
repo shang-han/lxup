@@ -241,14 +241,13 @@ class UpdateManager:
         return (len(pa) > len(pb)) - (len(pa) < len(pb))
     def download_file(self, url, sha256="", expected_size=0):
         td = tempfile.mkdtemp(prefix="lxup_update_"); tf = os.path.join(td, "update.zip")
-        self.log("  正在下载...")
         response = None
         keep_download = False
         try:
             response = http_get(url, stream=True, timeout=300,
                                     headers={"User-Agent": f"LXUP/{self.cv}"})
             response.raise_for_status()
-            try: total = int(response.headers.get("content-length", 0))
+            try: total = int(response.headers.get("Content-Length") or response.headers.get("content-length") or 0)
             except (TypeError, ValueError): total = 0
             if total <= 0:
                 try: total = int(expected_size or 0)
@@ -261,7 +260,7 @@ class UpdateManager:
                     f.write(chunk); dl += len(chunk)
                     if total > 0:
                         self.prog(min(100, int(dl * 100 / total)),
-                                  f"下载中 {dl // 1024}KB / {total // 1024}KB")
+                                  f"下载中 {dl / 1024 / 1024:.1f}MB / {total / 1024 / 1024:.1f}MB")
                     else:
                         self.prog(None, f"下载中 {dl / 1024 / 1024:.1f}MB")
             if total > 0:
@@ -379,9 +378,13 @@ class LauncherApp:
         self._bu = Button(bf, text="🔄 检查更新", font=("Microsoft YaHei UI", 11), bg="#8e44ad", fg="white",
                            relief="flat", bd=0, padx=16, pady=8, cursor="hand2", command=self._on_update)
         self._bu.pack(side="right")
-        self._pf = Frame(self.root, bg="#f5f5f5"); self._pf.pack(fill="x", padx=20); self._pf.pack_forget()
-        self._pb = ttk.Progressbar(self._pf, mode="determinate", maximum=100); self._pb.pack(fill="x", pady=2)
-        self._pl = Label(self._pf, text="", font=("Microsoft YaHei UI", 9), bg="#f5f5f5", fg="#666"); self._pl.pack(anchor="w")
+        self._pf = Frame(self.root, bg="#f5f5f5")
+        self._pf.pack(fill="x", padx=20, pady=(0, 8))
+        self._pb = ttk.Progressbar(self._pf, mode="determinate", maximum=100)
+        self._pb.pack(fill="x", pady=(2, 0))
+        self._pl = Label(self._pf, text="就绪", font=("Microsoft YaHei UI", 10, "bold"),
+                         bg="#f5f5f5", fg="#2c3e50")
+        self._pl.pack(anchor="w", pady=(2, 0))
         lf = Frame(self.root, bg="#f5f5f5"); lf.pack(fill="both", expand=True, padx=20, pady=(8, 12))
         Label(lf, text="运行日志", font=("Microsoft YaHei UI", 12, "bold"), bg="#f5f5f5", fg="#2c3e50").pack(anchor="w")
         li = Frame(lf, bg="#1e1e1e"); li.pack(fill="both", expand=True, pady=4)
@@ -464,13 +467,16 @@ class LauncherApp:
 
     def _prog(self, pct, msg):
         def _do():
-            self._pf.pack(fill="x", padx=20)
+            self._pf.pack(fill="x", padx=20, pady=(0, 8))
+            self._pf.lift()
+            self._pf.update_idletasks()
             if pct is None:
                 if str(self._pb["mode"]) != "indeterminate": self._pb.configure(mode="indeterminate")
                 self._pb.start(10)
             else:
                 self._pb.stop(); self._pb.configure(mode="determinate"); self._pb["value"] = pct
             self._pl.configure(text=msg)
+            self._pl.update_idletasks()
         self.root.after(0, _do)
 
     def _do_update(self, ut, data):
@@ -513,7 +519,9 @@ class LauncherApp:
         self._pb.stop(); self._pb.configure(mode="determinate", value=0)
         self._bs.configure(state="normal", text="▶ 启动全部")
         self._bk.configure(state="normal"); self._bu.configure(state="normal", text="🔄 检查更新")
-        self._pf.pack_forget()
+        self._pf.pack(fill="x", padx=20, pady=(0, 8))
+        self._pl.configure(text="就绪")
+        self._pb["value"] = 0
 
     def _done(self):
         self._restore(); self.vi = load_version(); self.vs = self.vi.get("version", "unknown")
