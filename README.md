@@ -116,7 +116,7 @@ item.completed / turn.completed …）归一化成与 Hermes 一致的 SSE 词�
 
 ## 便携包使用
 
-解压到任意本地目录后，进入**包含 `LXUP-Launcher.exe` 的那一层目录**，直接双击 `LXUP-Launcher.exe` 或 `start-all.bat`。两种启动方式都只按当前解压目录寻找运行时，不依赖原电脑的盘符、全局 Node.js 或全局 Python。
+解压到任意本地目录后，进入**包含 `LXUP启动器.exe` 的那一层目录**，直接双击 `LXUP启动器.exe` 或 `start-all.bat`。两种启动方式都只按当前解压目录寻找运行时，不依赖原电脑的盘符、全局 Node.js 或全局 Python。
 
 建议把最终目录放在某个盘符根目录下的短路径，不要放在多层桌面/下载目录，也不要重复套成 `长目录\LXUP\LXUP`。压缩包文件名可以任意，但运行根目录必须是启动器所在目录；路径过长时 Windows 解压工具可能先丢失深层依赖文件。
 
@@ -124,7 +124,7 @@ item.completed / turn.completed …）归一化成与 Hermes 一致的 SSE 词�
 
 便携包不含本机 API Key、Codex/OpenClaw 登录态、聊天会话、日志或本机激活状态。首次启动后按控制台页面完成自己的模型配置和激活即可。
 
-**一键启动**（推荐）：双击运行 `start-all.bat`，它和 `LXUP-Launcher.exe` 使用同一套单实例启动逻辑，会逐个等待服务端口就绪；重复点击不会再叠加一批进程。服务日志写入 `runtime\logs`，停止全部服务用 `stop-all.bat`。本发行包已经内置 Node、Python、Hermes、OpenClaw、Codex、前端和插件依赖，正常使用不需要联网运行 bootstrap 脚本；bootstrap 脚本仅用于开发者重新构建运行时。
+**一键启动**（推荐）：双击运行 `start-all.bat`，它和 `LXUP启动器.exe` 使用同一套单实例启动逻辑，会逐个等待服务端口就绪；重复点击不会再叠加一批进程。服务日志写入 `runtime\logs`，停止全部服务用 `stop-all.bat`。本发行包已经内置 Node、Python、Hermes、OpenClaw、Codex、前端和插件依赖，正常使用不需要联网运行 bootstrap 脚本；bootstrap 脚本仅用于开发者重新构建运行时。
 
 手动启动（每个服务一个终端）：
 

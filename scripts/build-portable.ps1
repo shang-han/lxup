@@ -22,9 +22,18 @@ if (-not (Get-Command tar.exe -ErrorAction SilentlyContinue)) {
 
 New-Item -ItemType Directory -Path $stageRoot | Out-Null
 
+$launcherExe = Get-ChildItem -LiteralPath $projectRoot -File -Filter "LXUP*.exe" |
+    Where-Object { $_.Name -notmatch "1\.exe$" } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+if (-not $launcherExe) {
+    throw "Launcher executable is missing from project root."
+}
+Copy-Item -LiteralPath $launcherExe.FullName -Destination $stageRoot
+
 foreach ($file in @(
-    "LXUP-Launcher.exe",
-    "launcher.py",
+    "launcher_gui.py",
+    "LXUP-icon.ico",
     "README.md",
     "start-all.bat",
     "start-hermes.bat",
@@ -136,7 +145,7 @@ Copy-PortableTree $sharedOpenClaw (Join-Path $sharedPluginNodeModules "openclaw"
 $pluginSpecs = @(
     @{ Id = "deepseek"; Short = "deepseek"; Project = "openclaw-deepseek-provider-2481ed984b"; Package = "node_modules\\@openclaw\\deepseek-provider" },
     @{ Id = "qqbot"; Short = "qqbot"; Project = "openclaw-qqbot-d3553f72f8"; Package = "node_modules\\@openclaw\\qqbot" },
-    @{ Id = "openclaw-weixin"; Short = "weixin"; Project = "tencent-weixin-openclaw-weixin-7783ac86ba__openclaw-generation__g-35332e4f87bce2a1"; Package = "node_modules\\@tencent-weixin\\openclaw-weixin" },
+    @{ Id = "openclaw-weixin"; Short = "weixin"; Project = "tencent-weixin-openclaw-weixin-7783ac86ba"; Package = "node_modules\\@tencent-weixin\\openclaw-weixin" },
     @{ Id = "wecom-openclaw-plugin"; Short = "wecom"; Project = "wecom-wecom-openclaw-plugin-18f843d908"; Package = "node_modules\\@wecom\\wecom-openclaw-plugin" }
 )
 $pluginLoadPaths = @()
@@ -308,6 +317,8 @@ try {
     $zip = [IO.Compression.ZipFile]::OpenRead($archivePath)
     try {
         $requiredEntries = @(
+            "$packageName/launcher_gui.py",
+            "$packageName/LXUP-icon.ico",
             "$packageName/control-ui/node_modules/vite/bin/vite.js",
             "$packageName/control-ui/node_modules/vite/dist/node/cli.js",
             "$packageName/runtime/python/cpython-3.11.15-windows-x86_64-none/python.exe",
