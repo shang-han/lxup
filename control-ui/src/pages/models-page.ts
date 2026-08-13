@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L, sidecarHeaders } from '../i18n/index.js';
+import { PROVIDER_PRESETS } from './provider-presets.js';
 import { icons } from '../components/icons.js';
 import { getSharedStore } from '../store/shared.js';
 import '../components/oc-dialog.js';
@@ -68,26 +69,7 @@ function isRedactedSecret(value: unknown): boolean {
  */
 const PENDING_KEY = 'openclaw.models.pending-sync';
 
-/** key=稳定标识（选中态比较/无 labelKey 时即显示名）；labelKey=本地化显示名（自动填充也用本地化名）。
- *  专属名称用官方英文品牌：Volcano Engine / Zhipu AI / Alibaba Cloud Model Studio。 */
-const PROVIDER_PRESETS = [
-  { key: 'relay', labelKey: 'presetRelay', baseUrl: '', models: ['gpt-4o', 'claude-sonnet-4-5'] },
-  { key: 'volcengine', labelKey: 'presetVolcengine', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-1-5-pro-32k', 'deepseek-v3-250324'] },
-  { key: 'volcengine-coding', labelKey: 'presetVolcengineCoding', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: ['doubao-seed-code-preview-251028'] },
-  { key: 'bailian', labelKey: 'presetBailian', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-max', 'qwen-plus', 'qwen-turbo'] },
-  { key: 'zhipu', labelKey: 'presetZhipu', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
-  { key: 'MiniMax', baseUrl: 'https://api.minimax.chat/v1', models: ['MiniMax-Text-01'] },
-  { key: 'Moonshot / Kimi', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k'] },
-  { key: 'openai-official', labelKey: 'presetOpenAIOfficial', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'] },
-  { key: 'anthropic-official', labelKey: 'presetAnthropicOfficial', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-5', 'claude-opus-4-1'] },
-  { key: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-  { key: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-2.0-flash', 'gemini-1.5-pro'] },
-  { key: 'xAI (Grok)', baseUrl: 'https://api.x.ai/v1', models: ['grok-3', 'grok-3-mini'] },
-  { key: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile'] },
-  { key: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', models: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'] },
-  { key: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', models: ['meta/llama-3.1-70b-instruct'] },
-  { key: 'ollama-local', labelKey: 'presetOllamaLocal', baseUrl: 'http://127.0.0.1:11434/v1', models: ['llama3.1', 'qwen2.5'] },
-];
+
 
 /** 弹框「接口类型」→ 网关 provider.api 标识（openai/ollama 走 OpenAI 兼容，openclaw 默认） */
 const API_TYPE_TO_GATEWAY: Record<string, string> = {
@@ -1222,9 +1204,13 @@ export class ModelsPage extends LitElement {
           <div class="form-group">
             <label class="form-label">${L('models.apiUrl')}</label>
             <input class="form-input" type="text" .value=${this._formBaseUrl}
+              list="lxup-models-baseurls"
               placeholder="https://api.deepseek.com/v1"
               @input=${(e: Event) => { this._formBaseUrl = (e.target as HTMLInputElement).value; }}
             />
+            <datalist id="lxup-models-baseurls">
+              ${PROVIDER_PRESETS.filter(p => p.baseUrl).map(p => html`<option value=${p.baseUrl}></option>`)}
+            </datalist>
             <div class="form-hint">${L('models.apiUrlHint')}</div>
           </div>
 

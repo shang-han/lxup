@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
+import { PROVIDER_PRESETS } from './provider-presets.js';
 import { getStatus, getConfig, saveConfig } from '../services/codex-client.js';
 import '../components/page-header.js';
 import '../components/oc-card.js';
@@ -139,7 +140,10 @@ export class CodexPage extends LitElement {
             </div>
             <div class="form-group">
               <label class="form-label">${L('common.baseUrl')}</label>
-              <input class="form-input" .value=${this._config.baseUrl} placeholder="https://api.openai.com/v1" @input=${(e:Event) => { this._config = {...this._config, baseUrl:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+              <input class="form-input" .value=${this._config.baseUrl} list="lxup-codex-baseurls" placeholder="https://api.openai.com/v1" @input=${(e:Event) => { this._config = {...this._config, baseUrl:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+              <datalist id="lxup-codex-baseurls">
+                ${PROVIDER_PRESETS.filter(p => p.baseUrl && p.key !== 'anthropic-official').map(p => html`<option value=${p.baseUrl}></option>`)}
+              </datalist>
               <p style="font-size:12px;color:var(--text-soft);margin:6px 0 0;line-height:1.5;">${L('common.baseUrlHint')}</p>
             </div>
             <div class="form-group">
