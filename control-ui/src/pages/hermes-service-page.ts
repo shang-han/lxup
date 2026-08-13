@@ -96,6 +96,8 @@ export class HermesServicePage extends LitElement {
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
   @property({ type: Function }) onNavigate: (page: string) => void = () => {};
+  /** 来源页：从哪里进来就返回哪里（默认仪表盘） */
+  @property({ type: String }) backTo = 'dashboard';
 
   // 真实状态（来自 Sidecar）
   @state() _online = false;
@@ -192,8 +194,8 @@ export class HermesServicePage extends LitElement {
     const gatewayAddr = `http://${host}:${this._port}`;
     return html`
       <div class="page-content" style="padding:24px 24px 0;">
-        <a class="hs-back" @click=${() => this.onNavigate('dashboard')}>
-          ← ${L('hermesService.backToDashboard')}
+        <a class="hs-back" @click=${() => this.onNavigate(this.backTo || 'dashboard')}>
+          ← ${this.backTo === 'models' ? `返回${L('tabs.models')}` : this.backTo === 'hermes-config' ? `返回${L('hermesConfig.title')}` : L('hermesService.backToDashboard')}
         </a>
       </div>
 
@@ -303,7 +305,7 @@ export class HermesServicePage extends LitElement {
                 <span class="hs-info-row__value mono">${this._maskedKey || L('hermesService.notSet')}</span>
               </div>
               <div class="hs-config-links">
-                <button @click=${() => this.onNavigate('dashboard')}>${L('hermesService.openConfig')}</button>
+                <button @click=${() => this.onNavigate('hermes-config')}>${L('hermesService.openConfig')}</button>
                 <button @click=${() => this.onNavigate('hermes-env')}>${L('hermesService.openEnv')}</button>
               </div>
             </div>
@@ -355,7 +357,6 @@ export class HermesServicePage extends LitElement {
             </div>
             <div style="display:flex;gap:16px;">
               <a class="hs-link" @click=${() => this.onNavigate('logs')}>${L('hermesService.openLogs')}</a>
-              <a class="hs-link" @click=${() => this.onNavigate('dashboard')}>${L('hermesService.openConfig')}</a>
             </div>
           </div>
         </div>

@@ -55,6 +55,8 @@ export class HermesConfigPage extends LitElement {
   `;
 
   @property({ type: Function }) onNavigate: (page: string) => void = () => {};
+  /** 来源页：从哪里进来就返回哪里（默认服务页） */
+  @property({ type: String }) backTo = 'hermes-service';
 
   @state() _configContent = '';
   @state() _path = '';
@@ -112,7 +114,7 @@ export class HermesConfigPage extends LitElement {
   render() {
     return html`
       <div class="page-content" style="padding:24px 24px 0;">
-        <a class="hc-back" @click=${() => this.onNavigate('hermes-service')}>
+        <a class="hc-back" @click=${() => this.onNavigate(this.backTo || 'hermes-service')}>
           ← ${L('hermesConfig.backToService')}
         </a>
       </div>

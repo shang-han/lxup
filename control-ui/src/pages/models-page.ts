@@ -23,6 +23,11 @@ import '../components/page-header.js';
  *    网关（重新）连上后自动把本地配置 merge-push 到网关，成功后清除待同步标记。
  * localStorage（openclaw.models.config）同时供聊天页/AI 页等读取方使用。
  *
+ * Hermes 模式（engine=hermes）：页面 UI 与 OpenClaw 完全一致（同一套渲染/对话框），
+ * 仅数据层换到 Sidecar——读取 GET /api/hermes/model 映射为单个「Hermes」服务商，
+ * 保存 POST /api/hermes/model 写 config.yaml（热加载）；不落 OpenClaw 的
+ * localStorage 镜像、不碰网关 RPC、不同步 Agent 认证仓库。
+ *
  * 功能：
  *  - 添加/编辑/删除服务商（Provider）
  *  - 每个服务商下可添加多个模型（输入模型名回车添加）
@@ -153,6 +158,15 @@ export class ModelsPage extends LitElement {
       font-size: 12px; color: var(--warn); margin: -4px 0 12px;
       display: flex; align-items: center; gap: 6px;
     }
+
+
+    /* === back link（从隐藏页进入时显示）=== */
+    .models-back {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--accent); cursor: pointer;
+      margin-bottom: 10px; text-decoration: none;
+    }
+    .models-back:hover { text-decoration: underline; }
 
     /* === hint === */
     .models-hint {
@@ -349,6 +363,14 @@ export class ModelsPage extends LitElement {
 
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
+  /** 引擎：openclaw 走网关 RPC（openclaw.json）；hermes 走 Sidecar（config.yaml，保存即热加载） */
+  @property({ type: String }) engine = 'openclaw';
+
+  /** 来源页：从 Hermes 服务页进入时显示返回链接 */
+  @property({ type: String }) backTo = '';
+  @property({ type: Function }) onNavigate: (page: string) => void = () => {};
+
+  get _isHermes(): boolean { return this.engine === 'hermes'; }
 
   @state() _providers: ProviderConfig[] = [];
   @state() _expanded: Record<string, boolean> = {};
@@ -400,6 +422,11 @@ export class ModelsPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    if (this._isHermes) {
+      // Hermes 模式：不碰 OpenClaw 网关 RPC / localStorage 镜像，直接读 Sidecar 配置
+      this._loadHermesConfig();
+      return;
+    }
     const store = getSharedStore();
     // 恢复上次离线编辑留下的待同步改动（实例状态随页面卸载丢失，只认 localStorage）
     const pend = this._readPending();
@@ -535,6 +562,11 @@ export class ModelsPage extends LitElement {
 
   /** 统一保存入口：在线直写网关（权威）；离线落本地缓存，网关连上后自动同步 */
   _save() {
+    if (this._isHermes) {
+      // Hermes：写 config.yaml（Sidecar），不落 OpenClaw 的 localStorage 镜像
+      this._saveToHermes();
+      return;
+    }
     const store = getSharedStore();
     if (store.connected) this._saveToGateway();
     else this._saveToLocal();
@@ -730,6 +762,78 @@ export class ModelsPage extends LitElement {
   get _sidecarBase(): string {
     const host = (typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1';
     return `http://${host}:7889`;
+  }
+
+  // ── Hermes 模式：数据层适配（页面 UI 与 OpenClaw 完全一致，只换后端读写）──
+
+  /** 读取 Hermes 当前模型配置 → 映射成本页的「服务商 + 模型」结构 */
+  async _loadHermesConfig() {
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() });
+      if (!r.ok) return;
+      const c = (await r.json()) as { name?: string; baseUrl?: string; apiKey?: string; hasKey?: boolean };
+      const name = (c.name || '').trim();
+      if (!name && !c.baseUrl) {
+        this._providers = [];
+        this._defaultModelRef = '';
+        return;
+      }
+      this._defaultModelRef = name ? `hermes/${name}` : '';
+      this._providers = [{
+        id: 'hermes',
+        name: name || 'Hermes',          // 卡片标题直接显示模型名（与 OpenClaw 一致）
+        baseUrl: String(c.baseUrl || ''),
+        apiKey: String(c.apiKey || ''),  // 打码值，保存时后端会保留原 Key
+        models: name ? [{ id: name, isPrimary: true }] : [],
+      }];
+      this._rawProviders = {};
+      this._rawModels = {};
+      this._saveError = '';
+    } catch { /* Sidecar 离线时忽略，保存时会报错 */ }
+  }
+
+  /** 保存 Hermes 模型配置：取页面上第一个服务商的主模型（或第一个模型）写 config.yaml；
+   *  模型已删空时调用 DELETE /api/hermes/model 清空配置（对应 OpenClaw 的删除语义） */
+  async _saveToHermes() {
+    this._saving = true;
+    this._saveError = '';
+    try {
+      let name = '', baseUrl = '', apiKey = '';
+      for (const p of this._providers) {
+        const m = p.models.find(x => x.isPrimary) || p.models[0];
+        if (!m) continue;
+        name = m.id; baseUrl = p.baseUrl; apiKey = p.apiKey; break;
+      }
+      let d: { success?: boolean } = {};
+      if (name) {
+        const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
+          method: 'POST',
+          headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim() }),
+        });
+        d = (await r.json()) as { success?: boolean };
+      } else {
+        // 模型删空 → 清空 Hermes 模型配置，页面回到「未配置」空态
+        const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
+          method: 'DELETE',
+          headers: sidecarHeaders(),
+        });
+        d = (await r.json().catch(() => ({}))) as { success?: boolean };
+      }
+      if (d.success) {
+        this._defaultModelRef = name ? `hermes/${name}` : '';
+        this._saveFlash = true;
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => { this._saveFlash = false; }, 1800);
+        await this._loadHermesConfig();
+      } else {
+        this._saveError = L('hermesDashboard.saveFailed');
+      }
+    } catch {
+      this._saveError = L('hermesDashboard.sidecarOffline');
+    } finally {
+      this._saving = false;
+    }
   }
 
   /** 通过 Sidecar 代理探测 OpenAI 兼容端点，获取模型列表 */
@@ -974,7 +1078,8 @@ export class ModelsPage extends LitElement {
   // ── 渲染：系统主/备模型 ─────────────────────────────
 
   _renderSystemGroup() {
-    const all = this._providers.flatMap(p => p.models.map(m => ({ ...m, provider: p.name })));
+    // Hermes 模式下服务商名固定为 Hermes，系统区与 OpenClaw 同格式显示「服务商/模型」
+    const all = this._providers.flatMap(p => p.models.map(m => ({ ...m, provider: this._isHermes ? 'Hermes' : p.name })));
     const primary = all.find(m => m.isPrimary);
     const backups = all.filter(m => !m.isPrimary);
     const total = all.length;
@@ -1034,7 +1139,7 @@ export class ModelsPage extends LitElement {
           <div class="provider-group__left">
             <span class="provider-group__chevron ${isExpanded ? 'open' : ''}">${icons['chevron-right']}</span>
             <span class="provider-group__name">${provider.name}</span>
-            ${provider.baseUrl ? html`<span class="provider-group__url">${provider.baseUrl}</span>` : ''}
+            ${!this._isHermes && provider.baseUrl ? html`<span class="provider-group__url">${provider.baseUrl}</span>` : ''}
           </div>
           <div class="provider-group__right">
             <span class="provider-group__status">
@@ -1225,6 +1330,11 @@ export class ModelsPage extends LitElement {
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
       <div class="models-page">
+        ${this.backTo === 'hermes-service' ? html`
+          <a class="models-back" @click=${() => this.onNavigate('hermes-service')}>
+            ← ${L('hermesConfig.backToService')}
+          </a>
+        ` : ''}
         <!-- 工具栏 -->
         <div class="models-toolbar">
           <button class="btn-add" @click=${this._openAddDialog}>
@@ -1254,7 +1364,7 @@ export class ModelsPage extends LitElement {
         ` : ''}
 
         <!-- 提示 -->
-        <div class="models-hint">${L('models.hint')}</div>
+        <div class="models-hint">${L(this._isHermes ? 'hermesDashboard.modelPageHint' : 'models.hint')}</div>
 
         <!-- 系统主/备模型 -->
         ${this._renderSystemGroup()}

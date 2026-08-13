@@ -58,7 +58,8 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
   if (engine === 'hermes') {
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','channels','extensions','settings'] },
+      { heading: L('sections.Config'), tabs: ['models','channels'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','extensions','settings'] },
     ];
     // hermes 引擎的技能页（skills2）由页面自身按 engine 切换数据源
   } else if (engine === 'codex') {
@@ -168,6 +169,8 @@ export class OpenClawApp extends LitElement {
 
   @state() _initDone = sessionStorage.getItem('openclaw.init-shown') === '1';
   @state() _page = 'dashboard';
+  /** 进入隐藏页（Hermes 服务 / ENV / Hermes 配置）前的来源页，返回时回到这里 */
+  _prevPage = 'dashboard';
   @state() _connected = false;
   @state() _snapshot = { status:'Offline', uptime:'--', version:'1.0.0' };
   @state() _theme = 'claw';
@@ -209,11 +212,11 @@ export class OpenClawApp extends LitElement {
   }
 
   _saveState() { try { localStorage.setItem('openclaw-control-state', JSON.stringify({ page:this._page, engine:this._engine })); } catch {} }
-  _navigate(page: string) { if (TAB_ICONS[page]) { this._page = page; this._saveState(); } }
+  _navigate(page: string) { if (TAB_ICONS[page]) { if (page !== this._page) this._prevPage = this._page; this._page = page; this._saveState(); } }
   _setTheme(t: string) { this._theme = t; document.documentElement.setAttribute('data-theme', t); localStorage.setItem('openclaw-control-theme', JSON.stringify({ theme:t, mode:this._themeMode })); }
   _setThemeMode(m: string) { this._themeMode = m; const r = m==='system'?(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'):m; document.documentElement.setAttribute('data-theme-mode', r); localStorage.setItem('openclaw-control-theme', JSON.stringify({ theme:this._theme, mode:m })); }
   _setLang(l: string) { i18n.setLocale(l); this._lang = l; }
-  _setEngine(e: string) { const v = (e==='openclaw'||e==='hermes'||e==='codex')?e:'openclaw'; if (v !== this._engine) { this._engine = v; this._page = v==='codex' ? 'codex' : 'dashboard'; this._saveState(); } }
+  _setEngine(e: string) { const v = (e==='openclaw'||e==='hermes'||e==='codex')?e:'openclaw'; if (v !== this._engine) { this._engine = v; this._page = v==='codex' ? 'codex' : 'dashboard'; this._prevPage = 'dashboard'; this._saveState(); } }
 
   _renderPage() {
     const title = (k: string) => L(`tabs.${k}`);
@@ -226,7 +229,7 @@ export class OpenClawApp extends LitElement {
         return html`<dashboard-page title=${title('dashboard')} subtitle=${L('dashboard.subtitle')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
       case 'chat': return html`<chat-page title=${title('chat')} subtitle=${sub('chat')} .connected=${this._connected} .engine=${this._engine} .onNavigate=${(p:string)=>this._navigate(p)}></chat-page>`;
       case 'logs':
-        if (this._engine === 'hermes') return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
+        if (this._engine === 'hermes') return html`<hermes-logs-page .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
         return html`<logs-page title=${title('logs')} subtitle=${sub('logs')}></logs-page>`;
       case 'skills2': return html`<skills-v2-page title=${title('skills2')} subtitle=${sub('skills2')} .engine=${this._engine} .onNavigate=${(p:string)=>this._navigate(p)}></skills-v2-page>`;
       case 'memory':
@@ -238,15 +241,15 @@ export class OpenClawApp extends LitElement {
       case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
       case 'settings': return html`<settings-page title=${title('settings')} subtitle=${sub('settings')} .theme=${this._theme} .themeMode=${this._themeMode} .snapshot=${this._snapshot} @set-theme=${(e:CustomEvent)=>this._setTheme(e.detail.value)} @set-mode=${(e:CustomEvent)=>this._setThemeMode(e.detail.value)}></settings-page>`;
       case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')} .engine=${this._engine}></channels-page>`;
-      case 'models': return html`<models-page title=${title('models')} subtitle=${sub('models')}></models-page>`;
+      case 'models': return html`<models-page title=${title('models')} subtitle=${sub('models')} .engine=${this._engine} .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></models-page>`;
       case 'gateway': return html`<gateway-page title=${title('gateway')} subtitle=${sub('gateway')}></gateway-page>`;
       case 'diagnostics': return html`<diagnostics-page title=${title('diagnostics')} subtitle=${sub('diagnostics')}></diagnostics-page>`;
       case 'browser': return html`<browser-page title=${title('browser')} subtitle=${sub('browser')}></browser-page>`;
       case 'codex': return html`<codex-page title=${title('codex')} subtitle=${sub('codex')}></codex-page>`;
       case 'sandbox': return html`<sandbox-page title=${title('sandbox')} subtitle=${sub('sandbox')}></sandbox-page>`;
-      case 'hermes-service': return html`<hermes-service-page title=${L('hermesDashboard.hermesService')} subtitle=${L('hermesService.subtitle')} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-service-page>`;
-      case 'hermes-env': return html`<hermes-env-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-env-page>`;
-      case 'hermes-config': return html`<hermes-config-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-config-page>`;
+      case 'hermes-service': return html`<hermes-service-page title=${L('hermesDashboard.hermesService')} subtitle=${L('hermesService.subtitle')} .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-service-page>`;
+      case 'hermes-env': return html`<hermes-env-page .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-env-page>`;
+      case 'hermes-config': return html`<hermes-config-page .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></hermes-config-page>`;
       case 'hermes-logs': return html`<hermes-logs-page .onNavigate=${(p:string)=>this._navigate(p)}></hermes-logs-page>`;
       default: return html`<dashboard-page title=${title('dashboard')} subtitle=${sub('dashboard')} .connected=${this._connected} .onNavigate=${(p:string)=>this._navigate(p)} @check-updates=${() => { this._initDone = false; sessionStorage.removeItem('openclaw.init-shown'); }}></dashboard-page>`;
     }

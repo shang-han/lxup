@@ -2,23 +2,6 @@ import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L, sidecarHeaders } from '../i18n/index.js';
 import { getStoredHermesUrl, setHermesUrl } from '../services/hermes-client.js';
-/** 服务商预设（OpenAI 兼容端点；点击自动填充 Base URL 与默认模型） */
-const PROVIDER_PRESETS: Array<{ name: string; baseUrl: string; model?: string }> = [
-  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  { name: '火山引擎', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
-  { name: '火山引擎 Coding', baseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3' },
-  { name: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-  { name: '智谱 AI', baseUrl: 'https://open.bigmodel.cn/api/paas/v4' },
-  { name: 'MiniMax', baseUrl: 'https://api.minimax.chat/v1' },
-  { name: 'Moonshot / Kimi', baseUrl: 'https://api.moonshot.cn/v1' },
-  { name: 'OpenAI 官方', baseUrl: 'https://api.openai.com/v1' },
-  { name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  { name: 'xAI (Grok)', baseUrl: 'https://api.x.ai/v1' },
-  { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1' },
-  { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
-  { name: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1' },
-  { name: 'Ollama (本地)', baseUrl: 'http://localhost:11434/v1' },
-];
 import '../components/page-header.js';
 
 const TERMINAL_COMMANDS = [
@@ -92,18 +75,6 @@ export class HermesDashboardPage extends LitElement {
     .hermes-save-msg.ok { color: var(--success); }
     .hermes-save-msg.err { color: var(--danger); }
 
-    /* === API Key 可视开关 === */
-    .hermes-key-wrap { position: relative; flex: 1; }
-    .hermes-key-wrap .hermes-form-input { width: 100%; padding-right: 34px; }
-    .hermes-key-eye {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      width: 22px; height: 22px; display: grid; place-items: center;
-      background: transparent; border: none; cursor: pointer;
-      color: var(--muted); border-radius: var(--radius-sm);
-      transition: color var(--duration-fast), background var(--duration-fast);
-    }
-    .hermes-key-eye:hover { color: var(--text); background: var(--bg-hover); }
-    .hermes-key-eye svg { width: 14px; height: 14px; }
     .hermes-section__link {
       font-size: 12px; color: var(--text-soft); cursor: pointer;
       display: flex; align-items: center; gap: 4px;
@@ -181,52 +152,6 @@ export class HermesDashboardPage extends LitElement {
     }
     .hermes-cmd-table .cmd-copy:hover { background: var(--bg-hover); color: var(--text); }
 
-    /* === model config form === */
-    .hermes-model-presets {
-      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
-    }
-    .hermes-model-presets button {
-      padding: 4px 10px; border-radius: var(--radius-sm); font-size: 12px;
-      font-weight: 500; border: 1px solid var(--border); cursor: pointer;
-      background: transparent; color: var(--text-soft); transition: all var(--duration-fast);
-      white-space: nowrap;
-    }
-    .hermes-model-presets button:hover { background: var(--bg-hover); color: var(--text); }
-    .hermes-model-presets button.active {
-      background: var(--accent-subtle); color: var(--accent); border-color: var(--accent);
-    }
-    .hermes-form-row {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
-    }
-    @media (max-width: 700px) { .hermes-form-row { grid-template-columns: 1fr; } }
-    .hermes-form-group { margin-bottom: 12px; }
-    .hermes-form-label {
-      font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px;
-      font-style: italic;
-    }
-    .hermes-form-input {
-      width: 100%; padding: 8px 12px; background: var(--bg-muted);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text); font-size: 13px; outline: none;
-      font-family: var(--font-mono);
-    }
-    .hermes-form-input:focus { border-color: var(--accent); }
-    .hermes-form-actions {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-top: 16px;
-    }
-    .hermes-btn-save {
-      padding: 8px 20px; border-radius: var(--radius-sm); font-size: 13px;
-      font-weight: 600; border: none; cursor: pointer;
-      background: var(--text-strong); color: var(--bg);
-    }
-    .hermes-btn-save:hover { opacity: 0.9; }
-    .hermes-btn-ghost {
-      padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px;
-      font-weight: 500; border: 1px solid var(--border); cursor: pointer;
-      background: transparent; color: var(--text-soft); transition: all var(--duration-fast);
-    }
-    .hermes-btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
     .hermes-link {
       font-size: 12px; color: var(--text-soft); cursor: pointer;
       text-decoration: none;
@@ -241,24 +166,12 @@ export class HermesDashboardPage extends LitElement {
   @state() _customUrl = '';
   @state() _connMsg = '';
   @state() _connMsgOk = false;
-  @state() _modelConfigOpen = false;
-  @state() _apiBase = 'https://api.deepseek.com/v1';
-  @state() _apiKey = '';
-  @state() _model = 'deepseek-chat';
 
   // 真实状态（来自 Sidecar / Hermes 网关）
-  @state() _selectedPreset = '';
-  @state() _modelList: string[] = [];
-  @state() _busyBtn: '' | 'models' | 'conn' = '';
   @state() _currentName = '';
-  @state() _currentBaseUrl = '';
   @state() _hasKey = false;
   @state() _hermesOnline = false;
   @state() _hermesVersion = '';
-  @state() _saving = false;
-  @state() _saveMsg = '';
-  @state() _saveMsgOk = false;
-  @state() _showKey = false;
 
   /** Sidecar HTTP 基址（Hermes 模型配置经 Sidecar 写入 config.yaml） */
   get _sidecarBase(): string {
@@ -314,11 +227,7 @@ export class HermesDashboardPage extends LitElement {
       if (!r.ok) return;
       const c = (await r.json()) as { name?: string; baseUrl?: string; apiKey?: string; hasKey?: boolean };
       this._currentName = c.name || '';
-      this._currentBaseUrl = c.baseUrl || '';
       this._hasKey = !!c.hasKey;
-      if (c.name) this._model = c.name;
-      if (c.baseUrl) this._apiBase = c.baseUrl;
-      if (c.apiKey) this._apiKey = c.apiKey; // 打码值，保存时后端会保留原 Key
     } catch { /* Sidecar 离线时忽略 */ }
   }
 
@@ -338,99 +247,6 @@ export class HermesDashboardPage extends LitElement {
     }
   }
 
-  /** 点击服务商预设 → 填充 Base URL 与默认模型 */
-  _applyPreset(p: { name: string; baseUrl: string; model?: string }) {
-    this._selectedPreset = p.name;
-    // 无公开端点的预设不清空已填的 Base URL
-    if (p.baseUrl) this._apiBase = p.baseUrl;
-    if (p.model) this._model = p.model;
-    this._modelList = [];
-    this._saveMsg = '';
-  }
-
-  /** 探测 OpenAI 兼容端点（获取模型列表 / 测试连通性共用）。
-   * 经 Sidecar 服务端代探：浏览器只有打码 Key 且受 CORS 限制，
-   * Sidecar 会回落到 config.yaml 里的真实 Key。 */
-  async _probeModels(): Promise<string[]> {
-    const base = this._apiBase.trim().replace(/\/+$/, '');
-    if (!base) throw new Error(L('hermesDashboard.needBaseUrl'));
-    const r = await fetch(`${this._sidecarBase}/api/hermes/model/probe`, {
-      method: 'POST',
-      headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ baseUrl: base, apiKey: this._apiKey.trim() }),
-    });
-    if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`);
-    const d = (await r.json()) as { ok?: boolean; error?: string; models?: string[] };
-    if (!d.ok) throw new Error(d.error || 'unknown');
-    return d.models || [];
-  }
-
-  /** 获取模型列表：成功后展示为可点选的 chips */
-  async _fetchModels() {
-    if (this._busyBtn) return;
-    this._busyBtn = 'models';
-    this._saveMsg = '';
-    try {
-      const list = await this._probeModels();
-      if (!list.length) throw new Error(L('hermesDashboard.noModels'));
-      this._modelList = list;
-      this._saveMsg = `✓ ${L('hermesDashboard.fetchModelsOk', { n: list.length })}`;
-      this._saveMsgOk = true;
-    } catch (e) {
-      this._saveMsg = `✗ ${L('hermesDashboard.fetchModelsFailed')}${e instanceof Error ? e.message : String(e)}`;
-      this._saveMsgOk = false;
-    } finally {
-      this._busyBtn = '';
-    }
-  }
-
-  /** 测试连通性：只报成功/失败 */
-  async _testConn() {
-    if (this._busyBtn) return;
-    this._busyBtn = 'conn';
-    this._saveMsg = '';
-    try {
-      await this._probeModels();
-      this._saveMsg = `✓ ${L('hermesDashboard.connOk')}`;
-      this._saveMsgOk = true;
-    } catch (e) {
-      this._saveMsg = `✗ ${L('hermesDashboard.connFailed')}${e instanceof Error ? e.message : String(e)}`;
-      this._saveMsgOk = false;
-    } finally {
-      this._busyBtn = '';
-    }
-  }
-
-  /** 保存模型配置（Sidecar POST /api/hermes/model → Hermes 热加载） */
-  async _saveModelConfig() {
-    this._saving = true;
-    this._saveMsg = '';
-    try {
-      const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
-        method: 'POST',
-        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          name: this._model.trim(),
-          baseUrl: this._apiBase.trim(),
-          apiKey: this._apiKey.trim(),
-        }),
-      });
-      const d = (await r.json()) as { success?: boolean };
-      if (d.success) {
-        this._saveMsg = `✓ ${L('hermesDashboard.savedHotReload')}`;
-        this._saveMsgOk = true;
-        await this._loadCurrentConfig();
-      } else {
-        this._saveMsg = `✗ ${L('hermesDashboard.saveFailed')}`;
-        this._saveMsgOk = false;
-      }
-    } catch {
-      this._saveMsg = `✗ ${L('hermesDashboard.sidecarOffline')}`;
-      this._saveMsgOk = false;
-    }
-    this._saving = false;
-  }
-
   _refreshAll() {
     void this._loadCurrentConfig();
     void this._loadStatus();
@@ -438,7 +254,7 @@ export class HermesDashboardPage extends LitElement {
 
   render() {
     return html`
-      <page-header title=${this.title} subtitle=${`${this._connHostPort.host}:${this._connHostPort.port} · ${L('hermesDashboard.subtitle')}${this._hermesVersion ? ' · v' + this._hermesVersion : ''}`}>
+      <page-header title=${this.title} subtitle=${L('hermesDashboard.subtitle')}>
         <div style="display:flex;gap:8px;align-items:center;">
           <button style="padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text-soft);display:inline-flex;align-items:center;gap:6px;"
                   @click=${() => this._refreshAll()}>
@@ -486,100 +302,6 @@ export class HermesDashboardPage extends LitElement {
             <div class="hermes-status-card__value" style="font-size:13px;">${L('hermesDashboard.hermesChatPanel')}</div>
             <div class="hermes-status-card__sub">${L('hermesDashboard.openChat')}</div>
           </div>
-        </div>
-
-        <!-- Model config -->
-        <div class="hermes-section">
-          <div class="hermes-section__header" style="cursor:pointer;user-select:none;" @click=${() => { this._modelConfigOpen = !this._modelConfigOpen; this.requestUpdate(); }}>
-            <div class="hermes-section__title">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              ${L('hermesDashboard.modelConfig')}
-              ${this._currentName
-                ? html`<span class="hermes-section__badge ok">${this._currentName}</span>`
-                : html`<span class="hermes-section__badge">${L('hermesDashboard.notConfigured')}</span>`}
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              style="transform:${this._modelConfigOpen ? 'rotate(180deg)' : 'rotate(0)'};transition:transform var(--duration-fast);color:var(--muted);">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-
-          ${this._modelConfigOpen ? html`
-            <!-- 服务商预设 -->
-            <div style="font-size:12px;color:var(--text-soft);margin-bottom:8px;">${L('hermesDashboard.providerPresets')}</div>
-            <div class="hermes-model-presets">
-              ${PROVIDER_PRESETS.map((p) => html`
-                <button class="${this._selectedPreset === p.name ? 'active' : ''}"
-                  @click=${() => this._applyPreset(p)}>${p.name}</button>
-              `)}
-            </div>
-
-            <!-- API Base URL & API Key -->
-            <div class="hermes-form-row">
-              <div class="hermes-form-group">
-                <div class="hermes-form-label">API Base URL</div>
-                <input class="hermes-form-input" type="text" .value=${this._apiBase}
-                  placeholder="https://api.deepseek.com/v1"
-                  @input=${(e: Event) => { this._apiBase = (e.target as HTMLInputElement).value; this._selectedPreset = ''; }} />
-              </div>
-              <div class="hermes-form-group">
-                <div class="hermes-form-label">API Key</div>
-                <div class="hermes-key-wrap">
-                  <input class="hermes-form-input" type=${this._showKey ? 'text' : 'password'} .value=${this._apiKey}
-                    placeholder="sk-...（留空=保留原 Key）"
-                    @input=${(e: Event) => { this._apiKey = (e.target as HTMLInputElement).value; }} />
-                  <button class="hermes-key-eye" type="button"
-                    title=${this._showKey ? L('common.hide') : L('common.show')}
-                    @click=${() => { this._showKey = !this._showKey; }}>
-                    ${this._showKey ? html`
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    ` : html`
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    `}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Model + 探测按钮 -->
-            <div class="hermes-form-group">
-              <div class="hermes-form-label">${L('hermesDashboard.model', '模型')}</div>
-              <div style="display:flex;gap:8px;">
-                <input class="hermes-form-input" style="flex:1;" type="text" .value=${this._model}
-                  placeholder="deepseek-chat"
-                  @input=${(e: Event) => { this._model = (e.target as HTMLInputElement).value; }} />
-                <button class="hermes-btn-ghost" ?disabled=${!!this._busyBtn} @click=${this._fetchModels}>
-                  ${this._busyBtn === 'models' ? L('common.loading') : L('hermesDashboard.fetchModels')}
-                </button>
-                <button class="hermes-btn-ghost" ?disabled=${!!this._busyBtn} @click=${this._testConn}>
-                  ${this._busyBtn === 'conn' ? L('common.loading') : L('hermesDashboard.testConn')}
-                </button>
-              </div>
-            </div>
-
-            <!-- 获取到的模型列表 → 点选填入 -->
-            ${this._modelList.length > 0 ? html`
-              <div class="hermes-model-presets" style="margin-top:4px;">
-                ${this._modelList.map((id) => html`
-                  <button class="${this._model === id ? 'active' : ''}"
-                    @click=${() => { this._model = id; }}>${id}</button>
-                `)}
-              </div>
-            ` : ''}
-
-            <!-- Actions -->
-            <div class="hermes-form-actions" style="justify-content:space-between;">
-              <div style="display:flex;gap:10px;align-items:center;">
-                <button class="hermes-btn-save" ?disabled=${this._saving} @click=${this._saveModelConfig}>
-                  ${this._saving ? L('hermesDashboard.saving') : L('hermesDashboard.saveConfig', '保存配置')}
-                </button>
-                <span class="hermes-save-msg ${this._saveMsgOk ? 'ok' : 'err'}">${this._saveMsg}</span>
-              </div>
-              <span class="hermes-section__link" @click=${() => this.onNavigate('hermes-env')}>
-                ${L('hermesDashboard.envAdvanced')} →
-              </span>
-            </div>
-          ` : ''}
         </div>
 
         <!-- Connection target -->

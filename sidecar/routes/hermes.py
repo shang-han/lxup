@@ -160,6 +160,22 @@ async def set_model(request: Request, body: HermesModelRequest):
     }
 
 
+@router.delete("/model")
+async def clear_model(request: Request):
+    """清空 Hermes 模型配置（删除 config.yaml 的 model 段，对应前端删除模型/服务商）"""
+    path = _config_path(request)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    cfg = _load_config(path)
+    cfg.pop("model", None)
+    path.write_text(
+        yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    logger.info("Hermes 模型配置已清空")
+    return {"success": True}
+
+
 @router.get("/skills")
 async def list_skills(request: Request):
     """Hermes 技能包清单（扫描 hermes-home/skills/**/SKILL.md 的 frontmatter）"""

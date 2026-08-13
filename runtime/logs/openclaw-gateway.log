@@ -2886,3 +2886,265 @@ o  Config warnings -------------------------------------------------------------
 2026-08-13T11:22:12.404+08:00 [ws] ⇄ res ✓ skills.status 390ms conn=4e45ec0f…3232 id=r19-hglxm5
 2026-08-13T11:22:12.410+08:00 [ws] ⇄ res ✓ channels.status 397ms conn=4e45ec0f…3232 id=r18-p9mf5o
 2026-08-13T11:22:23.705+08:00 [ws] ⇄ res ✗ skills.entries 1ms errorCode=INVALID_REQUEST errorMessage=unknown method: skills.entries conn=4e45ec0f…3232 id=r28-wd42ni
+2026-08-13T15:04:41.855+08:00 [gateway] loading configuration…
+2026-08-13T15:04:42.231+08:00 [gateway] force: no listeners on port 18789
+2026-08-13T15:04:42.237+08:00 [gateway] resolving authentication…
+2026-08-13T15:04:42.289+08:00 [gateway] starting...
+2026-08-13T15:04:44.619+08:00 [gateway] starting HTTP server...
+2026-08-13T15:04:44.624+08:00 [gateway] ⚠️  Gateway is binding to a non-loopback address. Ensure authentication is configured before exposing to public networks.
+2026-08-13T15:04:45.228+08:00 [health-monitor] started (interval: 300s, startup-grace: 60s, channel-connect-grace: 120s)
+2026-08-13T15:04:50.096+08:00 [gateway] agent model: openai/gpt-5.5 (thinking=medium, fast=off)
+2026-08-13T15:04:50.100+08:00 [gateway] http server listening (11 plugins: browser, canvas, device-pair, file-transfer, memory-core, ollama, openclaw-weixin, phone-control, qqbot, talk-voice, wecom-openclaw-plugin; 7.0s)
+2026-08-13T15:04:50.104+08:00 [gateway] log file: C:\Users\13907\AppData\Local\Temp\openclaw\openclaw-2026-08-13.log
+2026-08-13T15:04:50.502+08:00 [gateway] security warning: dangerous config flags enabled: gateway.controlUi.dangerouslyDisableDeviceAuth=true. Run `openclaw security audit`.
+2026-08-13T15:04:50.506+08:00 [gateway] starting channels and sidecars...
+2026-08-13T15:04:50.689+08:00 [openclaw-weixin] [7a83c9ea7479-im-bot] starting weixin provider (https://ilinkai.weixin.qq.com)
+2026-08-13T15:04:51.161+08:00 [gateway] ready
+2026-08-13T15:04:51.309+08:00 [heartbeat] started
+2026-08-13T15:04:52.340+08:00 [openclaw-weixin] [7a83c9ea7479-im-bot] weixin logs: C:\Users\13907\AppData\Local\Temp\openclaw\openclaw-2026-08-13.log
+2026-08-13T15:04:52.581+08:00 [openclaw-weixin] weixin monitor started (https://ilinkai.weixin.qq.com, account=7a83c9ea7479-im-bot)
+2026-08-13T15:04:52.585+08:00 [openclaw-weixin] [weixin] resuming from previous sync buf (96 bytes)
+2026-08-13T15:04:57.425+08:00 [ws] webchat connected conn=f3cbbea2-fb2d-43d5-aa53-891377f94555 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:05:01.935+08:00 [gateway] agent runtime plugins pre-warmed in 762ms
+2026-08-13T15:05:04.455+08:00 [ws] webchat connected conn=bb0c6026-a6bb-44c5-85af-93cbb5045156 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:05:11.455+08:00 [ws] ⇄ res ✓ agents.list 179ms conn=bb0c6026…5156 id=r10-dpcdl2
+2026-08-13T15:05:11.460+08:00 [ws] ⇄ res ✓ agents.list 66ms conn=bb0c6026…5156 id=r12-l1pau5
+2026-08-13T15:05:11.956+08:00 [ws] ⇄ res ✓ sessions.list 491ms conn=bb0c6026…5156 id=r13-mr9mc5
+2026-08-13T15:05:11.961+08:00 [ws] ⇄ res ✓ sessions.list 496ms conn=bb0c6026…5156 id=r14-g7dpnr
+2026-08-13T15:05:12.788+08:00 [ws] ⇄ res ✓ skills.status 822ms conn=bb0c6026…5156 id=r15-rm5ibc
+2026-08-13T15:05:13.140+08:00 [ws] ⇄ res ✓ skills.status 1174ms conn=bb0c6026…5156 id=r16-wam9m1
+2026-08-13T15:05:13.761+08:00 [ws] ⇄ res ✓ logs.tail 2368ms conn=bb0c6026…5156 id=r11-ppa71o
+2026-08-13T15:05:14.068+08:00 [ws] ⇄ res ✓ config.get 923ms conn=bb0c6026…5156 id=r17-afgmk9
+2026-08-13T15:05:14.080+08:00 [ws] ⇄ res ✓ config.get 937ms conn=bb0c6026…5156 id=r18-rdptzw
+2026-08-13T15:05:16.012+08:00 [ws] ⇄ res ✓ skills.status 391ms conn=bb0c6026…5156 id=r21-mrnsbo
+2026-08-13T15:05:16.021+08:00 [ws] ⇄ res ✓ channels.status 399ms conn=bb0c6026…5156 id=r20-quuwnn
+2026-08-13T15:05:20.482+08:00 [ws] ⇄ res ✓ config.get 303ms conn=bb0c6026…5156 id=r22-rbka71
+2026-08-13T15:05:21.209+08:00 [ws] ⇄ res ✓ channels.status 289ms conn=bb0c6026…5156 id=r25-qf56zh
+2026-08-13T15:05:21.223+08:00 [ws] ⇄ res ✓ config.get 305ms conn=bb0c6026…5156 id=r24-p9wzea
+2026-08-13T15:05:31.882+08:00 [ws] ⇄ res ✗ skills.entries 2ms errorCode=INVALID_REQUEST errorMessage=unknown method: skills.entries conn=bb0c6026…5156 id=r26-e3vdoz
+2026-08-13T15:05:36.512+08:00 [browser/extension-relay] extension relay for profile "chrome" listening on 127.0.0.1:18799
+2026-08-13T15:05:36.515+08:00 [browser/service] Browser control service ready (profiles=3)
+2026-08-13T15:05:36.584+08:00 [ws] ⇄ res ✓ browser.request 561ms conn=7165b540…036e id=e29c728b…2b10
+2026-08-13T15:05:36.860+08:00 [ws] ⇄ res ✓ browser.request 107ms conn=b63391e9…0ad4 id=4bd04e5e…1cea
+2026-08-13T15:06:24.923+08:00 [ws] ⇄ res ✓ skills.status 458ms conn=bb0c6026…5156 id=r32-u21mrs
+2026-08-13T15:06:25.302+08:00 [ws] ⇄ res ✓ skills.status 374ms conn=bb0c6026…5156 id=r33-aacwm7
+2026-08-13T15:06:26.171+08:00 [ws] ⇄ res ✓ config.get 1243ms conn=bb0c6026…5156 id=r34-8xipt1
+2026-08-13T15:06:26.183+08:00 [ws] ⇄ res ✓ config.get 578ms conn=bb0c6026…5156 id=r35-76pkpx
+2026-08-13T15:06:26.198+08:00 [ws] ⇄ res ✓ config.get 327ms conn=bb0c6026…5156 id=r36-uz3db5
+2026-08-13T15:09:23.919+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=bb0c6026-a6bb-44c5-85af-93cbb5045156
+2026-08-13T15:09:24.331+08:00 [ws] webchat connected conn=18ee2376-9347-4187-b8f5-d02c846eaa10 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:10:02.035+08:00 [ws] ⇄ res ✓ skills.status 528ms conn=18ee2376…aa10 id=r7-zryegs
+2026-08-13T15:10:02.390+08:00 [ws] ⇄ res ✓ skills.status 350ms conn=18ee2376…aa10 id=r8-ie6bc0
+2026-08-13T15:10:02.985+08:00 [ws] ⇄ res ✓ config.get 943ms conn=18ee2376…aa10 id=r9-e5lzar
+2026-08-13T15:10:03.000+08:00 [ws] ⇄ res ✓ config.get 305ms conn=18ee2376…aa10 id=r10-2oj68v
+2026-08-13T15:10:06.245+08:00 [ws] ⇄ res ✓ skills.status 343ms conn=18ee2376…aa10 id=r16-g40kef
+2026-08-13T15:10:06.594+08:00 [ws] ⇄ res ✓ skills.status 345ms conn=18ee2376…aa10 id=r17-9ug14r
+2026-08-13T15:10:07.085+08:00 [ws] ⇄ res ✓ config.get 835ms conn=18ee2376…aa10 id=r18-y4ktj3
+2026-08-13T15:10:07.096+08:00 [ws] ⇄ res ✓ config.get 264ms conn=18ee2376…aa10 id=r19-wiqh3e
+2026-08-13T15:10:11.162+08:00 [ws] ⇄ res ✓ skills.status 377ms conn=18ee2376…aa10 id=r25-vtmt8i
+2026-08-13T15:10:11.594+08:00 [ws] ⇄ res ✓ skills.status 429ms conn=18ee2376…aa10 id=r26-1oguoz
+2026-08-13T15:10:12.106+08:00 [ws] ⇄ res ✓ config.get 940ms conn=18ee2376…aa10 id=r27-bhi6mq
+2026-08-13T15:10:12.118+08:00 [ws] ⇄ res ✓ config.get 270ms conn=18ee2376…aa10 id=r28-qpnbts
+2026-08-13T15:10:17.744+08:00 [ws] ⇄ res ✓ skills.status 386ms conn=18ee2376…aa10 id=r34-q8r6ir
+2026-08-13T15:10:18.099+08:00 [ws] ⇄ res ✓ skills.status 351ms conn=18ee2376…aa10 id=r35-aif76j
+2026-08-13T15:10:18.599+08:00 [ws] ⇄ res ✓ config.get 850ms conn=18ee2376…aa10 id=r36-c94qyd
+2026-08-13T15:10:18.612+08:00 [ws] ⇄ res ✓ config.get 263ms conn=18ee2376…aa10 id=r37-ge2ztp
+2026-08-13T15:10:23.935+08:00 [ws] ⇄ res ✓ skills.status 377ms conn=18ee2376…aa10 id=r43-lu6jtr
+2026-08-13T15:10:24.265+08:00 [ws] ⇄ res ✓ skills.status 326ms conn=18ee2376…aa10 id=r44-y3nm8h
+2026-08-13T15:10:24.829+08:00 [ws] ⇄ res ✓ config.get 890ms conn=18ee2376…aa10 id=r45-4gunf9
+2026-08-13T15:10:24.844+08:00 [ws] ⇄ res ✓ config.get 305ms conn=18ee2376…aa10 id=r46-8w0jgx
+2026-08-13T15:11:22.742+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=18ee2376-9347-4187-b8f5-d02c846eaa10
+2026-08-13T15:11:23.155+08:00 [ws] webchat connected conn=7b2f435a-9d97-4357-a7eb-05970bd127ab remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:11:23.677+08:00 [ws] ⇄ res ✓ skills.status 358ms conn=7b2f435a…27ab id=r5-j6o8n7
+2026-08-13T15:11:23.952+08:00 [ws] ⇄ res ✓ config.get 270ms conn=7b2f435a…27ab id=r6-jedqrn
+2026-08-13T15:11:23.957+08:00 [ws] ⇄ res ✓ logs.tail 650ms conn=7b2f435a…27ab id=r2-9dwx4m
+2026-08-13T15:11:49.079+08:00 [ws] ⇄ res ✓ skills.status 363ms conn=7b2f435a…27ab id=r12-xr48eu
+2026-08-13T15:11:49.409+08:00 [ws] ⇄ res ✓ skills.status 327ms conn=7b2f435a…27ab id=r13-ewz3kr
+2026-08-13T15:11:49.964+08:00 [ws] ⇄ res ✓ config.get 882ms conn=7b2f435a…27ab id=r14-ogaxny
+2026-08-13T15:11:49.977+08:00 [ws] ⇄ res ✓ config.get 314ms conn=7b2f435a…27ab id=r15-xatkhs
+2026-08-13T15:11:55.586+08:00 [ws] ⇄ res ✓ skills.status 372ms conn=7b2f435a…27ab id=r21-9hoxmt
+2026-08-13T15:11:55.919+08:00 [ws] ⇄ res ✓ skills.status 329ms conn=7b2f435a…27ab id=r22-2iu6p5
+2026-08-13T15:11:56.461+08:00 [ws] ⇄ res ✓ config.get 869ms conn=7b2f435a…27ab id=r23-z5sgv0
+2026-08-13T15:11:56.474+08:00 [ws] ⇄ res ✓ config.get 289ms conn=7b2f435a…27ab id=r24-i2ufvi
+2026-08-13T15:11:59.301+08:00 [ws] ⇄ res ✓ skills.status 344ms conn=7b2f435a…27ab id=r30-ra9sba
+2026-08-13T15:11:59.621+08:00 [ws] ⇄ res ✓ skills.status 316ms conn=7b2f435a…27ab id=r31-qk7c75
+2026-08-13T15:12:00.098+08:00 [ws] ⇄ res ✓ config.get 792ms conn=7b2f435a…27ab id=r32-hn0elp
+2026-08-13T15:12:00.109+08:00 [ws] ⇄ res ✓ config.get 257ms conn=7b2f435a…27ab id=r33-bgmg61
+2026-08-13T15:15:37.719+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=7b2f435a-9d97-4357-a7eb-05970bd127ab
+2026-08-13T15:15:38.245+08:00 [ws] webchat connected conn=41560f9e-374d-4451-aa2e-c8e34d4c4d02 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:15:41.689+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=41560f9e-374d-4451-aa2e-c8e34d4c4d02
+2026-08-13T15:15:42.136+08:00 [ws] webchat connected conn=988f000a-5d61-4f0d-b340-6d2e7d398b93 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:18:14.062+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=988f000a-5d61-4f0d-b340-6d2e7d398b93
+2026-08-13T15:18:14.480+08:00 [ws] webchat connected conn=4b43af15-ed65-41cb-9d41-2b28d7973ae9 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:19:39.081+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=4b43af15-ed65-41cb-9d41-2b28d7973ae9
+2026-08-13T15:19:39.499+08:00 [ws] webchat connected conn=b488388f-9b5f-46b0-8c84-ed307d52c714 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:20:22.798+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=b488388f-9b5f-46b0-8c84-ed307d52c714
+2026-08-13T15:20:23.210+08:00 [ws] webchat connected conn=8f21e01c-3030-477f-80b6-9acdac9a755b remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:21:02.918+08:00 [ws] ⇄ res ✓ config.get 298ms conn=8f21e01c…755b id=r2-ehkgou
+2026-08-13T15:25:46.454+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=8f21e01c-3030-477f-80b6-9acdac9a755b
+2026-08-13T15:25:46.850+08:00 [ws] webchat connected conn=42be75dd-01ed-426c-8f04-0c26f5cd564d remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:25:47.256+08:00 [ws] ⇄ res ✓ config.get 261ms conn=42be75dd…564d id=r2-ihv83a
+2026-08-13T15:25:51.450+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=42be75dd-01ed-426c-8f04-0c26f5cd564d
+2026-08-13T15:25:51.878+08:00 [ws] webchat connected conn=d87afebd-f46e-4991-84db-d89fbc4127b7 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:25:52.423+08:00 [ws] ⇄ res ✓ config.get 400ms conn=d87afebd…27b7 id=r2-0qnw25
+2026-08-13T15:25:55.366+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=d87afebd-f46e-4991-84db-d89fbc4127b7
+2026-08-13T15:25:55.771+08:00 [ws] webchat connected conn=0e67c44c-ad27-43ce-b816-5803d2bc2709 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:25:56.229+08:00 [ws] ⇄ res ✓ config.get 293ms conn=0e67c44c…2709 id=r2-zeefwa
+2026-08-13T15:26:08.141+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=0e67c44c-ad27-43ce-b816-5803d2bc2709
+2026-08-13T15:26:08.540+08:00 [ws] webchat connected conn=905b85e4-e7e0-4bae-8075-b5d6c455f1e3 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:26:08.951+08:00 [ws] ⇄ res ✓ config.get 272ms conn=905b85e4…f1e3 id=r2-v4qs33
+2026-08-13T15:26:23.619+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=905b85e4-e7e0-4bae-8075-b5d6c455f1e3
+2026-08-13T15:26:24.015+08:00 [ws] webchat connected conn=5601b417-652a-4c9a-8187-b4a85b0498b8 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:26:24.459+08:00 [ws] ⇄ res ✓ config.get 290ms conn=5601b417…98b8 id=r2-8ofu1v
+2026-08-13T15:26:27.123+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=5601b417-652a-4c9a-8187-b4a85b0498b8
+2026-08-13T15:26:27.529+08:00 [ws] webchat connected conn=c58e494d-cf72-45f2-8b9e-9cbe3fdefc84 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:26:40.967+08:00 [ws] ⇄ res ✓ skills.status 444ms conn=c58e494d…fc84 id=r7-ba49ob
+2026-08-13T15:26:41.498+08:00 [ws] ⇄ res ✓ skills.status 527ms conn=c58e494d…fc84 id=r8-cjbjr7
+2026-08-13T15:26:42.378+08:00 [ws] ⇄ res ✓ config.get 1406ms conn=c58e494d…fc84 id=r9-qhfcea
+2026-08-13T15:26:42.390+08:00 [ws] ⇄ res ✓ config.get 582ms conn=c58e494d…fc84 id=r11-475rc9
+2026-08-13T15:26:42.402+08:00 [ws] ⇄ res ✓ config.get 594ms conn=c58e494d…fc84 id=r10-mbrn1t
+2026-08-13T15:29:21.948+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=c58e494d-cf72-45f2-8b9e-9cbe3fdefc84
+2026-08-13T15:29:22.337+08:00 [ws] webchat connected conn=aa999bed-4338-4391-8bb4-5da1f2ca2c7e remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:29:25.344+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=aa999bed-4338-4391-8bb4-5da1f2ca2c7e
+2026-08-13T15:29:25.737+08:00 [ws] webchat connected conn=85babfd7-4950-4741-abd2-d7c7d9a3ccf4 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:29:48.200+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=85babfd7-4950-4741-abd2-d7c7d9a3ccf4
+2026-08-13T15:29:48.602+08:00 [ws] webchat connected conn=f3b8ed43-3e6c-445f-bd80-3594d900551f remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:30:24.079+08:00 [ws] ⇄ res ✓ skills.status 450ms conn=f3b8ed43…551f id=r7-mrvdui
+2026-08-13T15:30:24.488+08:00 [ws] ⇄ res ✓ skills.status 405ms conn=f3b8ed43…551f id=r8-jltw4t
+2026-08-13T15:30:25.062+08:00 [ws] ⇄ res ✓ config.get 979ms conn=f3b8ed43…551f id=r9-1qyjkq
+2026-08-13T15:30:25.076+08:00 [ws] ⇄ res ✓ config.get 299ms conn=f3b8ed43…551f id=r10-hucu9c
+2026-08-13T15:30:28.015+08:00 [ws] ⇄ res ✓ config.get 281ms conn=f3b8ed43…551f id=r11-pqsl1p
+2026-08-13T15:32:54.072+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=f3b8ed43-3e6c-445f-bd80-3594d900551f
+2026-08-13T15:32:54.477+08:00 [ws] webchat connected conn=d6544a36-57df-4df1-a4ee-cb0fb200b65f remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:32:58.412+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=d6544a36-57df-4df1-a4ee-cb0fb200b65f
+2026-08-13T15:32:58.841+08:00 [ws] webchat connected conn=02b89ab5-b53d-4b59-8945-f305c06f1f26 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:03.091+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=02b89ab5-b53d-4b59-8945-f305c06f1f26
+2026-08-13T15:33:03.492+08:00 [ws] webchat connected conn=c06235df-5e4f-4021-892e-5430d293ae97 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:22.180+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=c06235df-5e4f-4021-892e-5430d293ae97
+2026-08-13T15:33:22.574+08:00 [ws] webchat connected conn=e33d3eb6-53f8-487d-bf26-a2b7f87cef4f remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:27.352+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=e33d3eb6-53f8-487d-bf26-a2b7f87cef4f
+2026-08-13T15:33:27.764+08:00 [ws] webchat connected conn=5f13ed7d-6145-4ec8-8f57-1d6db902ac19 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:38.235+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=5f13ed7d-6145-4ec8-8f57-1d6db902ac19
+2026-08-13T15:33:38.654+08:00 [ws] webchat connected conn=881a7410-6346-404d-84a8-fababd2a43a3 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:45.470+08:00 [ws] ⇄ res ✓ skills.status 431ms conn=881a7410…43a3 id=r7-00468a
+2026-08-13T15:33:45.852+08:00 [ws] ⇄ res ✓ skills.status 377ms conn=881a7410…43a3 id=r8-c2fkmx
+2026-08-13T15:33:46.431+08:00 [ws] ⇄ res ✓ config.get 955ms conn=881a7410…43a3 id=r9-rl9dgc
+2026-08-13T15:33:46.441+08:00 [ws] ⇄ res ✓ config.get 296ms conn=881a7410…43a3 id=r10-reypje
+2026-08-13T15:33:46.775+08:00 [ws] ⇄ res ✓ config.get 319ms conn=881a7410…43a3 id=r11-4q58ko
+2026-08-13T15:33:51.059+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=881a7410-6346-404d-84a8-fababd2a43a3
+2026-08-13T15:33:51.580+08:00 [ws] webchat connected conn=30c6d368-24e2-423d-8360-92646b1a8873 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:33:52.013+08:00 [ws] ⇄ res ✓ config.get 289ms conn=30c6d368…8873 id=r2-5fzbsa
+2026-08-13T15:34:10.274+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=30c6d368-24e2-423d-8360-92646b1a8873
+2026-08-13T15:34:10.687+08:00 [ws] webchat connected conn=2980903d-ba6e-4373-bc6b-47bb5c80ec09 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:34:13.039+08:00 [ws] ⇄ res ✓ skills.status 437ms conn=2980903d…ec09 id=r7-dez16g
+2026-08-13T15:34:13.447+08:00 [ws] ⇄ res ✓ skills.status 401ms conn=2980903d…ec09 id=r8-tgbn6n
+2026-08-13T15:34:14.019+08:00 [ws] ⇄ res ✓ config.get 972ms conn=2980903d…ec09 id=r9-eq8kfl
+2026-08-13T15:34:14.042+08:00 [ws] ⇄ res ✓ config.get 303ms conn=2980903d…ec09 id=r10-96c0la
+2026-08-13T15:34:14.569+08:00 [ws] ⇄ res ✓ config.get 290ms conn=2980903d…ec09 id=r11-i5haaw
+2026-08-13T15:34:44.412+08:00 [ws] ⇄ res ✓ config.get 289ms conn=2980903d…ec09 id=r12-l9eg7h
+2026-08-13T15:34:44.910+08:00 [gateway] config.patch write actor=openclaw-control-ui device=unknown-device ip=unknown-ip conn=2980903d-ba6e-4373-bc6b-47bb5c80ec09 changedPaths=models.providers.deepseek,agents.defaults.model restartReason=config.patch
+2026-08-13T15:34:45.902+08:00 [ws] ⇄ res ✓ config.patch 1486ms conn=2980903d…ec09 id=r13-n301vm
+2026-08-13T15:34:46.152+08:00 [reload] config change detected; evaluating reload (agents.defaults.model, models.providers.deepseek, meta.lastTouchedAt)
+2026-08-13T15:34:46.853+08:00 [ws] ⇄ res ✓ config.get 943ms conn=2980903d…ec09 id=r14-1yehur
+2026-08-13T15:34:46.894+08:00 [reload] config hot reload applied (agents.defaults.model, models.providers.deepseek)
+2026-08-13T15:35:00.601+08:00 [ws] ⇄ res ✓ skills.status 449ms conn=2980903d…ec09 id=r20-dzywg7
+2026-08-13T15:35:00.927+08:00 [ws] ⇄ res ✓ skills.status 776ms conn=2980903d…ec09 id=r21-h2i2fv
+2026-08-13T15:35:00.937+08:00 [ws] ⇄ res ✓ logs.tail 807ms conn=2980903d…ec09 id=r16-qufblg
+2026-08-13T15:35:02.073+08:00 [ws] ⇄ res ✓ config.get 234ms conn=2980903d…ec09 id=r22-97g5zw
+2026-08-13T15:35:06.214+08:00 [ws] ⇄ res ✓ models.authStatus 5131ms conn=c9417ccf…809f id=4ed8a01d…984f
+2026-08-13T15:35:06.224+08:00 [reload] config change detected; evaluating reload (meta.lastTouchedAt)
+2026-08-13T15:35:20.952+08:00 [ws] ⇄ res ✓ skills.status 412ms conn=2980903d…ec09 id=r28-ctj887
+2026-08-13T15:35:21.358+08:00 [ws] ⇄ res ✓ skills.status 403ms conn=2980903d…ec09 id=r29-rh4gpn
+2026-08-13T15:35:22.015+08:00 [ws] ⇄ res ✓ config.get 276ms conn=2980903d…ec09 id=r30-gbedp4
+2026-08-13T15:35:34.426+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=2980903d-ba6e-4373-bc6b-47bb5c80ec09
+2026-08-13T15:35:34.811+08:00 [ws] webchat connected conn=9e769229-c971-4ef2-8937-3b1c4d94f83f remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:36:55.320+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=9e769229-c971-4ef2-8937-3b1c4d94f83f
+2026-08-13T15:36:55.721+08:00 [ws] webchat connected conn=fd1ba16a-3d8f-4f05-aba1-9219649d6909 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:38:13.003+08:00 [ws] ⇄ res ✓ skills.status 395ms conn=fd1ba16a…6909 id=r7-wzi8qk
+2026-08-13T15:38:13.504+08:00 [ws] ⇄ res ✓ skills.status 497ms conn=fd1ba16a…6909 id=r8-fkxd2b
+2026-08-13T15:38:14.368+08:00 [ws] ⇄ res ✓ config.get 284ms conn=fd1ba16a…6909 id=r9-44nevl
+2026-08-13T15:38:17.408+08:00 [ws] ⇄ res ✓ config.get 277ms conn=fd1ba16a…6909 id=r10-ycmsw7
+2026-08-13T15:38:17.665+08:00 [gateway] config.patch write actor=openclaw-control-ui device=unknown-device ip=unknown-ip conn=fd1ba16a-3d8f-4f05-aba1-9219649d6909 changedPaths=models.providers.deepseek,agents.defaults.model restartReason=config.patch
+2026-08-13T15:38:18.376+08:00 [ws] ⇄ res ✓ config.patch 965ms conn=fd1ba16a…6909 id=r11-vxt9zn
+2026-08-13T15:38:18.663+08:00 [ws] ⇄ res ✓ config.get 282ms conn=fd1ba16a…6909 id=r12-s1zwh8
+2026-08-13T15:38:18.670+08:00 [reload] config change detected; evaluating reload (agents.defaults.model, models.providers.deepseek, meta.lastTouchedAt)
+2026-08-13T15:38:19.459+08:00 [reload] config hot reload applied (agents.defaults.model, models.providers.deepseek)
+2026-08-13T15:38:47.927+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=fd1ba16a-3d8f-4f05-aba1-9219649d6909
+2026-08-13T15:38:48.370+08:00 [ws] webchat connected conn=e67994e7-9334-4664-b1e4-16f612226183 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:38:51.302+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=e67994e7-9334-4664-b1e4-16f612226183
+2026-08-13T15:38:51.718+08:00 [ws] webchat connected conn=aca77025-88f8-425a-8684-9b6a70785499 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:39:10.209+08:00 [ws] ⇄ res ✓ skills.status 446ms conn=aca77025…5499 id=r7-rn3ma6
+2026-08-13T15:39:10.588+08:00 [ws] ⇄ res ✓ skills.status 375ms conn=aca77025…5499 id=r8-fjdnj7
+2026-08-13T15:39:11.371+08:00 [ws] ⇄ res ✓ config.get 1156ms conn=aca77025…5499 id=r9-7hyrol
+2026-08-13T15:39:11.383+08:00 [ws] ⇄ res ✓ config.get 552ms conn=aca77025…5499 id=r10-w4tq5j
+2026-08-13T15:39:11.395+08:00 [ws] ⇄ res ✓ config.get 301ms conn=aca77025…5499 id=r11-insfp2
+2026-08-13T15:39:43.082+08:00 [ws] ⇄ res ✓ skills.status 402ms conn=aca77025…5499 id=r17-z73h41
+2026-08-13T15:39:43.446+08:00 [ws] ⇄ res ✓ skills.status 360ms conn=aca77025…5499 id=r18-ur1suu
+2026-08-13T15:39:44.176+08:00 [ws] ⇄ res ✓ config.get 1089ms conn=aca77025…5499 id=r19-p5ugzq
+2026-08-13T15:39:44.187+08:00 [ws] ⇄ res ✓ config.get 488ms conn=aca77025…5499 id=r20-44w73j
+2026-08-13T15:39:44.198+08:00 [ws] ⇄ res ✓ config.get 499ms conn=aca77025…5499 id=r21-qyie7w
+2026-08-13T15:41:15.618+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=aca77025-88f8-425a-8684-9b6a70785499
+2026-08-13T15:41:16.034+08:00 [ws] webchat connected conn=d9548c25-69a3-4473-80f5-9ab726f6850e remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:43:24.134+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=d9548c25-69a3-4473-80f5-9ab726f6850e
+2026-08-13T15:43:24.516+08:00 [ws] webchat connected conn=c5ecceee-f8d8-4270-9168-3fb39ccba90f remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:44:00.439+08:00 [gateway] loading configuration…
+2026-08-13T15:44:00.715+08:00 [gateway] force: no listeners on port 18789
+2026-08-13T15:44:00.721+08:00 [gateway] resolving authentication…
+2026-08-13T15:44:00.736+08:00 [gateway] starting...
+2026-08-13T15:44:02.100+08:00 [gateway] starting HTTP server...
+2026-08-13T15:44:02.105+08:00 [gateway] ⚠️  Gateway is binding to a non-loopback address. Ensure authentication is configured before exposing to public networks.
+2026-08-13T15:44:02.515+08:00 [health-monitor] started (interval: 300s, startup-grace: 60s, channel-connect-grace: 120s)
+2026-08-13T15:44:04.920+08:00 [gateway] agent model: openai/gpt-5.5 (thinking=medium, fast=off)
+2026-08-13T15:44:04.924+08:00 [gateway] http server listening (11 plugins: browser, canvas, device-pair, file-transfer, memory-core, ollama, openclaw-weixin, phone-control, qqbot, talk-voice, wecom-openclaw-plugin; 3.9s)
+2026-08-13T15:44:04.928+08:00 [gateway] log file: C:\Users\13907\AppData\Local\Temp\openclaw\openclaw-2026-08-13.log
+2026-08-13T15:44:05.325+08:00 [gateway] security warning: dangerous config flags enabled: gateway.controlUi.dangerouslyDisableDeviceAuth=true. Run `openclaw security audit`.
+2026-08-13T15:44:05.329+08:00 [gateway] starting channels and sidecars...
+2026-08-13T15:44:05.419+08:00 [openclaw-weixin] [7a83c9ea7479-im-bot] starting weixin provider (https://ilinkai.weixin.qq.com)
+2026-08-13T15:44:05.502+08:00 [gateway] ready
+2026-08-13T15:44:05.525+08:00 [heartbeat] started
+2026-08-13T15:44:05.761+08:00 [openclaw-weixin] [7a83c9ea7479-im-bot] weixin logs: C:\Users\13907\AppData\Local\Temp\openclaw\openclaw-2026-08-13.log
+2026-08-13T15:44:05.836+08:00 [openclaw-weixin] weixin monitor started (https://ilinkai.weixin.qq.com, account=7a83c9ea7479-im-bot)
+2026-08-13T15:44:05.841+08:00 [openclaw-weixin] [weixin] resuming from previous sync buf (96 bytes)
+2026-08-13T15:44:12.259+08:00 [ws] webchat connected conn=e7278916-c0ed-4992-a7bc-d9fdbc337e9b remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:44:12.683+08:00 [ws] webchat connected conn=180c504e-6747-4f66-a2b0-c2f30e7d27f9 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:44:16.110+08:00 [gateway] agent runtime plugins pre-warmed in 597ms
+2026-08-13T15:44:16.115+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=e7278916-c0ed-4992-a7bc-d9fdbc337e9b
+2026-08-13T15:44:18.174+08:00 [ws] webchat connected conn=07f7ed89-c452-42f2-bc59-6c0a7f183f0c remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:50:05.794+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=180c504e-6747-4f66-a2b0-c2f30e7d27f9
+2026-08-13T15:50:06.221+08:00 [ws] webchat connected conn=a1d85dcc-9810-4064-8947-6d8bb97a3aea remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:53:41.201+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=a1d85dcc-9810-4064-8947-6d8bb97a3aea
+2026-08-13T15:53:41.671+08:00 [ws] webchat connected conn=a4c8ff8b-e253-44cd-b1e9-2a1756d6b7fb remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:53:44.890+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=a4c8ff8b-e253-44cd-b1e9-2a1756d6b7fb
+2026-08-13T15:53:45.426+08:00 [ws] webchat connected conn=995073e5-2ca4-4ed9-b813-515375e39154 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:53:49.024+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=995073e5-2ca4-4ed9-b813-515375e39154
+2026-08-13T15:53:49.420+08:00 [ws] webchat connected conn=d90fd204-04a0-4794-8300-b8d28b642756 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:56:29.630+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=d90fd204-04a0-4794-8300-b8d28b642756
+2026-08-13T15:56:30.023+08:00 [ws] webchat connected conn=8b801f30-dc25-4800-8bcc-d7ae604101e4 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:57:02.030+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=8b801f30-dc25-4800-8bcc-d7ae604101e4
+2026-08-13T15:57:02.427+08:00 [ws] webchat connected conn=799ec15e-685a-4e8c-a170-50be7c8f19a6 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T15:57:09.722+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=799ec15e-685a-4e8c-a170-50be7c8f19a6
+2026-08-13T15:57:10.151+08:00 [ws] webchat connected conn=903a577f-164b-4dda-adbf-f4719c566128 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:04.464+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=903a577f-164b-4dda-adbf-f4719c566128
+2026-08-13T16:13:04.858+08:00 [ws] webchat connected conn=b418e03e-c6b4-436e-88ae-69c7650de7fe remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:08.905+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=b418e03e-c6b4-436e-88ae-69c7650de7fe
+2026-08-13T16:13:09.312+08:00 [ws] webchat connected conn=c9275a59-5069-4260-a096-16e0402c068b remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:13.977+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=c9275a59-5069-4260-a096-16e0402c068b
+2026-08-13T16:13:14.389+08:00 [ws] webchat connected conn=8ca42068-c63d-448b-bfce-967ae98f25ec remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:19.425+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=8ca42068-c63d-448b-bfce-967ae98f25ec
+2026-08-13T16:13:19.855+08:00 [ws] webchat connected conn=f6a3ddf6-2cfb-47ad-8031-6af6e34c1279 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:24.653+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=f6a3ddf6-2cfb-47ad-8031-6af6e34c1279
+2026-08-13T16:13:25.323+08:00 [ws] webchat connected conn=a19ae4ff-b69e-426a-9615-01dc507ddc0d remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:28.314+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=a19ae4ff-b69e-426a-9615-01dc507ddc0d
+2026-08-13T16:13:28.715+08:00 [ws] webchat connected conn=dda14f65-7588-418d-82d3-32f01560e09b remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:33.806+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=dda14f65-7588-418d-82d3-32f01560e09b
+2026-08-13T16:13:34.203+08:00 [ws] webchat connected conn=53a636f6-eed9-4f5b-b9fb-67cb4362c427 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:13:54.086+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=53a636f6-eed9-4f5b-b9fb-67cb4362c427
+2026-08-13T16:13:54.495+08:00 [ws] webchat connected conn=c7cca4cd-766f-40ea-9a70-45ab3d96cdc1 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:14:13.852+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=c7cca4cd-766f-40ea-9a70-45ab3d96cdc1
+2026-08-13T16:14:14.281+08:00 [ws] webchat connected conn=b5e7c491-e6ed-4631-a74c-c6bb4c661067 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:18:29.045+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=b5e7c491-e6ed-4631-a74c-c6bb4c661067
+2026-08-13T16:18:29.435+08:00 [ws] webchat connected conn=ba5c06a9-c006-4c2d-a09c-ce2d531ca2cf remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:19:17.603+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=ba5c06a9-c006-4c2d-a09c-ce2d531ca2cf
+2026-08-13T16:19:18.144+08:00 [ws] webchat connected conn=15ff3737-8b72-419e-bd7e-10bc5b6686c5 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0
+2026-08-13T16:20:04.014+08:00 [ws] webchat disconnected code=1001 reason=n/a conn=15ff3737-8b72-419e-bd7e-10bc5b6686c5
+2026-08-13T16:20:04.586+08:00 [ws] webchat connected conn=89ee243c-e7be-4c74-98ef-27e572f8f1b0 remote=127.0.0.1 client=openclaw-control-ui webchat v1.0.0

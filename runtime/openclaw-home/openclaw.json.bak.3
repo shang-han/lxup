@@ -7,7 +7,8 @@
       "maxConcurrent": 4,
       "subagents": {
         "maxConcurrent": 8
-      }
+      },
+      "model": "deepseek/deepseek-v4-pro"
     },
     "list": [
       {
@@ -41,11 +42,23 @@
     }
   },
   "models": {
-    "providers": {}
+    "providers": {
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com/v1",
+        "apiKey": "sk-ade26cd9f76442ceb23fe3988094bbde",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "deepseek-v4-pro",
+            "name": "deepseek-v4-pro"
+          }
+        ]
+      }
+    }
   },
   "meta": {
     "lastTouchedVersion": "2026.7.1-2",
-    "lastTouchedAt": "2026-08-10T07:01:21.656Z"
+    "lastTouchedAt": "2026-08-10T07:06:49.741Z"
   },
   "plugins": {
     "entries": {

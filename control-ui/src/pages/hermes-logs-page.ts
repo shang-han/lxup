@@ -12,6 +12,14 @@ export class HermesLogsPage extends LitElement {
     :host { display: block; }
     ${unsafeCSS(pageStyles)}
 
+
+    .hl-back {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--accent); cursor: pointer;
+      margin-bottom: 8px; text-decoration: none;
+    }
+    .hl-back:hover { text-decoration: underline; }
+
     .hl-header-actions { display: flex; gap: 8px; align-items: center; }
     .hl-action-btn {
       padding: 5px 14px; border-radius: var(--radius-sm); font-size: 12px;
@@ -82,6 +90,8 @@ export class HermesLogsPage extends LitElement {
   `;
 
   @property({ type: Function }) onNavigate: (page: string) => void = () => {};
+  /** 来源页：从 Hermes 服务页进入时显示返回链接 */
+  @property({ type: String }) backTo = '';
 
   @state() _logFiles: LogFileInfo[] = [];
   @state() _activeFile = '';
@@ -167,6 +177,13 @@ export class HermesLogsPage extends LitElement {
   render() {
     const filtered = this._filteredLines;
     return html`
+      ${this.backTo === 'hermes-service' ? html`
+        <div class="page-content" style="padding:16px 24px 0;">
+          <a class="hl-back" @click=${() => this.onNavigate('hermes-service')}>
+            ← ${L('hermesConfig.backToService')}
+          </a>
+        </div>
+      ` : ''}
       <page-header
         title=${L('hermesLogs.title')}
         subtitle=${'runtime/logs · runtime/hermes-home/logs'}

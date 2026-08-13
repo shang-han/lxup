@@ -24,7 +24,6 @@
 │   ├── hermes-home/   Hermes 家目录（config.yaml / 会话 / 日志）
 │   └── logs/          各服务日志
 ├── start-hermes.bat   单独启动 Hermes 网关
-├── docs/              方案文档（方案.md 等）
 └── README.md
 ```
 

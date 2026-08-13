@@ -832,7 +832,7 @@ const en = {
     fromGatewayConfig: 'gateway config',
   },
   hermesDashboard: {
-    subtitle: 'Not configured',
+    subtitle: 'Hermes runtime status overview.',
     stopGateway: 'Stop Gateway',
     startGateway: 'Start Gateway',
     gatewayStatus: 'Gateway Status',
@@ -904,6 +904,7 @@ const en = {
     testConnectivity: 'Test Connectivity',
     saveConfig: 'Save Config',
     envAdvancedEdit: '.env Advanced Edit',
+    modelPageHint: 'Providers are the source of models (e.g. OpenAI, DeepSeek). Multiple models can be added under each provider. The ★ primary model is used first, with the rest as fallbacks for auto-switching. Changes are written to the Hermes config (config.yaml) in real time; a running gateway hot-reloads them on save — no restart required.',
   },
   hermesService: {
     subtitle: '集中查看 Gateway 运行状态、连接目标、健康检查与维护操作。',
@@ -1932,7 +1933,7 @@ const zhCN = {
     fromGatewayConfig: '网关配置',
   },
   hermesDashboard: {
-    subtitle: '未配置',
+    subtitle: 'Hermes 运行状态概览',
     stopGateway: '停止 Gateway',
     startGateway: '启动 Gateway',
     gatewayStatus: 'Gateway 状态',
@@ -2004,6 +2005,7 @@ const zhCN = {
     testConnectivity: '测试连通性',
     saveConfig: '保存配置',
     envAdvancedEdit: '.env 高级编辑',
+    modelPageHint: '服务商是模型的来源（如 OpenAI、DeepSeek 等）。每个服务商下可添加多个模型，标记 ★ 的「主模型」优先使用，其余作为备选自动切换。配置实时写入 Hermes 配置（config.yaml）；Hermes 运行时保存即热加载生效，无需重启网关。',
   },
   hermesService: {
     subtitle: '集中查看 Gateway 运行状态、连接目标、健康检查与维护操作。',

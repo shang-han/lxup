@@ -92,6 +92,8 @@ export class HermesEnvPage extends LitElement {
 
   @property({ type: String }) title = '';
   @property({ type: Function }) onNavigate: (page: string) => void = () => {};
+  /** 来源页：从哪里进来就返回哪里（默认仪表盘） */
+  @property({ type: String }) backTo = 'dashboard';
 
   @state() _variables: Array<{ name: string; value: string }> = [];
   @state() _path = '';
@@ -162,8 +164,8 @@ export class HermesEnvPage extends LitElement {
   render() {
     return html`
       <div class="page-content" style="padding:24px;">
-        <a class="env-back" @click=${() => this.onNavigate('dashboard')}>
-          ← ${L('hermesEnv.backToDashboard')}
+        <a class="env-back" @click=${() => this.onNavigate(this.backTo || 'dashboard')}>
+          ← ${this.backTo === 'hermes-service' ? L('hermesConfig.backToService') : L('hermesEnv.backToDashboard')}
         </a>
 
         <div class="env-page-title">${L('hermesEnv.title')}</div>
