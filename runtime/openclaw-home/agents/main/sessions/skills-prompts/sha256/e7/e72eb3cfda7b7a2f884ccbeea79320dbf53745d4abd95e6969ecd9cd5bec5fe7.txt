@@ -1,0 +1,171 @@
+
+
+The following skills provide specialized instructions for specific tasks.
+Use the read tool to load a skill's file when the task matches its description.
+If a skill's <version> differs from a previous turn, re-read its SKILL.md before using it.
+When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.
+
+<available_skills>
+  <skill>
+    <name>browser-automation</name>
+    <description>Use when controlling web pages with the OpenClaw browser tool, especially multi-step flows, login checks, tab management, or recovery from stale refs/timeouts.</description>
+    <location>D:\lxup\runtime\openclaw-home\plugin-skills\browser-automation\SKILL.md</location>
+    <version>sha256:608bed60aca52631</version>
+  </skill>
+  <skill>
+    <name>canvas</name>
+    <description>Present HTML on connected OpenClaw node canvases, navigate/eval/snapshot, and debug canvas host URLs.</description>
+    <location>D:\lxup\runtime\openclaw-home\plugin-skills\canvas\SKILL.md</location>
+    <version>sha256:7419e23f242397b3</version>
+  </skill>
+  <skill>
+    <name>diagram-maker</name>
+    <description>Create SVG/HTML or Excalidraw diagrams for concepts, architecture, flows, and whiteboards.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\diagram-maker\SKILL.md</location>
+    <version>sha256:6195e03fcb04a1a6</version>
+  </skill>
+  <skill>
+    <name>healthcheck</name>
+    <description>Audit/harden OpenClaw hosts: SSH, firewall, updates, exposure, backups, disk encryption, gateway security.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\healthcheck\SKILL.md</location>
+    <version>sha256:518ec6e0482cf1c7</version>
+  </skill>
+  <skill>
+    <name>meme-maker</name>
+    <description>Search meme templates, suggest formats, and generate local or hosted image memes.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\meme-maker\SKILL.md</location>
+    <version>sha256:8b8832f9f0f58b16</version>
+  </skill>
+  <skill>
+    <name>node-connect</name>
+    <description>Diagnose OpenClaw Android, iOS, or macOS node pairing, QR/setup code, route, auth, and connection failures.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\node-connect\SKILL.md</location>
+    <version>sha256:cc39026fd84e5cfa</version>
+  </skill>
+  <skill>
+    <name>node-inspect-debugger</name>
+    <description>Debug Node.js with node inspect, --inspect, breakpoints, CDP, heap, and CPU profiles.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\node-inspect-debugger\SKILL.md</location>
+    <version>sha256:50d2f6828eaf4bbf</version>
+  </skill>
+  <skill>
+    <name>notion</name>
+    <description>Notion CLI/API for pages, Markdown content, data sources, files, comments, search, Workers, and raw API calls.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\notion\SKILL.md</location>
+    <version>sha256:d45e2c1270d58c78</version>
+  </skill>
+  <skill>
+    <name>openai-whisper</name>
+    <description>Local speech-to-text with the Whisper CLI (no API key).</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\openai-whisper\SKILL.md</location>
+    <version>sha256:802e31d7310316fc</version>
+  </skill>
+  <skill>
+    <name>openai-whisper-api</name>
+    <description>OpenAI Audio Transcriptions API via curl; gpt-4o-transcribe, mini, diarize, or whisper-1.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\openai-whisper-api\SKILL.md</location>
+    <version>sha256:afff70c706a9bae2</version>
+  </skill>
+  <skill>
+    <name>skill-creator</name>
+    <description>Create, edit, audit, tidy, validate, or restructure AgentSkills and SKILL.md files.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\skill-creator\SKILL.md</location>
+    <version>sha256:d15b25d332d835eb</version>
+  </skill>
+  <skill>
+    <name>spike</name>
+    <description>Run throwaway prototypes to validate feasibility, compare approaches, and report a verdict.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\spike\SKILL.md</location>
+    <version>sha256:1258cde2d0e53267</version>
+  </skill>
+  <skill>
+    <name>taskflow</name>
+    <description>Coordinate multi-step detached tasks as one durable TaskFlow job with owner context, state, waits, and child tasks.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\taskflow\SKILL.md</location>
+    <version>sha256:d8b6a48d329aef0a</version>
+  </skill>
+  <skill>
+    <name>taskflow-inbox-triage</name>
+    <description>Example TaskFlow pattern for inbox triage, intent routing, waiting on replies, and later summaries.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\taskflow-inbox-triage\SKILL.md</location>
+    <version>sha256:1fe28cd924d8ae2d</version>
+  </skill>
+  <skill>
+    <name>video-frames</name>
+    <description>Extract frames or short clips from videos using ffmpeg.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\video-frames\SKILL.md</location>
+    <version>sha256:bdaaa9964db9584f</version>
+  </skill>
+  <skill>
+    <name>weather</name>
+    <description>Current weather and forecasts with web_fetch, falling back to wttr.in curl for locations, rain, temperature, travel planning.</description>
+    <location>D:\lxup\runtime\openclaw\node_modules\openclaw\skills\weather\SKILL.md</location>
+    <version>sha256:62ab4821aa873949</version>
+  </skill>
+  <skill>
+    <name>Word文档生成</name>
+    <description>把结构化内容渲染成真实的 Word(.docx)文件:标题层级、项目符号、编号列表、表格、分页,中文排版(调用本地脚本,需 python-docx)</description>
+    <location>D:\lxup\runtime\workspace\skills\Word文档生成\SKILL.md</location>
+    <version>sha256:b3e7a97f6cf88e13</version>
+  </skill>
+  <skill>
+    <name>促销活动方案策划</name>
+    <description>策划餐饮门店引流、锁客、节日促销活动的完整方案与配套宣传文案</description>
+    <location>D:\lxup\runtime\workspace\skills\01-促销活动方案策划\SKILL.md</location>
+    <version>sha256:0cacb2cb371d936e</version>
+  </skill>
+  <skill>
+    <name>加盟商管理手册</name>
+    <description>编写加盟商全生命周期管理手册，涵盖招募、签约、扶持、续约与退出机制</description>
+    <location>D:\lxup\runtime\workspace\skills\02-加盟商管理手册\SKILL.md</location>
+    <version>sha256:644cca57f45dd21a</version>
+  </skill>
+  <skill>
+    <name>员工排班与考勤</name>
+    <description>根据客流时段生成员工排班表，管理考勤与加班，平衡人力成本与服务</description>
+    <location>D:\lxup\runtime\workspace\skills\01-员工排班与考勤\SKILL.md</location>
+    <version>sha256:c8d4955601aaf467</version>
+  </skill>
+  <skill>
+    <name>培训材料制作</name>
+    <description>制作加盟商与门店员工的培训材料，含课件大纲、讲师手册与考核题</description>
+    <location>D:\lxup\runtime\workspace\skills\02-培训材料制作\SKILL.md</location>
+    <version>sha256:fa02610406916cef</version>
+  </skill>
+  <skill>
+    <name>客诉处理话术库</name>
+    <description>针对餐饮门店常见客诉场景，提供分步骤的安抚、处理与补偿话术</description>
+    <location>D:\lxup\runtime\workspace\skills\01-客诉处理话术库\SKILL.md</location>
+    <version>sha256:6715119a1e01aeb6</version>
+  </skill>
+  <skill>
+    <name>巡查报告生成</name>
+    <description>根据巡店检查记录生成结构化的督导巡查报告，含评分、问题与整改要求</description>
+    <location>D:\lxup\runtime\workspace\skills\02-巡查报告生成\SKILL.md</location>
+    <version>sha256:cfdadbdf82cd2221</version>
+  </skill>
+  <skill>
+    <name>运营数据分析</name>
+    <description>对单店及多店运营数据进行分析对比，定位问题门店并给出改善建议</description>
+    <location>D:\lxup\runtime\workspace\skills\02-运营数据分析\SKILL.md</location>
+    <version>sha256:6d5e8a52f29b6be3</version>
+  </skill>
+  <skill>
+    <name>门店日报周报生成</name>
+    <description>根据门店经营数据生成结构化的餐饮日报/周报，含营收、客流、成本与问题分析</description>
+    <location>D:\lxup\runtime\workspace\skills\01-门店日报周报生成\SKILL.md</location>
+    <version>sha256:6e52253b916af389</version>
+  </skill>
+  <skill>
+    <name>门店标准化SOP</name>
+    <description>编写连锁门店可复制的标准化作业流程（SOP），保证千店一面的运营质量</description>
+    <location>D:\lxup\runtime\workspace\skills\02-门店标准化SOP\SKILL.md</location>
+    <version>sha256:f1f7a85669a9d99c</version>
+  </skill>
+  <skill>
+    <name>食材采购与库存管理</name>
+    <description>制定食材采购计划、控制库存与损耗，生成采购清单与盘点台账</description>
+    <location>D:\lxup\runtime\workspace\skills\01-食材采购与库存管理\SKILL.md</location>
+    <version>sha256:679bf67f4af4e9d5</version>
+  </skill>
+</available_skills>

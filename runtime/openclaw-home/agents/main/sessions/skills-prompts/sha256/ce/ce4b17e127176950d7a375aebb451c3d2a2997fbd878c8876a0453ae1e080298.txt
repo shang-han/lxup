@@ -1,0 +1,183 @@
+
+
+The following skills provide specialized instructions for specific tasks.
+Use the read tool to load a skill's file when the task matches its description.
+If a skill's <version> differs from a previous turn, re-read its SKILL.md before using it.
+When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.
+
+<available_skills>
+  <skill>
+    <name>browser-automation</name>
+    <description>Use when controlling web pages with the OpenClaw browser tool, especially multi-step flows, login checks, tab management, or recovery from stale refs/timeouts.</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\browser-automation\SKILL.md</location>
+    <version>sha256:608bed60aca52631</version>
+  </skill>
+  <skill>
+    <name>canvas</name>
+    <description>Present HTML on connected OpenClaw node canvases, navigate/eval/snapshot, and debug canvas host URLs.</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\canvas\SKILL.md</location>
+    <version>sha256:7419e23f242397b3</version>
+  </skill>
+  <skill>
+    <name>clawhub</name>
+    <description>Search ClawHub for skills when a requested capability is not already available; install, verify, update, publish, or sync skills.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\clawhub\SKILL.md</location>
+    <version>sha256:6bb70d95cbd1a545</version>
+  </skill>
+  <skill>
+    <name>diagram-maker</name>
+    <description>Create SVG/HTML or Excalidraw diagrams for concepts, architecture, flows, and whiteboards.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\diagram-maker\SKILL.md</location>
+    <version>sha256:6195e03fcb04a1a6</version>
+  </skill>
+  <skill>
+    <name>healthcheck</name>
+    <description>Audit/harden OpenClaw hosts: SSH, firewall, updates, exposure, backups, disk encryption, gateway security.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\healthcheck\SKILL.md</location>
+    <version>sha256:518ec6e0482cf1c7</version>
+  </skill>
+  <skill>
+    <name>meme-maker</name>
+    <description>Search meme templates, suggest formats, and generate local or hosted image memes.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\meme-maker\SKILL.md</location>
+    <version>sha256:8b8832f9f0f58b16</version>
+  </skill>
+  <skill>
+    <name>node-connect</name>
+    <description>Diagnose OpenClaw Android, iOS, or macOS node pairing, QR/setup code, route, auth, and connection failures.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\node-connect\SKILL.md</location>
+    <version>sha256:cc39026fd84e5cfa</version>
+  </skill>
+  <skill>
+    <name>node-inspect-debugger</name>
+    <description>Debug Node.js with node inspect, --inspect, breakpoints, CDP, heap, and CPU profiles.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\node-inspect-debugger\SKILL.md</location>
+    <version>sha256:50d2f6828eaf4bbf</version>
+  </skill>
+  <skill>
+    <name>notion</name>
+    <description>Notion CLI/API for pages, Markdown content, data sources, files, comments, search, Workers, and raw API calls.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\notion\SKILL.md</location>
+    <version>sha256:d45e2c1270d58c78</version>
+  </skill>
+  <skill>
+    <name>python-debugpy</name>
+    <description>Debug Python with pdb, breakpoint(), post-mortem inspection, and debugpy remote attach.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\python-debugpy\SKILL.md</location>
+    <version>sha256:bfb1891204b67260</version>
+  </skill>
+  <skill>
+    <name>skill-creator</name>
+    <description>Create, edit, audit, tidy, validate, or restructure AgentSkills and SKILL.md files.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\skill-creator\SKILL.md</location>
+    <version>sha256:d15b25d332d835eb</version>
+  </skill>
+  <skill>
+    <name>spike</name>
+    <description>Run throwaway prototypes to validate feasibility, compare approaches, and report a verdict.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\spike\SKILL.md</location>
+    <version>sha256:1258cde2d0e53267</version>
+  </skill>
+  <skill>
+    <name>taskflow</name>
+    <description>Coordinate multi-step detached tasks as one durable TaskFlow job with owner context, state, waits, and child tasks.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\taskflow\SKILL.md</location>
+    <version>sha256:d8b6a48d329aef0a</version>
+  </skill>
+  <skill>
+    <name>taskflow-inbox-triage</name>
+    <description>Example TaskFlow pattern for inbox triage, intent routing, waiting on replies, and later summaries.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\taskflow-inbox-triage\SKILL.md</location>
+    <version>sha256:1fe28cd924d8ae2d</version>
+  </skill>
+  <skill>
+    <name>video-frames</name>
+    <description>Extract frames or short clips from videos using ffmpeg.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\video-frames\SKILL.md</location>
+    <version>sha256:bdaaa9964db9584f</version>
+  </skill>
+  <skill>
+    <name>weather</name>
+    <description>Current weather and forecasts with web_fetch, falling back to wttr.in curl for locations, rain, temperature, travel planning.</description>
+    <location>D:\project\LXUP\runtime\openclaw\node_modules\openclaw\skills\weather\SKILL.md</location>
+    <version>sha256:62ab4821aa873949</version>
+  </skill>
+  <skill>
+    <name>wecom-contact-lookup</name>
+    <description>通讯录成员查询技能，基于 MCP tool 协议封装的 `get_userlist` 接口，获取当前用户可见范围内的通讯录成员，支持按姓名/别名本地筛选匹配。返回 userid、姓名和别名。⚠️ 仅返回当前用户有权限查看的成员，非全量成员。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-contact-lookup\SKILL.md</location>
+    <version>sha256:106bba6abb42e8c7</version>
+  </skill>
+  <skill>
+    <name>wecom-doc-manager</name>
+    <description>企业微信文档管理技能。支持企业微信文档、智能表格和智能文档（原名智能主页）的管理。具体能力：(1) 获取文档或智能表格的完整内容，以 Markdown 格式导出 (2) 新建文档或智能表格 (3) 用 Markdown 覆写文档内容 (4) 创建智能文档，将本地 Markdown 文件发布为智能文档 (5) 导出智能文档内容为 Markdown 文件。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-doc-manager\SKILL.md</location>
+    <version>sha256:a2600cb785f55fd8</version>
+  </skill>
+  <skill>
+    <name>wecom-edit-todo</name>
+    <description>企业微信待办事项编辑技能，支持创建、更新、删除待办及变更用户处理进度状态。在用户说&quot;帮我创建一个待办&quot;、&quot;把这个任务分派给张三&quot;、&quot;标记待办完成&quot;、&quot;删掉那个待办&quot;、&quot;帮我建个提醒&quot;、&quot;更新一下待办内容&quot;、&quot;把提醒时间改到下周&quot;、&quot;接受这个待办&quot;、&quot;拒绝这个待办&quot;等需要对待办进行写操作的场景时使用。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-edit-todo\SKILL.md</location>
+    <version>sha256:4b852610e4c73605</version>
+  </skill>
+  <skill>
+    <name>wecom-get-todo-detail</name>
+    <description>企业微信待办详情批量查询技能，根据待办 ID 列表获取完整信息（包含待办内容和分派人）。在用户说&quot;看看这个待办的详情&quot;、&quot;待办内容是什么&quot;、&quot;这个待办分派给谁了&quot;、&quot;告诉我待办的具体信息&quot;等需要查看待办完整内容的场景时使用。通常配合 wecom-get-todo-list 使用——先获取待办 ID 列表，再用本技能获取详情。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-get-todo-detail\SKILL.md</location>
+    <version>sha256:357e8833865c5471</version>
+  </skill>
+  <skill>
+    <name>wecom-get-todo-list</name>
+    <description>企业微信待办列表查询技能，支持按创建时间和提醒时间过滤，支持分页。在用户说&quot;看看我的待办列表&quot;、&quot;我有哪些待办&quot;、&quot;这周的待办有哪些&quot;、&quot;最近有什么待办&quot;、&quot;查一下我的待办&quot;、&quot;列出所有待办&quot;等需要浏览待办概览的场景时使用。注意：此技能仅返回待办概要信息（不含内容和分派人），如需完整详情请配合 wecom-get-todo-detail 使用。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-get-todo-list\SKILL.md</location>
+    <version>sha256:a01732340c38d69f</version>
+  </skill>
+  <skill>
+    <name>wecom-meeting-create</name>
+    <description>企业微信会议创建技能, 支持创建预约会议. 当用户需要&quot;创建会议&quot;, &quot;预约会议&quot;, &quot;约会议&quot;, &quot;安排会议&quot;时触发.</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-meeting-create\SKILL.md</location>
+    <version>sha256:75cb0065257744ed</version>
+  </skill>
+  <skill>
+    <name>wecom-meeting-manage</name>
+    <description>企业微信会议管理技能, 支持取消会议和更新会议受邀成员. 当用户需要&quot;取消会议&quot;, &quot;删除会议&quot;, &quot;修改会议成员&quot;, &quot;添加会议参与人&quot;, &quot;移除会议成员&quot;时触发.</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-meeting-manage\SKILL.md</location>
+    <version>sha256:4c2de7dcbbeb68ea</version>
+  </skill>
+  <skill>
+    <name>wecom-meeting-query</name>
+    <description>企业微信会议查询技能, 支持查询会议列表, 获取会议详情, 按关键词查找会议. 当用户需要&quot;查看会议&quot;, &quot;查询会议列表&quot;, &quot;会议详情&quot;, &quot;什么时候开会&quot;, &quot;有哪些会议&quot;, &quot;查找会议&quot;时触发.</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-meeting-query\SKILL.md</location>
+    <version>sha256:892f7f727c3822ed</version>
+  </skill>
+  <skill>
+    <name>wecom-msg</name>
+    <description>企业微信消息技能。提供会话列表查询、消息记录拉取（支持文本/图片/文件/语音/视频）、多媒体文件获取和文本消息发送能力。当用户需要&quot;查看消息&quot;、&quot;看聊天记录&quot;、&quot;发消息给某人&quot;、&quot;最近有什么消息&quot;、&quot;给群里发消息&quot;、&quot;看看发了什么图片/文件&quot;时触发。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-msg\SKILL.md</location>
+    <version>sha256:aa49af5602d24802</version>
+  </skill>
+  <skill>
+    <name>wecom-preflight</name>
+    <description>企业微信插件前置条件检查。在执行任何 wecom_mcp 操作前，通过 shell 命令检查工具权限配置（profile 和白名单），若缺失则自动修复并提示用户重启 Gateway。所有使用 wecom_mcp 的技能都应在首次调用前执行此检查。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-preflight\SKILL.md</location>
+    <version>sha256:9e80ce968a2a5f53</version>
+  </skill>
+  <skill>
+    <name>wecom-schedule</name>
+    <description>企业微信日程管理技能。适用于用户对企业微信日程的各类管理需求。当用户需要：(1) 查询指定时间范围内的日程列表或获取日程详细信息（标题、时间、地点、参与者等），(2) 创建新日程并设置提醒、参与人等，(3) 修改已有日程的标题、时间、地点等信息或取消日程，(4) 添加或移除日程参与人，(5) 查询多个成员的闲忙状态并分析共同空闲时段以安排会议时使用此技能。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-schedule\SKILL.md</location>
+    <version>sha256:90b48be33f05ae09</version>
+  </skill>
+  <skill>
+    <name>wecom-smartsheet-data</name>
+    <description>企业微信智能表格数据（记录）管理技能。提供智能表格记录的增删改查能力。适用场景：(1) 查询子表全部记录 (2) 添加一行或多行记录 (3) 更新已有记录 (4) 删除记录。当用户需要读取表格数据、写入新数据、修改或删除表格行时触发此 Skill。支持通过 docid 或文档 URL 定位文档。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-smartsheet-data\SKILL.md</location>
+    <version>sha256:a7c67de4dc8c1cfd</version>
+  </skill>
+  <skill>
+    <name>wecom-smartsheet-schema</name>
+    <description>企业微信智能表格结构管理技能。提供子表（Sheet）和字段（Field/列）的增删改查能力。适用场景：(1) 查询智能表格的子表列表 (2) 添加、更新、删除子表 (3) 查询子表的字段/列信息 (4) 添加、更新、删除字段/列。当用户需要管理智能表格的表结构、列定义、子表配置时触发此 Skill。支持通过 docid 或文档 URL 定位文档。</description>
+    <location>D:\project\LXUP\runtime\openclaw-home\plugin-skills\wecom-smartsheet-schema\SKILL.md</location>
+    <version>sha256:cb79947732389ebe</version>
+  </skill>
+</available_skills>

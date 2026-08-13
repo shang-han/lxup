@@ -1,7 +1,5 @@
 # 运行时标记文件
 .sidecar.ready
-runtime/
-LXUP/
 
 # JS产物依赖
 control-ui/node_modules/
@@ -15,3 +13,7 @@ __pycache__/
 # 系统
 .DS_Store
 Thumbs.db
+
+docs/
+
+node_modules/

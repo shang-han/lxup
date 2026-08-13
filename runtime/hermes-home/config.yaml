@@ -1,0 +1,5 @@
+model:
+  api_key: sksadasdbde
+  name: deepseek-v4-pro
+  base_url: https://api.deepseek.com/v1
+  provider: auto

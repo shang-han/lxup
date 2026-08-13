@@ -1,0 +1,228 @@
+2026-08-10 10:51:54 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 10:51:57 已拉起 sidecar
+2026-08-10 10:51:58 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 10:51:58 已拉起 openclaw
+2026-08-10 10:52:41 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 10:52:41 已拉起 hermes
+2026-08-10 10:52:45 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 10:52:45 已拉起 ai-assistant
+2026-08-10 10:52:47 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 10:52:47 已拉起 frontend
+2026-08-10 10:52:48 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 10:52:48 前端已就绪
+2026-08-10 10:52:48 已打开浏览器 http://localhost:5173
+2026-08-10 10:52:48 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 11:32:36 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 11:32:39 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 11:32:39 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 11:32:39 已拉起 sidecar
+2026-08-10 11:32:41 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 11:32:41 已拉起 openclaw
+2026-08-10 11:32:50 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 11:32:50 已拉起 hermes
+2026-08-10 11:32:53 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 11:32:53 已拉起 ai-assistant
+2026-08-10 11:32:54 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 11:32:54 已拉起 frontend
+2026-08-10 11:32:56 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 11:32:56 前端已就绪
+2026-08-10 11:32:56 已打开浏览器 http://localhost:5173
+2026-08-10 11:32:56 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 11:48:56 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 11:48:59 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 11:48:59 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 11:48:59 已拉起 sidecar
+2026-08-10 11:49:01 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 11:49:01 已拉起 openclaw
+2026-08-10 11:49:10 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 11:49:10 已拉起 hermes
+2026-08-10 11:49:13 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 11:49:13 已拉起 ai-assistant
+2026-08-10 11:49:14 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 11:49:14 已拉起 frontend
+2026-08-10 11:49:16 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 11:49:16 前端已就绪
+2026-08-10 11:49:16 已打开浏览器 http://localhost:5173
+2026-08-10 11:49:16 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 15:08:54 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 15:08:57 已拉起 sidecar
+2026-08-10 15:08:58 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 15:08:58 已拉起 openclaw
+2026-08-10 15:09:09 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 15:09:09 已拉起 hermes
+2026-08-10 15:09:12 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 15:09:12 已拉起 ai-assistant
+2026-08-10 15:09:13 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 15:09:13 已拉起 frontend
+2026-08-10 15:09:15 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 15:09:15 前端已就绪
+2026-08-10 15:09:15 已打开浏览器 http://localhost:5173
+2026-08-10 15:09:15 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 15:16:18 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 15:16:21 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 15:16:21 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 15:16:21 已拉起 sidecar
+2026-08-10 15:16:22 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 15:16:22 已拉起 openclaw
+2026-08-10 15:16:33 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 15:16:33 已拉起 hermes
+2026-08-10 15:16:36 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 15:16:36 已拉起 ai-assistant
+2026-08-10 15:16:37 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 15:16:37 已拉起 frontend
+2026-08-10 15:16:39 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 15:16:39 前端已就绪
+2026-08-10 15:16:39 已打开浏览器 http://localhost:5173
+2026-08-10 15:16:39 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 15:35:53 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 15:35:56 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 15:35:56 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 15:35:56 已拉起 sidecar
+2026-08-10 15:35:58 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 15:35:58 已拉起 openclaw
+2026-08-10 15:36:08 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 15:36:08 已拉起 hermes
+2026-08-10 15:36:13 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 15:36:13 已拉起 ai-assistant
+2026-08-10 15:36:14 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 15:36:14 已拉起 frontend
+2026-08-10 15:36:16 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 15:36:16 前端已就绪
+2026-08-10 15:36:16 已打开浏览器 http://localhost:5173
+2026-08-10 15:36:16 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 15:49:35 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 15:49:38 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 15:49:38 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 15:49:38 已拉起 sidecar
+2026-08-10 15:49:40 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 15:49:40 已拉起 openclaw
+2026-08-10 15:49:50 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 15:49:50 已拉起 hermes
+2026-08-10 15:49:53 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 15:49:53 已拉起 ai-assistant
+2026-08-10 15:49:55 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 15:49:55 已拉起 frontend
+2026-08-10 15:49:56 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 15:49:56 前端已就绪
+2026-08-10 15:49:56 已打开浏览器 http://localhost:5173
+2026-08-10 15:49:56 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 16:18:34 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 16:18:36 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 16:18:36 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 16:18:36 已拉起 sidecar
+2026-08-10 16:18:38 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 16:18:38 已拉起 openclaw
+2026-08-10 16:18:49 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 16:18:49 已拉起 hermes
+2026-08-10 16:18:52 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 16:18:52 已拉起 ai-assistant
+2026-08-10 16:18:53 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 16:18:53 已拉起 frontend
+2026-08-10 16:18:55 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 16:18:55 前端已就绪
+2026-08-10 16:18:55 已打开浏览器 http://localhost:5173
+2026-08-10 16:18:55 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 17:24:12 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 17:24:15 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 17:24:15 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 17:24:15 已拉起 sidecar
+2026-08-10 17:24:16 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 17:24:16 已拉起 openclaw
+2026-08-10 17:24:27 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 17:24:27 已拉起 hermes
+2026-08-10 17:24:30 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 17:24:30 已拉起 ai-assistant
+2026-08-10 17:24:32 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 17:24:32 已拉起 frontend
+2026-08-10 17:24:33 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 17:24:33 前端已就绪
+2026-08-10 17:24:33 已打开浏览器 http://localhost:5173
+2026-08-10 17:24:33 === 启动器退出(服务继续在后台运行) ===
+2026-08-10 17:26:13 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 17:26:13 检测到全部服务已在运行, 直接打开浏览器
+2026-08-10 17:26:13 已打开浏览器 http://localhost:5173
+2026-08-10 17:26:48 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 17:26:48 检测到全部服务已在运行, 直接打开浏览器
+2026-08-10 17:26:48 已打开浏览器 http://localhost:5173
+2026-08-10 17:27:19 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 17:27:22 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 17:27:22 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 17:27:22 已拉起 sidecar
+2026-08-10 17:27:24 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 17:27:24 已拉起 openclaw
+2026-08-10 17:27:33 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 17:27:33 已拉起 hermes
+2026-08-10 17:27:36 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 17:27:36 已拉起 ai-assistant
+2026-08-10 17:27:38 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 17:27:38 已拉起 frontend
+2026-08-10 17:29:14 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-10 17:29:17 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-10 17:29:17 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-10 17:29:17 已拉起 sidecar
+2026-08-10 17:29:19 sidecar 已就绪: 127.0.0.1:7889
+2026-08-10 17:29:19 已拉起 openclaw
+2026-08-10 17:29:28 openclaw 已就绪: 127.0.0.1:18789
+2026-08-10 17:29:28 已拉起 hermes
+2026-08-10 17:29:31 hermes 已就绪: 127.0.0.1:8642
+2026-08-10 17:29:31 已拉起 ai-assistant
+2026-08-10 17:29:32 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-10 17:29:32 已拉起 frontend
+2026-08-10 17:29:34 frontend 已就绪: 127.0.0.1:5173
+2026-08-10 17:29:34 前端已就绪
+2026-08-10 17:29:34 已打开浏览器 http://localhost:5173
+2026-08-10 17:29:34 === 启动器退出(服务继续在后台运行) ===
+2026-08-11 09:01:43 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-11 09:01:46 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-11 09:01:46 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-11 09:01:46 已拉起 sidecar
+2026-08-11 09:01:48 sidecar 已就绪: 127.0.0.1:7889
+2026-08-11 09:01:48 已拉起 openclaw
+2026-08-11 09:01:58 openclaw 已就绪: 127.0.0.1:18789
+2026-08-11 09:01:58 已拉起 hermes
+2026-08-11 09:02:01 hermes 已就绪: 127.0.0.1:8642
+2026-08-11 09:02:01 已拉起 ai-assistant
+2026-08-11 09:02:03 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-11 09:02:03 已拉起 frontend
+2026-08-11 09:02:05 frontend 已就绪: 127.0.0.1:5173
+2026-08-11 09:02:05 前端已就绪
+2026-08-11 09:02:05 已打开浏览器 http://localhost:5173
+2026-08-11 09:02:05 === 启动器退出(服务继续在后台运行) ===
+2026-08-11 10:02:49 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-11 10:02:52 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-11 10:02:52 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-11 10:02:52 已拉起 sidecar
+2026-08-11 10:02:53 sidecar 已就绪: 127.0.0.1:7889
+2026-08-11 10:02:53 已拉起 openclaw
+2026-08-11 10:03:02 openclaw 已就绪: 127.0.0.1:18789
+2026-08-11 10:03:02 已拉起 hermes
+2026-08-11 10:03:05 hermes 已就绪: 127.0.0.1:8642
+2026-08-11 10:03:05 已拉起 ai-assistant
+2026-08-11 10:03:07 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-11 10:03:07 已拉起 frontend
+2026-08-11 10:03:08 frontend 已就绪: 127.0.0.1:5173
+2026-08-11 10:03:08 前端已就绪
+2026-08-11 10:03:08 已打开浏览器 http://localhost:5173
+2026-08-11 10:03:08 === 启动器退出(服务继续在后台运行) ===
+2026-08-11 10:04:59 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-11 10:04:59 检测到全部服务已在运行, 直接打开浏览器
+2026-08-11 10:04:59 已打开浏览器 http://localhost:5173
+2026-08-11 11:11:48 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-11 11:11:48 检测到全部服务已在运行, 直接打开浏览器
+2026-08-11 11:11:48 已打开浏览器 http://localhost:5173
+2026-08-11 16:28:24 === LXUP 启动器 v2 (root=D:\project\LXUP) dry_run=False ===
+2026-08-11 16:28:27 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-wal
+2026-08-11 16:28:27 已清理崩溃残留文件: D:\project\LXUP\runtime\openclaw-home\state\openclaw.sqlite-shm
+2026-08-11 16:28:27 已拉起 sidecar
+2026-08-11 16:28:29 sidecar 已就绪: 127.0.0.1:7889
+2026-08-11 16:28:29 已拉起 openclaw
+2026-08-11 16:28:39 openclaw 已就绪: 127.0.0.1:18789
+2026-08-11 16:28:39 已拉起 hermes
+2026-08-11 16:28:44 hermes 已就绪: 127.0.0.1:8642
+2026-08-11 16:28:44 已拉起 ai-assistant
+2026-08-11 16:28:46 ai-assistant 已就绪: 127.0.0.1:8080
+2026-08-11 16:28:46 已拉起 frontend
+2026-08-11 16:28:47 frontend 已就绪: 127.0.0.1:5173
+2026-08-11 16:28:47 前端已就绪
+2026-08-11 16:28:47 已打开浏览器 http://localhost:5173
+2026-08-11 16:28:47 === 启动器退出(服务继续在后台运行) ===

@@ -1,0 +1,22 @@
+{
+  "entries": {
+    "D:\\lxup\\runtime\\openclaw-home\\openclaw.json": {
+      "lastKnownGood": {
+        "hash": "bbef0273e6a4cdf1518efd26768f5c1f3918d33aa14e36a4964e020266713140",
+        "bytes": 1628,
+        "mtimeMs": 1785394539435.3887,
+        "ctimeMs": 1785394539445.4353,
+        "dev": "911354610",
+        "ino": "7881299348289178",
+        "mode": 438,
+        "nlink": 1,
+        "uid": 0,
+        "gid": 0,
+        "hasMeta": true,
+        "gatewayMode": "local",
+        "observedAt": "2026-07-31T06:54:26.833Z"
+      },
+      "lastObservedSuspiciousSignature": null
+    }
+  }
+}
