@@ -940,8 +940,8 @@ const en = {
     saveConfig: 'Save Config',
   },
   hermesEnv: {
-    title: 'ENV 编辑',
-    backToDashboard: '返回仪表盘',
+    title: 'ENV Editor',
+    backToDashboard: 'Back to Dashboard',
     subtitle: '自定义环境变量 · ~/.hermes/.env',
     customEnvFile: 'custom.env',
     keyPlaceholder: 'KEY',
@@ -2041,7 +2041,7 @@ const zhCN = {
     saveConfig: '保存配置',
   },
   hermesEnv: {
-    title: 'ENV 编辑',
+    title: '环境变量编辑',
     backToDashboard: '返回仪表盘',
     subtitle: '自定义环境变量 · ~/.hermes/.env',
     customEnvFile: 'custom.env',

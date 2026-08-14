@@ -6,12 +6,662 @@
   "priority": "P0",
   "icon": "🧰",
   "locked": false,
-  "version": "1.0.0",
-  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理能力,技能自带可执行脚本。含 PDF 处理、Word 文档生成、数据图表、图片处理。",
+  "version": "2.0.0",
+  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理与办公能力:文档办公、数据图表、图片处理、文件整理、写作润色、开发辅助与实用小工具,共 48 个技能。",
   "skills": [
-    { "file": "01-PDF处理.SKILL.md", "name": "PDF处理", "scripts": ["pdf_tool.py"], "triggers": ["PDF", "合并PDF", "拆分PDF", "提取PDF文字", "PDF旋转"] },
-    { "file": "02-Word文档生成.SKILL.md", "name": "Word文档生成", "scripts": ["docx_tool.py"], "triggers": ["Word", "生成文档", "导出Word", "写报告", "文档排版"] },
-    { "file": "03-数据图表.SKILL.md", "name": "数据图表", "scripts": ["chart_tool.py"], "triggers": ["图表", "柱状图", "折线图", "饼图", "数据可视化"] },
-    { "file": "04-图片处理.SKILL.md", "name": "图片处理", "scripts": ["image_tool.py"], "triggers": ["图片", "图片转换", "压缩图片", "图片缩放", "裁剪图片"] }
+    {
+      "file": "01-PDF处理.SKILL.md",
+      "name": "PDF处理",
+      "scripts": [
+        "pdf_tool.py"
+      ],
+      "triggers": [
+        "PDF",
+        "合并PDF",
+        "拆分PDF",
+        "PDF提取文字",
+        "PDF抽取页面",
+        "PDF旋转",
+        "PDF页数"
+      ]
+    },
+    {
+      "file": "02-Word文档生成.SKILL.md",
+      "name": "Word文档生成",
+      "scripts": [
+        "docx_tool.py"
+      ],
+      "triggers": [
+        "Word",
+        "生成文档",
+        "导出Word",
+        "写报告",
+        "文档排版",
+        "docx"
+      ]
+    },
+    {
+      "file": "03-Excel表格生成.SKILL.md",
+      "name": "Excel表格生成",
+      "scripts": [
+        "xlsx_tool.py"
+      ],
+      "triggers": [
+        "Excel",
+        "生成表格",
+        "导出xlsx",
+        "多工作表",
+        "表格样式"
+      ]
+    },
+    {
+      "file": "04-PPT演示文稿生成.SKILL.md",
+      "name": "PPT演示文稿生成",
+      "scripts": [
+        "pptx_tool.py"
+      ],
+      "triggers": [
+        "PPT",
+        "演示文稿",
+        "生成幻灯片",
+        "汇报材料",
+        "pptx"
+      ]
+    },
+    {
+      "file": "05-Markdown转文档.SKILL.md",
+      "name": "Markdown转文档",
+      "scripts": [
+        "md_tool.py"
+      ],
+      "triggers": [
+        "Markdown转Word",
+        "md转docx",
+        "Markdown转HTML",
+        "md转html"
+      ]
+    },
+    {
+      "file": "06-文档格式互转.SKILL.md",
+      "name": "文档格式互转",
+      "scripts": [
+        "conv_tool.py"
+      ],
+      "triggers": [
+        "格式转换",
+        "互转",
+        "json转yaml",
+        "csv转json",
+        "md转html"
+      ]
+    },
+    {
+      "file": "07-CSV数据处理.SKILL.md",
+      "name": "CSV数据处理",
+      "scripts": [
+        "csv_tool.py"
+      ],
+      "triggers": [
+        "CSV",
+        "筛选数据",
+        "排序",
+        "去重",
+        "合并表格",
+        "数据统计"
+      ]
+    },
+    {
+      "file": "08-简历生成.SKILL.md",
+      "name": "简历生成",
+      "scripts": [
+        "resume_tool.py"
+      ],
+      "triggers": [
+        "简历",
+        "生成简历",
+        "求职简历",
+        "CV"
+      ]
+    },
+    {
+      "file": "09-周报月报生成.SKILL.md",
+      "name": "周报月报生成",
+      "scripts": [],
+      "triggers": [
+        "周报",
+        "月报",
+        "工作汇报",
+        "写周报",
+        "总结工作"
+      ]
+    },
+    {
+      "file": "10-会议纪要整理.SKILL.md",
+      "name": "会议纪要整理",
+      "scripts": [],
+      "triggers": [
+        "会议纪要",
+        "整理会议",
+        "纪要",
+        "待办事项",
+        "会议记录"
+      ]
+    },
+    {
+      "file": "11-合同模板起草.SKILL.md",
+      "name": "合同模板起草",
+      "scripts": [],
+      "triggers": [
+        "合同",
+        "协议",
+        "起草合同",
+        "合同模板",
+        "保密协议"
+      ]
+    },
+    {
+      "file": "12-票据信息提取.SKILL.md",
+      "name": "票据信息提取",
+      "scripts": [
+        "invoice_tool.py"
+      ],
+      "triggers": [
+        "发票",
+        "票据",
+        "提取发票信息",
+        "报销",
+        "发票号码",
+        "税号"
+      ]
+    },
+    {
+      "file": "13-图片PDF转换.SKILL.md",
+      "name": "图片PDF转换",
+      "scripts": [
+        "imgpdf_tool.py"
+      ],
+      "triggers": [
+        "图片转PDF",
+        "PDF转图片",
+        "扫描件合并",
+        "导出PDF为图片"
+      ]
+    },
+    {
+      "file": "14-数据图表.SKILL.md",
+      "name": "数据图表",
+      "scripts": [
+        "chart_tool.py"
+      ],
+      "triggers": [
+        "图表",
+        "柱状图",
+        "折线图",
+        "饼图",
+        "数据可视化"
+      ]
+    },
+    {
+      "file": "15-统计报告生成.SKILL.md",
+      "name": "统计报告生成",
+      "scripts": [
+        "stats_tool.py"
+      ],
+      "triggers": [
+        "统计",
+        "数据分析",
+        "描述统计",
+        "均值",
+        "中位数",
+        "标准差",
+        "分布"
+      ]
+    },
+    {
+      "file": "16-甘特图时间线.SKILL.md",
+      "name": "甘特图时间线",
+      "scripts": [
+        "gantt_tool.py"
+      ],
+      "triggers": [
+        "甘特图",
+        "时间线",
+        "项目排期",
+        "进度计划",
+        "里程碑"
+      ]
+    },
+    {
+      "file": "17-流程图思维导图.SKILL.md",
+      "name": "流程图思维导图",
+      "scripts": [
+        "diagram_tool.py"
+      ],
+      "triggers": [
+        "流程图",
+        "思维导图",
+        "时序图",
+        "架构图",
+        "Mermaid"
+      ]
+    },
+    {
+      "file": "18-词云生成.SKILL.md",
+      "name": "词云生成",
+      "scripts": [
+        "wordcloud_tool.py"
+      ],
+      "triggers": [
+        "词云",
+        "关键词云",
+        "热词",
+        "词频图"
+      ]
+    },
+    {
+      "file": "19-数据对比分析.SKILL.md",
+      "name": "数据对比分析",
+      "scripts": [
+        "compare_tool.py"
+      ],
+      "triggers": [
+        "数据对比",
+        "找差异",
+        "比对",
+        "版本对比",
+        "数据核对"
+      ]
+    },
+    {
+      "file": "20-图片处理.SKILL.md",
+      "name": "图片处理",
+      "scripts": [
+        "image_tool.py"
+      ],
+      "triggers": [
+        "图片",
+        "图片转换",
+        "压缩图片",
+        "图片缩放",
+        "裁剪图片",
+        "旋转图片"
+      ]
+    },
+    {
+      "file": "21-图片水印.SKILL.md",
+      "name": "图片水印",
+      "scripts": [
+        "watermark_tool.py"
+      ],
+      "triggers": [
+        "水印",
+        "加水印",
+        "版权标注",
+        "防盗图"
+      ]
+    },
+    {
+      "file": "22-长图拼接.SKILL.md",
+      "name": "长图拼接",
+      "scripts": [
+        "concat_tool.py"
+      ],
+      "triggers": [
+        "长图",
+        "拼接",
+        "拼图",
+        "截图拼接",
+        "聊天记录长图"
+      ]
+    },
+    {
+      "file": "23-图片防泄密处理.SKILL.md",
+      "name": "图片防泄密处理",
+      "scripts": [
+        "exif_tool.py"
+      ],
+      "triggers": [
+        "EXIF",
+        "元数据",
+        "隐私",
+        "去位置信息",
+        "照片信息",
+        "防泄密"
+      ]
+    },
+    {
+      "file": "24-文件批量重命名.SKILL.md",
+      "name": "文件批量重命名",
+      "scripts": [
+        "rename_tool.py"
+      ],
+      "triggers": [
+        "重命名",
+        "批量改名",
+        "文件改名",
+        "序号命名"
+      ]
+    },
+    {
+      "file": "25-文件整理归档.SKILL.md",
+      "name": "文件整理归档",
+      "scripts": [
+        "organize_tool.py"
+      ],
+      "triggers": [
+        "整理文件",
+        "归档",
+        "文件归类",
+        "整理下载",
+        "桌面整理"
+      ]
+    },
+    {
+      "file": "26-重复文件查找.SKILL.md",
+      "name": "重复文件查找",
+      "scripts": [
+        "dup_tool.py"
+      ],
+      "triggers": [
+        "重复文件",
+        "去重",
+        "查重",
+        "清理重复",
+        "磁盘清理"
+      ]
+    },
+    {
+      "file": "27-大文件清理.SKILL.md",
+      "name": "大文件清理",
+      "scripts": [
+        "clean_tool.py"
+      ],
+      "triggers": [
+        "大文件",
+        "空间不足",
+        "磁盘占用",
+        "清理空间",
+        "空目录"
+      ]
+    },
+    {
+      "file": "28-压缩解压.SKILL.md",
+      "name": "压缩解压",
+      "scripts": [
+        "archive_tool.py"
+      ],
+      "triggers": [
+        "压缩",
+        "解压",
+        "zip",
+        "tar",
+        "打包"
+      ]
+    },
+    {
+      "file": "29-目录结构生成.SKILL.md",
+      "name": "目录结构生成",
+      "scripts": [
+        "tree_tool.py"
+      ],
+      "triggers": [
+        "目录结构",
+        "目录树",
+        "结构文档",
+        "README",
+        "交接文档"
+      ]
+    },
+    {
+      "file": "30-文件编码转换.SKILL.md",
+      "name": "文件编码转换",
+      "scripts": [
+        "encoding_tool.py"
+      ],
+      "triggers": [
+        "乱码",
+        "编码转换",
+        "转码",
+        "GBK",
+        "UTF-8",
+        "锟斤拷"
+      ]
+    },
+    {
+      "file": "31-批量查找替换.SKILL.md",
+      "name": "批量查找替换",
+      "scripts": [
+        "replace_tool.py"
+      ],
+      "triggers": [
+        "批量替换",
+        "查找替换",
+        "改词",
+        "批量修改内容"
+      ]
+    },
+    {
+      "file": "32-写作润色改写.SKILL.md",
+      "name": "写作润色改写",
+      "scripts": [],
+      "triggers": [
+        "润色",
+        "改写",
+        "优化文字",
+        "措辞",
+        "帮我改一下",
+        "改正式一点"
+      ]
+    },
+    {
+      "file": "33-邮件起草.SKILL.md",
+      "name": "邮件起草",
+      "scripts": [],
+      "triggers": [
+        "写邮件",
+        "回邮件",
+        "邮件回复",
+        "email",
+        "商务邮件"
+      ]
+    },
+    {
+      "file": "34-通知公告起草.SKILL.md",
+      "name": "通知公告起草",
+      "scripts": [],
+      "triggers": [
+        "通知",
+        "公告",
+        "群消息",
+        "群公告",
+        "发个通知"
+      ]
+    },
+    {
+      "file": "35-新媒体文案.SKILL.md",
+      "name": "新媒体文案",
+      "scripts": [],
+      "triggers": [
+        "小红书",
+        "公众号",
+        "文案",
+        "种草",
+        "标题党",
+        "爆款标题"
+      ]
+    },
+    {
+      "file": "36-正则表达式生成.SKILL.md",
+      "name": "正则表达式生成",
+      "scripts": [],
+      "triggers": [
+        "正则",
+        "正则表达式",
+        "regex",
+        "匹配规则",
+        "校验规则"
+      ]
+    },
+    {
+      "file": "37-本地知识检索.SKILL.md",
+      "name": "本地知识检索",
+      "scripts": [],
+      "triggers": [
+        "找文件",
+        "查资料",
+        "本地搜索",
+        "哪个文件",
+        "检索文档"
+      ]
+    },
+    {
+      "file": "38-论文长文速读.SKILL.md",
+      "name": "论文长文速读",
+      "scripts": [],
+      "triggers": [
+        "论文",
+        "速读",
+        "拆解",
+        "文献",
+        "这篇讲了什么"
+      ]
+    },
+    {
+      "file": "39-代码审查.SKILL.md",
+      "name": "代码审查",
+      "scripts": [],
+      "triggers": [
+        "代码审查",
+        "code review",
+        "看看代码",
+        "检查代码",
+        "代码有问题吗"
+      ]
+    },
+    {
+      "file": "40-数据脱敏.SKILL.md",
+      "name": "数据脱敏",
+      "scripts": [
+        "mask_tool.py"
+      ],
+      "triggers": [
+        "脱敏",
+        "打码",
+        "敏感信息",
+        "手机号打码",
+        "身份证打码"
+      ]
+    },
+    {
+      "file": "41-日志分析排障.SKILL.md",
+      "name": "日志分析排障",
+      "scripts": [],
+      "triggers": [
+        "日志分析",
+        "报错",
+        "排查",
+        "定位问题",
+        "看日志",
+        "服务挂了"
+      ]
+    },
+    {
+      "file": "42-JSON工具.SKILL.md",
+      "name": "JSON工具",
+      "scripts": [
+        "json_tool.py"
+      ],
+      "triggers": [
+        "JSON",
+        "美化",
+        "格式化",
+        "校验json",
+        "提取字段",
+        "json格式"
+      ]
+    },
+    {
+      "file": "43-文本差异对比.SKILL.md",
+      "name": "文本差异对比",
+      "scripts": [
+        "diff_tool.py"
+      ],
+      "triggers": [
+        "diff",
+        "差异",
+        "对比文本",
+        "哪里改了",
+        "版本差异"
+      ]
+    },
+    {
+      "file": "44-表格转换.SKILL.md",
+      "name": "表格转换",
+      "scripts": [
+        "table_tool.py"
+      ],
+      "triggers": [
+        "表格转换",
+        "csv转markdown",
+        "markdown表格",
+        "表格导出",
+        "转成表格"
+      ]
+    },
+    {
+      "file": "45-联系方式提取.SKILL.md",
+      "name": "联系方式提取",
+      "scripts": [
+        "contact_tool.py"
+      ],
+      "triggers": [
+        "提取手机号",
+        "提取邮箱",
+        "联系方式",
+        "通讯录",
+        "名单提取"
+      ]
+    },
+    {
+      "file": "46-二维码生成解析.SKILL.md",
+      "name": "二维码生成解析",
+      "scripts": [
+        "qr_tool.py"
+      ],
+      "triggers": [
+        "二维码",
+        "生成二维码",
+        "扫码",
+        "二维码内容",
+        "QR码"
+      ]
+    },
+    {
+      "file": "47-单位换算.SKILL.md",
+      "name": "单位换算",
+      "scripts": [],
+      "triggers": [
+        "换算",
+        "单位转换",
+        "几斤",
+        "多少公里",
+        "英寸",
+        "存储单位"
+      ]
+    },
+    {
+      "file": "48-财务计算.SKILL.md",
+      "name": "财务计算",
+      "scripts": [],
+      "triggers": [
+        "个税",
+        "贷款",
+        "月供",
+        "复利",
+        "理财计算",
+        "投资收益",
+        "折扣"
+      ]
+    }
   ]
 }
