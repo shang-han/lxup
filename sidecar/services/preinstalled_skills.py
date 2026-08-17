@@ -79,7 +79,7 @@ def _portable_python() -> str:
 
 
 # requires 里的 PyPI 包名 → 实际 import 名
-_IMPORT_NAMES = {"python-docx": "docx", "pillow": "PIL"}
+_IMPORT_NAMES = {"python-docx": "docx", "python-pptx": "pptx", "pillow": "PIL"}
 _lib_cache: dict[str, bool] = {}
 
 

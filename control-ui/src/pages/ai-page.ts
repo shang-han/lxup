@@ -129,7 +129,13 @@ export class AiPage extends LitElement {
       this._assistantOnline = false;
     }
     await this._refreshConvs();
-    if (this._conversations.length) await this._switchConv(this._conversations[0].id);
+    // 刷新后恢复上次打开的会话(该会话仍在列表中才恢复,否则打开第一个)
+    const saved = this._readSavedConv();
+    if (saved && this._conversations.some(c => c.id === saved)) {
+      await this._switchConv(saved);
+    } else if (this._conversations.length) {
+      await this._switchConv(this._conversations[0].id);
+    }
   }
 
   async _refreshConvs() {
@@ -142,11 +148,21 @@ export class AiPage extends LitElement {
 
   _toggleConvList() { this._showConvList = !this._showConvList; }
 
+  /** 当前会话记忆:刷新后恢复上次打开的会话 */
+  get _convStorageKey(): string { return 'lxup.ai.conversation'; }
+  _readSavedConv(): string {
+    try { return localStorage.getItem(this._convStorageKey) || ''; } catch { return ''; }
+  }
+  _setActiveConv(id: string) {
+    this._activeConv = id;
+    try { if (id) localStorage.setItem(this._convStorageKey, id); } catch { /* ignore */ }
+  }
+
   async _newConversation() {
     try {
       const c = await createConversation();
       this._conversations = [c, ...this._conversations];
-      this._activeConv = c.id;
+      this._setActiveConv(c.id);
       this._messages = [];
       this._view = 'chat';
       this._showConvList = false;
@@ -156,7 +172,7 @@ export class AiPage extends LitElement {
   }
 
   async _switchConv(id: string) {
-    this._activeConv = id;
+    this._setActiveConv(id);
     this._showConvList = false;
     try {
       const detail = await getConversation(id);
@@ -180,10 +196,16 @@ export class AiPage extends LitElement {
 
   async _deleteConv(id: string, e: Event) {
     e.stopPropagation();
-    try { await deleteConversation(id); } catch { /* ignore */ }
+    try {
+      await deleteConversation(id);
+    } catch {
+      // 服务端删除失败时不假装成功,列表保持不变并提示
+      this._toast?.show(L('chat.deleteFailed'));
+      return;
+    }
     this._conversations = this._conversations.filter((c) => c.id !== id);
     if (this._activeConv === id) {
-      this._activeConv = this._conversations[0]?.id || '';
+      this._setActiveConv(this._conversations[0]?.id || '');
       this._messages = [];
     }
   }

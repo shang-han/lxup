@@ -139,8 +139,25 @@ export class OpenClawChatEngine implements ChatEngine {
   }
 
   async createSession(): Promise<ChatSession | null> {
-    // OpenClaw 用固定会话键，不支持从前端新建
-    return null;
+    // 网关 sessions.create 支持新建会话;不带 key 会重置主会话,因此必须显式生成新 key
+    try {
+      const requestKey =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `webchat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const label = `新对话 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+      const res = await this.store.request<{ ok?: boolean; key?: string; entry?: Record<string, unknown> }>(
+        'sessions.create',
+        { key: requestKey, label },
+      );
+      if (!res?.ok || !res.key) return null;
+      const entry = (res.entry ?? {}) as Record<string, unknown>;
+      const display = entry.displayName ?? entry.label ?? label;
+      const updatedAt = typeof entry.updatedAt === 'number' ? entry.updatedAt : null;
+      return { id: res.key, name: display ? String(display) : res.key, updatedAt };
+    } catch {
+      return null;
+    }
   }
 
   async deleteSession(sessionId: string): Promise<boolean> {

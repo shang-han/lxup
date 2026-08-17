@@ -363,6 +363,42 @@ export class ChatPage extends LitElement {
     }
     .chat-input-bar__send:hover { background: var(--accent-hover); }
     .chat-input-bar__send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* === 斜杠命令联想 === */
+    .sc-autocomplete {
+      margin: 0 16px 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      box-shadow: var(--shadow-card);
+      overflow-y: auto;
+      max-height: 240px;
+    }
+    .sc-ac-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .sc-ac-item.sel { background: var(--accent-subtle); }
+    .sc-ac-cmd {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--accent);
+      min-width: 96px;
+      flex-shrink: 0;
+    }
+    .sc-ac-desc { color: var(--text-soft); flex: 1; }
+    .sc-ac-group {
+      font-size: 10px;
+      color: var(--muted);
+      background: var(--bg-muted);
+      border-radius: var(--radius-full);
+      padding: 1px 8px;
+      flex-shrink: 0;
+    }
   `;
 
   @property({ type: String }) title = '';
@@ -502,17 +538,22 @@ export class ChatPage extends LitElement {
 
   async _bootstrapSessions() {
     await this._loadSessions();
+    // 刷新后恢复上次打开的会话(该会话仍在列表中才恢复)
+    const saved = this._readSavedSessionKey();
+    if (saved && this._sessions.some(s => s.id === saved)) {
+      this._sessionKey = saved;
+    }
     if (!this._sessionKey) {
       const dflt = this._engineAdapter.defaultSessionId();
       if (dflt) {
-        this._sessionKey = dflt;
+        this._setSessionKey(dflt);
       } else if (this._sessions.length) {
-        this._sessionKey = this._sessions[0].id;
+        this._setSessionKey(this._sessions[0].id);
       } else {
         try {
           const s = await this._engineAdapter.createSession();
           if (s) {
-            this._sessionKey = s.id;
+            this._setSessionKey(s.id);
             this._sessions = [s, ...this._sessions];
           }
         } catch { /* ignore */ }
@@ -543,13 +584,13 @@ export class ChatPage extends LitElement {
     if (this._sessionKey) return this._sessionKey;
     const dflt = this._engineAdapter.defaultSessionId();
     if (dflt) {
-      this._sessionKey = dflt;
+      this._setSessionKey(dflt);
       return dflt;
     }
     try {
       const s = await this._engineAdapter.createSession();
       if (s) {
-        this._sessionKey = s.id;
+        this._setSessionKey(s.id);
         this._sessions = [s, ...this._sessions];
       }
     } catch { /* ignore */ }
@@ -745,6 +786,29 @@ export class ChatPage extends LitElement {
   }
 
   _onKeydown(e: KeyboardEvent) {
+    if (this._scItems.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this._scSel = (this._scSel + 1) % this._scItems.length;
+        this._scrollScSel();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this._scSel = (this._scSel - 1 + this._scItems.length) % this._scItems.length;
+        this._scrollScSel();
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        this._completeSc(this._scItems[this._scSel] ?? this._scItems[0]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        this._scItems = [];
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void this._send();
@@ -752,6 +816,16 @@ export class ChatPage extends LitElement {
   }
 
   _toggleSessionList() { this._showSessionList = !this._showSessionList; }
+
+  /** 当前会话记忆(按引擎隔离):刷新后恢复上次打开的会话 */
+  get _sessionStorageKey(): string { return `lxup.chat.session.${this.engine}`; }
+  _readSavedSessionKey(): string {
+    try { return localStorage.getItem(this._sessionStorageKey) || ''; } catch { return ''; }
+  }
+  _setSessionKey(key: string) {
+    this._sessionKey = key;
+    try { if (key) localStorage.setItem(this._sessionStorageKey, key); } catch { /* ignore */ }
+  }
 
   @state() _confirmDeleteId: string | null = null;
   @state() _deleting = false;
@@ -777,7 +851,7 @@ export class ChatPage extends LitElement {
     if (wasActive) {
       const next = this._sessions.find(s => s.id !== id);
       const fallback = next?.id || this._engineAdapter.defaultSessionId();
-      this._sessionKey = fallback || '';
+      this._setSessionKey(fallback || '');
       this._messages = [];
       if (this._sessionKey) await this._loadHistory();
     }
@@ -788,7 +862,7 @@ export class ChatPage extends LitElement {
       this._showSessionList = false;
       return;
     }
-    this._sessionKey = id;
+    this._setSessionKey(id);
     this._showSessionList = false;
     this._streaming = false;
     this._chatCancel?.abort();
@@ -801,9 +875,9 @@ export class ChatPage extends LitElement {
       const s = await this._engineAdapter.createSession();
       if (s) {
         this._sessions = [s, ...this._sessions];
-        this._sessionKey = s.id;
+        this._setSessionKey(s.id);
       } else {
-        this._sessionKey = this._engineAdapter.defaultSessionId();
+        this._setSessionKey(this._engineAdapter.defaultSessionId());
       }
     } catch { /* ignore */ }
     this._messages = [];
@@ -1074,6 +1148,54 @@ export class ChatPage extends LitElement {
     if (e.key === 'Escape') this._toggleSc();
   };
 
+  // ── 斜杠命令输入实时联想 ────────────────────────────────
+
+  /** 联想候选(输入 / 开头时实时过滤) */
+  @state() _scItems: Array<{ cmd: string; desc: string; group: string; needsArg?: boolean }> = [];
+  @state() _scSel = 0;
+
+  get _scFlat() {
+    return this._scCommands().flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
+  }
+
+  /** 输入变化时重算联想;非 / 开头或已含空格时关闭 */
+  _updateScMatches() {
+    const text = this._input;
+    if (!text.startsWith('/') || text.includes(' ')) {
+      this._scItems = [];
+      return;
+    }
+    const q = text.toLowerCase();
+    this._scItems = this._scFlat.filter((it) => it.cmd.toLowerCase().startsWith(q));
+    if (this._scSel >= this._scItems.length) this._scSel = 0;
+  }
+
+  /** 键盘上下键选择时,让选中项滚入可视区 */
+  _scrollScSel() {
+    void this.updateComplete.then(() => {
+      const box = this.renderRoot.querySelector('.sc-autocomplete') as HTMLElement | null;
+      const sel = this.renderRoot.querySelector('.sc-ac-item.sel') as HTMLElement | null;
+      if (!box || !sel) return;
+      const top = sel.offsetTop - box.offsetTop;
+      const bottom = top + sel.offsetHeight;
+      if (top < box.scrollTop) box.scrollTop = top;
+      else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+    });
+  }
+
+  /** 补全选中命令(带参数的命令补全后加空格),保持输入焦点 */
+  _completeSc(it: { cmd: string; needsArg?: boolean }) {
+    this._input = it.cmd + (it.needsArg ? ' ' : '');
+    this._scItems = [];
+    this._scSel = 0;
+    this.requestUpdate();
+    const ta = this.renderRoot.querySelector('.chat-input-bar__input textarea') as HTMLTextAreaElement | null;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(this._input.length, this._input.length);
+    }
+  }
+
   /** 点快捷键：需参数的填入输入框等用户补全；其余走网关 RPC 客户端执行（实测：斜杠文本直发 webchat 网关不解释） */
   _runSlash(item: { cmd: string; needsArg?: boolean }) {
     this._toggleSc();
@@ -1109,7 +1231,7 @@ export class ChatPage extends LitElement {
       this._chatCancel?.abort();
       const s = await this._engineAdapter.createSession();
       if (!s) throw new Error(L('chat.engineOffline'));
-      this._sessionKey = s.id;
+      this._setSessionKey(s.id);
       this._messages = [];
       void this._loadSessions();
       note(`✅ /new — ${s.name}`);
@@ -1321,12 +1443,12 @@ export class ChatPage extends LitElement {
                   <button class="yes" ?disabled=${this._deleting} @click=${() => this._deleteSession(s.id)}>${L('chat.deleteConfirmYes')}</button>
                   <button class="no" ?disabled=${this._deleting} @click=${() => { this._confirmDeleteId = null; }}>${L('chat.deleteConfirmNo')}</button>
                 </span>
-              ` : html`
+              ` : s.id !== this._engineAdapter.defaultSessionId() ? html`
                 <button class="session-item__del" title=${L('chat.deleteSession')}
                   @click=${(e: Event) => { e.stopPropagation(); this._confirmDeleteId = s.id; }}>
                   ${icons['trash']}
                 </button>
-              `}
+              ` : ''}
             </div>
           `)}
         </div>
@@ -1427,6 +1549,21 @@ export class ChatPage extends LitElement {
             </div>
           ` : ''}
 
+          <!-- 斜杠命令联想 -->
+          ${this._scItems.length ? html`
+            <div class="sc-autocomplete">
+              ${this._scItems.map((it, i) => html`
+                <div class="sc-ac-item ${i === this._scSel ? 'sel' : ''}"
+                  @mousedown=${(e: Event) => { e.preventDefault(); this._completeSc(it); }}
+                  @mouseenter=${() => { this._scSel = i; }}>
+                  <span class="sc-ac-cmd">${it.cmd}</span>
+                  <span class="sc-ac-desc">${it.desc}</span>
+                  <span class="sc-ac-group">${it.group}</span>
+                </div>
+              `)}
+            </div>
+          ` : ''}
+
           <!-- Input bar -->
           <div class="chat-input-bar">
             <div class="chat-input-bar__tools">
@@ -1447,6 +1584,7 @@ export class ChatPage extends LitElement {
                 @input=${(e: Event) => {
                   const t = e.target as HTMLTextAreaElement;
                   this._input = t.value;
+                  this._updateScMatches();
                   t.style.height = 'auto';
                   t.style.height = Math.min(t.scrollHeight, 120) + 'px';
                 }}
