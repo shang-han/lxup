@@ -8,10 +8,10 @@
       "name": "通用工具",
       "category": "通用工具",
       "priority": "P0",
-      "version": "1.0.0",
-      "skills": 4,
+      "version": "2.1.0",
+      "skills": 45,
       "dir": "skills/00-通用工具",
-      "sha256": "1d32166724a42498ce369cf5cd1692ca120bbee17034e920410aadb776358547"
+      "sha256": "79acf89b68afe93a891b87492e2cdc931803e21c3e0570382049951178b3e414"
     },
     {
       "post": "01-餐饮店长",
@@ -178,30 +178,30 @@
       "name": "手机/数码店店长",
       "category": "其他门店",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/17-手机数码店长",
-      "sha256": "2653dd903d36f52188078a61ac36ac8bf7c76760b05ce9f249a94a8aced0c217"
+      "sha256": "692719224667e744bdc3b0d2c0070b433df19053af61482a0dc7e0b0d8cfc31e"
     },
     {
       "post": "18-水果生鲜店老板",
       "name": "水果/生鲜店老板",
       "category": "其他门店",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/18-水果生鲜店老板",
-      "sha256": "28bee3d470d929786facdf0c6122c666f3b97fa3f0501daa6a3f0e25a93ff69e"
+      "sha256": "38e0eb37de605993936d75f7c876103c4203dc180fd6c3be44edcc3f6073618b"
     },
     {
       "post": "19-健身房店长",
       "name": "健身房/瑜伽馆店长",
       "category": "文娱/教育门店",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/19-健身房店长",
-      "sha256": "c52e761cf31c4a1ee785c2f3d378b7c456d46044f2c45c8e8b0dff662c81f767"
+      "sha256": "30fcd313219954e7c7ae27df08976ac32a7f6ac699de0ee73c0cdc51b9f0c9f8"
     },
     {
       "post": "20-教培机构校长",
@@ -348,10 +348,10 @@
       "name": "平面设计师",
       "category": "创意设计",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/34-平面设计师",
-      "sha256": "736637af7b7f07986d871c982a52d9d700fcd329fe2fbad49cc518c407ba2307"
+      "sha256": "53bc2c65cc70276db65c14a30ddcd7efb3a27e2f1ae6b54dcfddffa34fc2970e"
     },
     {
       "post": "35-视频剪辑师",
@@ -458,20 +458,20 @@
       "name": "社区团长/社群运营",
       "category": "蓝海/自由职业",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/45-社区团长",
-      "sha256": "0be46406114bce88f093fd60950c2a84245bf9ddc0b959f74c1cbff3906ceee2"
+      "sha256": "bd2ce5a2036eb3171c32c8b07f4c7580c038971dd358beb7002f2361f0dffe3d"
     },
     {
       "post": "46-旅游定制师",
       "name": "旅游定制师",
       "category": "蓝海/自由职业",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/46-旅游定制师",
-      "sha256": "939fb6aacb340430470691d5cb1a4cc04ae069793df415c5c149ff3386d6c597"
+      "sha256": "f1dbc009bacd4644da7119410148a4bf8e3ff1b565186250b56dd336ba5a4564"
     },
     {
       "post": "47-电商主播",
@@ -638,10 +638,10 @@
       "name": "空调安装/维修师傅",
       "category": "工程/技术",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/63-空调安装维修",
-      "sha256": "7d1f28c034944aa0357bcb3dff95e1a8a71070a53b1c4357b6dd876adf89daa6"
+      "sha256": "8089c7d7e2645e77e9afa2361a7abae1248e022d373326545dadb9beec909647"
     },
     {
       "post": "64-锁匠开锁",
@@ -668,30 +668,30 @@
       "name": "短视频编导",
       "category": "互联网/新经济",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/66-短视频编导",
-      "sha256": "90a32c3048e5ef47efc9b30be0a669ccff01d8fb80517d99c60e848c4787e7a4"
+      "sha256": "75d3b64c9e41f749c9c656765b8d6e51e647247ab4dc03c891a44d92b7898db4"
     },
     {
       "post": "67-UI-UX设计师",
       "name": "UI/UX设计师",
       "category": "互联网/新经济",
       "priority": "P1",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "skills": 5,
       "dir": "skills/67-UI-UX设计师",
-      "sha256": "ba3b177e155a360203846a385f012af85a05f3b243f2f8a56c73e5ff0dca1013"
+      "sha256": "090d35b3f33b9b589aae15add5ea2599b9d51ee2eec6cf162bf8d963249d6d01"
     },
     {
       "post": "68-前端开发",
       "name": "前端开发工程师",
       "category": "互联网/新经济",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/68-前端开发",
-      "sha256": "5369bb19c894c3716c5e4a65e008701a741ea664dd2422efe492e6189bd5612e"
+      "sha256": "30bd8fcea52bfa2ec60ae85970eb8d97c5fcc3014f93d8b4f2ef35780c29a7bc"
     },
     {
       "post": "69-Python数据分析",
@@ -728,20 +728,20 @@
       "name": "AI应用工程师",
       "category": "互联网/新经济",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/72-AI应用工程师",
-      "sha256": "771502ea4cce937ee9975159492d726ea483616aa474efdcd3bc4be50c3d01a6"
+      "sha256": "128ad3b7762b1a687c9822a82c27599b4e1ad7aa606b9cce4be410dbb2766f70"
     },
     {
       "post": "73-产品经理",
       "name": "产品经理",
       "category": "互联网/新经济",
       "priority": "P1",
-      "version": "1.0.0",
-      "skills": 5,
+      "version": "1.1.0",
+      "skills": 4,
       "dir": "skills/73-产品经理",
-      "sha256": "3f43b44b4406e7bfc5ac8175d252254b6e1cf991d5cac3efebb6e491bb621673"
+      "sha256": "e269a2d843e177eaf099acc8cfdfd95bddf490dbd99663cee57343698912c87b"
     },
     {
       "post": "74-项目经理PMP",

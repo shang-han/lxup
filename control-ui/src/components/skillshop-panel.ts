@@ -520,9 +520,10 @@ export class SkillshopPanel extends LitElement {
 
     const filtered = this._filtered();
     const installedCount = this._packs.filter(p => p.installed).length;
+    const totalSkills = this._packs.reduce((n, p) => n + (typeof p.skills === 'number' ? p.skills : 0), 0);
 
     return html`
-      <div class="summary">${L('skills.packCount', { total: this._packs.length, skills: 5 })} · ${L('skills.installedPacks')} ${installedCount}</div>
+      <div class="summary">${L('skills.packCount', { total: this._packs.length, skills: totalSkills })} · ${L('skills.installedPacks')} ${installedCount}</div>
       <div class="demo-note">⚠️ ${L('skills.buyDemoNote')}</div>
 
       ${this._renderInstalledSection()}

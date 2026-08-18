@@ -207,6 +207,19 @@ export class SkillsV2Page extends LitElement {
     }
 
     .skills-empty { text-align: center; padding: 40px 24px; color: var(--muted); font-size: 13px; }
+
+    .skills-loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-right: 8px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: skills-spin 0.7s linear infinite;
+      vertical-align: -2px;
+    }
+    @keyframes skills-spin { to { transform: rotate(360deg); } }
   `;
 
   @property({ type: String }) title = '';
@@ -217,11 +230,14 @@ export class SkillsV2Page extends LitElement {
   @property({ attribute: false }) onNavigate: (page: string) => void = () => {};
 
   get _isHermes(): boolean { return this.engine === 'hermes'; }
+  get _isCodex(): boolean { return this.engine === 'codex'; }
 
   @state() _activeTab = 'mine'; // 'mine' | 'packs' | 'hub'
   @state() _search = '';
   @state() _skills: SkillItem[] = [];
   @state() _loading = true;
+  /** Codex：AGENTS.md 状态（path/exists/skills/skills_dir），来自 /api/codex/skills */
+  @state() _codexAgents: { path?: string; exists?: boolean; skills?: number; skills_dir?: string } | null = null;
 
   // ClawHub（与旧页一致的 WS RPC）
   @state() _hubQuery = '';
@@ -231,6 +247,15 @@ export class SkillsV2Page extends LitElement {
   @state() _installingSlug = '';
   @state() _hubMsg = '';
   @state() _hubMsgCls = '';
+
+  // Codex 插件市场（桥接 codex plugin 命令）
+  @state() _cxMarkets: Array<{ name: string; root: string }> = [];
+  @state() _cxPlugins: { installed: any[]; available: any[] } = { installed: [], available: [] };
+  @state() _cxUrl = '';
+  @state() _cxBusy = '';
+  @state() _cxMsg = '';
+  @state() _cxMsgCls = '';
+  @state() _cxLoaded = false;
 
   // 操作状态
   @state() _busyPre = '';      // 预装下载/卸载中
@@ -275,22 +300,28 @@ export class SkillsV2Page extends LitElement {
   }
 
   /** 技能清单：openclaw → /api/gateway/skills + WS skills.entries；
-   * hermes → /api/hermes/skills/all + /api/hermes/skills/entries（config.yaml） */
+   * hermes → /api/hermes/skills/all + /api/hermes/skills/entries（config.yaml）；
+   * codex → /api/codex/skills（无原生技能目录，经 AGENTS.md 生效） */
   async _loadSkills() {
     this._loading = true;
     try {
-      const url = this._isHermes ? '/api/hermes/skills/all' : '/api/gateway/skills';
+      const url = this._isCodex
+        ? '/api/codex/skills'
+        : this._isHermes ? '/api/hermes/skills/all' : '/api/gateway/skills';
       const r = await fetch(`${this._sidecarBase}${url}`, { headers: sidecarHeaders() });
-      const d = await r.json() as { data?: any[] };
+      const d = await r.json() as { data?: any[]; agents?: any };
+      this._codexAgents = d?.agents ?? null;
       try {
         if (this._isHermes) {
           const er = await fetch(`${this._sidecarBase}/api/hermes/skills/entries`, { headers: sidecarHeaders() });
           this._entries = er.ok ? this._normalizeEntries(await er.json()) : new Map();
-        } else {
+        } else if (!this._isCodex) {
           const store = getSharedStore();
           this._entries = store.connected
             ? this._normalizeEntries(await store.request('skills.entries'))
             : new Map();
+        } else {
+          this._entries = new Map();
         }
       } catch { this._entries = new Map(); }
       this._skills = (d.data || []).map((s: any) => {
@@ -428,6 +459,7 @@ export class SkillsV2Page extends LitElement {
   }
 
   async _toggleSkill(s: SkillItem) {
+    if (this._isCodex) return; // Codex 无原生启停机制，按钮已隐藏
     if (this._togglingKey) return;
     const next = s.enabled === false;
     this._togglingKey = s.name;
@@ -607,6 +639,135 @@ export class SkillsV2Page extends LitElement {
     `;
   }
 
+  // ── Codex 插件市场（经 sidecar 桥接 codex plugin 命令）────────
+
+  async _loadCodexMarket() {
+    this._cxMsg = '';
+    try {
+      const [mr, pr] = await Promise.all([
+        fetch(`${this._sidecarBase}/api/codex/plugins/marketplaces`, { headers: sidecarHeaders() }).then(r => r.json()),
+        fetch(`${this._sidecarBase}/api/codex/plugins`, { headers: sidecarHeaders() }).then(r => r.json()),
+      ]);
+      this._cxMarkets = Array.isArray(mr?.marketplaces) ? mr.marketplaces : [];
+      const plugs = pr?.plugins || { installed: [], available: [] };
+      this._cxPlugins = {
+        installed: Array.isArray(plugs.installed) ? plugs.installed : [],
+        available: Array.isArray(plugs.available) ? plugs.available : [],
+      };
+      this._cxLoaded = true;
+    } catch (e) {
+      this._cxMsg = e instanceof Error ? e.message : String(e);
+      this._cxMsgCls = 'err';
+    }
+  }
+
+  async _cxAddMarket() {
+    const src = this._cxUrl.trim();
+    if (!src || this._cxBusy) return;
+    this._cxBusy = 'market';
+    this._cxMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/codex/plugins/marketplaces`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ source: src }),
+      });
+      const d = await r.json();
+      if (!d?.ok) throw new Error(d?.stderr || `HTTP ${r.status}`);
+      this._cxUrl = '';
+      this._cxMsg = d?.stdout?.trim() || `${L('skills.codexMarketAdd')} ✓`;
+      this._cxMsgCls = 'ok';
+      await this._loadCodexMarket();
+    } catch (e) {
+      this._cxMsg = e instanceof Error ? e.message : String(e);
+      this._cxMsgCls = 'err';
+    } finally {
+      this._cxBusy = '';
+    }
+  }
+
+  async _cxMarketAction(action: 'upgrade' | 'remove', name: string) {
+    if (this._cxBusy) return;
+    this._cxBusy = name;
+    this._cxMsg = '';
+    try {
+      const url = action === 'upgrade'
+        ? `${this._sidecarBase}/api/codex/plugins/marketplaces/${encodeURIComponent(name)}/upgrade`
+        : `${this._sidecarBase}/api/codex/plugins/marketplaces/${encodeURIComponent(name)}`;
+      const r = await fetch(url, { method: action === 'upgrade' ? 'POST' : 'DELETE', headers: sidecarHeaders() });
+      const d = await r.json();
+      if (!d?.ok) throw new Error(d?.stderr || `HTTP ${r.status}`);
+      await this._loadCodexMarket();
+    } catch (e) {
+      this._cxMsg = e instanceof Error ? e.message : String(e);
+      this._cxMsgCls = 'err';
+    } finally {
+      this._cxBusy = '';
+    }
+  }
+
+  async _cxInstallPlugin(p: any) {
+    const key = p?.name || p?.id || '';
+    if (!key || this._cxBusy) return;
+    this._cxBusy = `plugin:${key}`;
+    this._cxMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/codex/plugins/install`, {
+        method: 'POST',
+        headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ plugin: key, marketplace: p?.marketplace || p?.source || '' }),
+      });
+      const d = await r.json();
+      if (!d?.ok) throw new Error(d?.stderr || `HTTP ${r.status}`);
+      await this._loadCodexMarket();
+    } catch (e) {
+      this._cxMsg = e instanceof Error ? e.message : String(e);
+      this._cxMsgCls = 'err';
+    } finally {
+      this._cxBusy = '';
+    }
+  }
+
+  async _cxRemovePlugin(name: string) {
+    if (this._cxBusy) return;
+    this._cxBusy = `plugin:${name}`;
+    this._cxMsg = '';
+    try {
+      const r = await fetch(`${this._sidecarBase}/api/codex/plugins/${encodeURIComponent(name)}`, { method: 'DELETE', headers: sidecarHeaders() });
+      const d = await r.json();
+      if (!d?.ok) throw new Error(d?.stderr || `HTTP ${r.status}`);
+      await this._loadCodexMarket();
+    } catch (e) {
+      this._cxMsg = e instanceof Error ? e.message : String(e);
+      this._cxMsgCls = 'err';
+    } finally {
+      this._cxBusy = '';
+    }
+  }
+
+  /** Codex 市场插件行（字段名兼容官方 JSON 的多种写法） */
+  _cxPluginRow(p: any, installed: boolean) {
+    const key = String(p?.name || p?.id || '');
+    const mkt = String(p?.marketplace || p?.source || '');
+    const desc = String(p?.description || p?.short_description || p?.summary || '');
+    const busy = this._cxBusy === `plugin:${key}`;
+    return html`
+      <div class="skill-item">
+        <div class="skill-item__icon">${this._skillIcon()}</div>
+        <div class="skill-item__content">
+          <div class="skill-item__name">${key}</div>
+          <div class="skill-item__source">${installed ? L('skills.codexInstalledPlugins') : mkt}</div>
+          <div class="skill-item__desc">${desc}</div>
+        </div>
+        <div class="skill-item__actions">
+          ${installed
+            ? html`<button class="btn-danger" ?disabled=${busy || !!this._cxBusy} @click=${() => this._cxRemovePlugin(key)}>${L('skills.codexPluginUninstall')}</button>`
+            : html`<button class="btn-primary" ?disabled=${busy || !!this._cxBusy} @click=${() => this._cxInstallPlugin(p)}>${busy ? L('common.loading') : L('skills.codexPluginInstall')}</button>`}
+        </div>
+      </div>
+    `;
+  }
+
   async _openHubDetail(slug: string) {
     const store = getSharedStore();
     this._detailOpen = true;
@@ -676,8 +837,9 @@ export class SkillsV2Page extends LitElement {
             : ''}
           ${s.installed ? html`
             <button class="btn-try" @click=${() => this._tryIt(s)}>${L('skills.tryIt')}</button>
-            <button class="btn-toggle" ?disabled=${(!this._isHermes && !this._gwConnected) || !!this._togglingKey} @click=${() => this._toggleSkill(s)}>
-              ${s.enabled === false ? L('skills.enableBtn') : L('skills.disableBtn')}</button>
+            ${this._isCodex ? '' : html`
+              <button class="btn-toggle" ?disabled=${(!this._isHermes && !this._gwConnected) || !!this._togglingKey} @click=${() => this._toggleSkill(s)}>
+                ${s.enabled === false ? L('skills.enableBtn') : L('skills.disableBtn')}</button>`}
             <button class="btn-danger" ?disabled=${busy} @click=${() => this._uninstallPre(s)}>${L('skills.uninstall')}</button>` : ''}
           <span class="skill-item__badge ${badge.cls}">${badge.text}</span>
         </div>
@@ -701,8 +863,9 @@ export class SkillsV2Page extends LitElement {
         <div class="skill-item__actions">
           <button class="btn-detail" @click=${() => this._openDetail(s)}>${L('skills.detail')}</button>
           ${tryable && !off ? html`<button class="btn-try" @click=${() => this._tryIt(s)}>${L('skills.tryIt')}</button>` : ''}
-          <button class="btn-toggle" ?disabled=${(!this._isHermes && !this._gwConnected) || !!this._togglingKey} @click=${() => this._toggleSkill(s)}>
-            ${busy ? L('common.loading') : off ? L('skills.enableBtn') : L('skills.disableBtn')}</button>
+          ${this._isCodex ? '' : html`
+            <button class="btn-toggle" ?disabled=${(!this._isHermes && !this._gwConnected) || !!this._togglingKey} @click=${() => this._toggleSkill(s)}>
+              ${busy ? L('common.loading') : off ? L('skills.enableBtn') : L('skills.disableBtn')}</button>`}
         </div>
       </div>
     `;
@@ -768,8 +931,8 @@ export class SkillsV2Page extends LitElement {
             ${L('skills.jobPacks')}
           </div>
           <div class="skills-tab ${this._activeTab === 'hub' ? 'active' : ''}"
-               @click=${() => { this._activeTab = 'hub'; }}>
-            ${this._isHermes ? L('skills.hermesHub') : 'ClawHub'}
+               @click=${() => { this._activeTab = 'hub'; if (this._isCodex && !this._cxLoaded) void this._loadCodexMarket(); }}>
+            ${this._isCodex ? L('skills.codexMarket') : this._isHermes ? L('skills.hermesHub') : 'ClawHub'}
           </div>
         </div>
 
@@ -787,6 +950,7 @@ export class SkillsV2Page extends LitElement {
             ${L('skills.summary2', { usable, repair: repair.length, off: off.length })}
           </div>
           ${this._isHermes ? html`<div class="hub-msg warn">${L('skills.hermesNote')}</div>` : ''}
+          ${this._isCodex ? html`<div class="hub-msg warn">${L('skills.codexNote', { dir: this._codexAgents?.skills_dir || 'skills', path: this._codexAgents?.path || 'AGENTS.md' })}</div>` : ''}
           ${this._laneMsg ? html`<div class="hub-msg err">${this._laneMsg}</div>` : ''}
 
           <!-- 💼 我的岗位技能（已购买部署的岗位包，按包分组） -->
@@ -878,11 +1042,58 @@ export class SkillsV2Page extends LitElement {
             </div>
           ` : ''}
 
-          ${filtered.length === 0 ? html`
-            <div class="skills-empty">${this._skills.length === 0 && !this._loading ? L('skills.notInstalled') : L('skills.noMatch')}</div>
+          ${this._loading ? html`
+            <div class="skills-empty">
+              <span class="skills-loading-spinner"></span>
+              ${L('common.loading')}
+            </div>
+          ` : filtered.length === 0 ? html`
+            <div class="skills-empty">${this._skills.length === 0 ? L('skills.notInstalled') : L('skills.noMatch')}</div>
           ` : ''}
         ` : this._activeTab === 'packs' ? html`
           <skillshop-panel></skillshop-panel>
+        ` : this._isCodex ? html`
+          <!-- Codex 插件市场（桥接 codex plugin marketplace/install） -->
+          <div class="skills-toolbar">
+            <input class="search-input" type="text"
+              .value=${this._cxUrl}
+              placeholder=${L('skills.codexMarketUrlPh')}
+              @input=${(e: Event) => { this._cxUrl = (e.target as HTMLInputElement).value; }}
+              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this._cxAddMarket(); }}
+            />
+            <button ?disabled=${!!this._cxBusy || !this._cxUrl.trim()} @click=${() => this._cxAddMarket()}>
+              ${this._cxBusy === 'market' ? L('common.loading') : L('skills.codexMarketAdd')}
+            </button>
+          </div>
+          <div class="skills-section">
+            <div class="skills-section__header">${L('skills.codexMarketTitle')}</div>
+            <div class="hub-warn">${icons['alert-triangle']}<span>${L('skills.codexMarketWarn')}</span></div>
+            ${this._cxMsg ? html`<div class="hub-msg ${this._cxMsgCls}">${this._cxMsg}</div>` : ''}
+            ${this._cxMarkets.length ? html`
+              <div class="skills-section__body">
+                ${this._cxMarkets.map(m => html`
+                  <div class="skill-item">
+                    <div class="skill-item__icon">${icons['globe']}</div>
+                    <div class="skill-item__content">
+                      <div class="skill-item__name">${m.name}</div>
+                      <div class="skill-item__source">${m.root}</div>
+                    </div>
+                    <div class="skill-item__actions">
+                      <button class="btn-detail" ?disabled=${!!this._cxBusy} @click=${() => this._cxMarketAction('upgrade', m.name)}>${L('skills.codexMarketUpgrade')}</button>
+                      <button class="btn-danger" ?disabled=${!!this._cxBusy} @click=${() => this._cxMarketAction('remove', m.name)}>${L('skills.codexMarketRemove')}</button>
+                    </div>
+                  </div>`)}
+              </div>` : ''}
+            ${this._cxPlugins.available.length ? html`
+              <div class="group-label">${L('skills.codexAvailPlugins')} (${this._cxPlugins.available.length})</div>
+              <div class="skills-section__body">${this._cxPlugins.available.map((p: any) => this._cxPluginRow(p, false))}</div>` : ''}
+            ${this._cxPlugins.installed.length ? html`
+              <div class="group-label">${L('skills.codexInstalledPlugins')} (${this._cxPlugins.installed.length})</div>
+              <div class="skills-section__body">${this._cxPlugins.installed.map((p: any) => this._cxPluginRow(p, true))}</div>` : ''}
+            ${!this._cxLoaded ? html`<div class="skills-empty">${L('common.loading')}</div>` : ''}
+            ${this._cxLoaded && !this._cxMarkets.length && !this._cxPlugins.available.length && !this._cxPlugins.installed.length ? html`
+              <div class="skills-empty">${L('skills.codexMarketEmpty')}</div>` : ''}
+          </div>
         ` : html`
           <!-- ClawHub 搜索安装（高级） -->
           <div class="skills-toolbar">

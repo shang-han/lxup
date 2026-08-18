@@ -11,6 +11,7 @@ tool.completed / tool.failed / error / done），前端 CodexChatEngine
   GET  /api/codex/status                    安装状态/版本/Key/会话数
   GET  /api/codex/config                    读取配置（Key 打码）
   POST /api/codex/config                    保存配置（写入 codex-home）
+  GET  /api/codex/skills                   技能视图（预装+岗位包，经 AGENTS.md 生效）
   GET  /api/codex/sessions                  会话列表
   POST /api/codex/sessions                  新建会话
   DELETE /api/codex/sessions/{sid}          删除会话
@@ -58,6 +59,15 @@ class ChatRequest(BaseModel):
     workspace: str = Field(default="", description="本轮工作目录覆盖（可选）")
 
 
+class MarketplaceBody(BaseModel):
+    source: str = Field(default="", description="Git 仓库地址或本地目录路径")
+
+
+class PluginInstallBody(BaseModel):
+    plugin: str = Field(default="", description="插件名")
+    marketplace: str = Field(default="", description="所属市场名（可选）")
+
+
 # ── 状态 / 配置 ──
 
 
@@ -81,6 +91,131 @@ async def set_config(request: Request, body: CodexConfigRequest):
     except Exception as e:  # noqa: BLE001
         logger.exception("保存 Codex 配置失败")
         return {"success": False, "message": str(e)}
+
+
+# ── 技能（经 AGENTS.md 生效，无原生技能目录）──
+
+
+@router.get("/skills")
+async def codex_skills(request: Request) -> dict:
+    """Codex 技能视图：预装通用工具（含安装状态，可装/卸）+ 已装岗位包技能 + AGENTS.md 状态。
+    安装/卸载复用 /api/gateway/skills/* 端点，装完自动同步 codex-home/AGENTS.md。"""
+    from ..i18n import ui_lang
+    from ..services import codex_skills, preinstalled_skills
+
+    lang = ui_lang(request)
+    data = []
+    for s in preinstalled_skills.list_skills(lang):
+        s["source_kind"] = ""
+        data.append(s)
+    installed = codex_skills.collect_installed()
+    for it in installed:
+        if it["source_kind"] != "jobpack":
+            continue
+        data.append(
+            {
+                "id": it["id"],
+                "name": it["name"],
+                "description": it["desc"],
+                "version": "",
+                "platforms": [],
+                "tags": [],
+                "requires": [],
+                "status": "available",
+                "status_note": "",
+                "preinstalled": False,
+                "installed": True,
+                "source_kind": "jobpack",
+                "pack_id": it["pack_id"],
+                "pack_name": it["pack_name"],
+                "pack_skill_file": it["pack_skill_file"],
+            }
+        )
+    agents = codex_skills.agents_path()
+    return {
+        "data": data,
+        "agents": {
+            "path": str(agents),
+            "exists": agents.is_file(),
+            "skills": len(installed),
+            "skills_dir": str(codex_skills.skills_dir()),
+        },
+    }
+
+
+# ── 插件市场（桥接 codex plugin 命令，需联网/本地路径）──
+
+
+def _parse_marketplaces(out: str) -> list[dict]:
+    """解析 `codex plugin marketplace list` 表格输出 → [{name, root}]"""
+    rows = []
+    for ln in (out or "").splitlines():
+        ln = ln.strip()
+        if not ln or ln.upper().startswith("MARKETPLACE"):
+            continue
+        parts = ln.split(None, 1)
+        if not parts:
+            continue
+        rows.append({"name": parts[0], "root": parts[1] if len(parts) > 1 else ""})
+    return rows
+
+
+@router.get("/plugins/marketplaces")
+async def plugin_marketplaces(request: Request) -> dict:
+    """已配置的插件市场（codex plugin marketplace list）"""
+    r = await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "marketplace", "list"])
+    r["marketplaces"] = _parse_marketplaces(r.get("stdout") or "")
+    return r
+
+
+@router.post("/plugins/marketplaces")
+async def plugin_marketplace_add(request: Request, body: MarketplaceBody) -> dict:
+    """添加插件市场（Git 仓库地址或本地目录）"""
+    src = (body.source or "").strip()
+    if not src:
+        return {"ok": False, "code": -1, "stdout": "", "stderr": "市场地址为空"}
+    return await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "marketplace", "add", src], 300)
+
+
+@router.post("/plugins/marketplaces/{name}/upgrade")
+async def plugin_marketplace_upgrade(request: Request, name: str) -> dict:
+    """刷新市场快照（重新拉取 Git 市场）"""
+    return await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "marketplace", "upgrade", name], 300)
+
+
+@router.delete("/plugins/marketplaces/{name}")
+async def plugin_marketplace_remove(request: Request, name: str) -> dict:
+    """移除市场源"""
+    return await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "marketplace", "remove", name])
+
+
+@router.get("/plugins")
+async def plugins_list(request: Request) -> dict:
+    """插件清单：available（市场快照中可选）+ installed（已装）"""
+    r = await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "list", "--json"])
+    try:
+        parsed = json.loads(r.get("stdout") or "{}")
+        r["plugins"] = parsed if isinstance(parsed, dict) else {"installed": [], "available": []}
+    except Exception:  # noqa: BLE001
+        r["plugins"] = {"installed": [], "available": []}
+    return r
+
+
+@router.post("/plugins/install")
+async def plugin_install(request: Request, body: PluginInstallBody) -> dict:
+    """安装插件：plugin add PLUGIN[@MARKETPLACE]"""
+    name = (body.plugin or "").strip()
+    if not name:
+        return {"ok": False, "code": -1, "stdout": "", "stderr": "插件名为空"}
+    mkt = (body.marketplace or "").strip()
+    sel = f"{name}@{mkt}" if mkt else name
+    return await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "add", sel], 300)
+
+
+@router.delete("/plugins/{name}")
+async def plugin_remove(request: Request, name: str) -> dict:
+    """卸载插件"""
+    return await asyncio.to_thread(_manager(request).run_cli_sync, ["plugin", "remove", name])
 
 
 # ── 会话 ──

@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { property, state, query } from 'lit/decorators.js';
-import { L } from '../i18n/index.js';
+import { L, sidecarHeaders } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
 import { getActiveModel, listModels, type ResolvedModel } from '../utils/model-config.js';
 import {
@@ -65,6 +65,15 @@ export class AiPage extends LitElement {
 
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
+  /** 当前引擎（app.ts 传入）：模型选择列表按引擎取——openclaw=网关模型 / hermes=Hermes 模型 / codex=Codex 模型 */
+  @property({ type: String }) engine = 'openclaw';
+
+  get _isHermes(): boolean { return this.engine === 'hermes'; }
+  get _isCodex(): boolean { return this.engine === 'codex'; }
+  get _sidecarBase(): string {
+    const host = window.location.hostname || '127.0.0.1';
+    return `http://${host}:7889`;
+  }
 
   @state() _view: 'home' | 'chat' = 'home';
   @query('oc-toast') _toast!: HTMLElement & { show: (msg: string) => void };
@@ -94,17 +103,39 @@ export class AiPage extends LitElement {
   @state() _uploadedImage: string | null = null;
   @query('#ai-file-input') _fileInput!: HTMLInputElement;
 
-  _functionCards = [
-    { icon: 'wrench', titleKey: 'ai.checkConfig', descKey: 'ai.checkConfigDesc' },
-    { icon: 'shield', titleKey: 'ai.diagGateway', descKey: 'ai.diagGatewayDesc' },
-    { icon: 'folder-open', titleKey: 'ai.browseDir', descKey: 'ai.browseDirDesc' },
-    { icon: 'monitor', titleKey: 'ai.checkEnv', descKey: 'ai.checkEnvDesc' },
-    { icon: 'scroll-text', titleKey: 'ai.analyzeLogs', descKey: 'ai.analyzeLogsDesc' },
-    { icon: 'refresh-cw', titleKey: 'ai.oneClickFix', descKey: 'ai.oneClickFixDesc' },
-    { icon: 'bug', titleKey: 'ai.feedbackBug', descKey: 'ai.feedbackBugDesc' },
-    { icon: 'zap', titleKey: 'ai.prAssistant', descKey: 'ai.prAssistantDesc' },
-    { icon: 'puzzle', titleKey: 'ai.skillsMgmt', descKey: 'ai.skillsMgmtDesc' },
-  ];
+  /** 首页功能卡片：前三张与最后一张按引擎切换（配置/诊断/目录/技能），中间通用 */
+  get _functionCards() {
+    const head = this._isHermes
+      ? [
+          { icon: 'wrench', titleKey: 'ai.hxCheckConfig', descKey: 'ai.hxCheckConfigDesc' },
+          { icon: 'shield', titleKey: 'ai.hxDiag', descKey: 'ai.hxDiagDesc' },
+          { icon: 'folder-open', titleKey: 'ai.hxBrowse', descKey: 'ai.hxBrowseDesc' },
+        ]
+      : this._isCodex
+        ? [
+            { icon: 'wrench', titleKey: 'ai.cxCheckConfig', descKey: 'ai.cxCheckConfigDesc' },
+            { icon: 'shield', titleKey: 'ai.cxDiag', descKey: 'ai.cxDiagDesc' },
+            { icon: 'folder-open', titleKey: 'ai.cxBrowse', descKey: 'ai.cxBrowseDesc' },
+          ]
+        : [
+            { icon: 'wrench', titleKey: 'ai.checkConfig', descKey: 'ai.checkConfigDesc' },
+            { icon: 'shield', titleKey: 'ai.diagGateway', descKey: 'ai.diagGatewayDesc' },
+            { icon: 'folder-open', titleKey: 'ai.browseDir', descKey: 'ai.browseDirDesc' },
+          ];
+    const shared = [
+      { icon: 'monitor', titleKey: 'ai.checkEnv', descKey: 'ai.checkEnvDesc' },
+      { icon: 'scroll-text', titleKey: 'ai.analyzeLogs', descKey: 'ai.analyzeLogsDesc' },
+      { icon: 'refresh-cw', titleKey: 'ai.oneClickFix', descKey: 'ai.oneClickFixDesc' },
+      { icon: 'bug', titleKey: 'ai.feedbackBug', descKey: 'ai.feedbackBugDesc' },
+      { icon: 'zap', titleKey: 'ai.prAssistant', descKey: 'ai.prAssistantDesc' },
+    ];
+    const tail = this._isHermes
+      ? { icon: 'puzzle', titleKey: 'ai.hxSkillsMgmt', descKey: 'ai.hxSkillsMgmtDesc' }
+      : this._isCodex
+        ? { icon: 'puzzle', titleKey: 'ai.cxSkillsMgmt', descKey: 'ai.cxSkillsMgmtDesc' }
+        : { icon: 'puzzle', titleKey: 'ai.skillsMgmt', descKey: 'ai.skillsMgmtDesc' };
+    return [...head, ...shared, tail];
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -117,9 +148,13 @@ export class AiPage extends LitElement {
   }
 
   async _boot() {
-    this._models = listModels();
-    const active = getActiveModel();
-    if (active) this._selectedModelKey = modelKey(active);
+    await this._loadModels();
+    if (!this._selectedModelKey) {
+      const active = getActiveModel();
+      if (active && this._models.some((x) => modelKey(x) === modelKey(active))) {
+        this._selectedModelKey = modelKey(active);
+      }
+    }
     try {
       const s = await getStatus();
       this._assistantOnline = true;
@@ -304,12 +339,57 @@ export class AiPage extends LitElement {
 
   // ── 设置（模型选择）──
 
-  _openSettings() {
-    this._models = listModels();
-    if (!this._selectedModelKey) {
-      const a = getActiveModel();
-      if (a) this._selectedModelKey = modelKey(a);
+  /** 按当前引擎加载可选模型：
+   *   openclaw → 网关模型配置；hermes → /api/hermes/model；codex → /api/codex/config */
+  async _loadModels() {
+    if (this._isHermes) {
+      try {
+        const r = await fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const c = await r.json();
+        const name = (c.name || '').trim();
+        this._models = name || c.baseUrl
+          ? [{
+              providerId: 'hermes',
+              providerName: 'Hermes',
+              baseUrl: String(c.baseUrl || ''),
+              apiKey: String(c.apiKey || ''), // 打码值，助手服务保存时会保留原 Key
+              apiType: 'openai',
+              model: name,
+              isPrimary: true,
+            }]
+          : [];
+      } catch { this._models = []; }
+    } else if (this._isCodex) {
+      try {
+        const r = await fetch(`${this._sidecarBase}/api/codex/config`, { headers: sidecarHeaders() });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const c = await r.json();
+        const model = String(c.model || '').trim();
+        this._models = model
+          ? [{
+              providerId: 'codex',
+              providerName: 'Codex',
+              baseUrl: String(c.baseUrl || ''),
+              apiKey: String(c.apiKey || ''),
+              apiType: 'openai',
+              model,
+              isPrimary: true,
+            }]
+          : [];
+      } catch { this._models = []; }
+    } else {
+      this._models = listModels();
     }
+    // 引擎切换/模型变化后，当前选中项不在列表里则回退到主模型或第一个
+    if (this._models.length && !this._models.some((x) => modelKey(x) === this._selectedModelKey)) {
+      const a = this._models.find((x) => x.isPrimary) || this._models[0];
+      this._selectedModelKey = modelKey(a);
+    }
+  }
+
+  async _openSettings() {
+    await this._loadModels();
     this._settingsOpen = true;
   }
 
@@ -417,7 +497,7 @@ export class AiPage extends LitElement {
         </div>
         <div class="ai-home__tip">
           <span class="ai-home__tip-badge">${L('ai.builtInBadge')}</span>
-          <div class="ai-home__tip-text">${L('ai.builtInDesc')}</div>
+          <div class="ai-home__tip-text">${this._isHermes ? L('ai.builtInDescHermes') : this._isCodex ? L('ai.builtInDescCodex') : L('ai.builtInDesc')}</div>
         </div>
         <div class="ai-home__grid">
           ${this._functionCards.map((c) => html`
@@ -491,11 +571,12 @@ export class AiPage extends LitElement {
           <div class="modal-header">${L('ai.settingsTitle')}</div>
           <div class="modal-body">
             <div class="settings-section-title">${L('ai.selectModel')}</div>
-            <div class="settings-hint" style="margin-bottom:12px;">${L('ai.selectModelHint')}</div>
+            <div class="settings-hint" style="margin-bottom:12px;">${this._isCodex ? L('ai.selectModelHintCodex') : L('ai.selectModelHint')}</div>
+            <div class="settings-hint" style="margin-bottom:12px;">${L('ai.modelSource', { engine: this._isHermes ? 'Hermes' : this._isCodex ? 'Codex' : 'OpenClaw' })}</div>
             ${this._models.length === 0 ? html`
               <div class="ai-empty-models">
                 <div style="font-weight:600;margin-bottom:6px;color:var(--text);">${L('ai.noModels')}</div>
-                <div class="settings-hint">${L('ai.noModelsHint')}</div>
+                <div class="settings-hint">${this._isCodex ? L('ai.noModelsHintCodex') : L('ai.noModelsHint')}</div>
               </div>
             ` : html`
               <div class="model-list">

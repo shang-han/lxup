@@ -175,6 +175,10 @@ def install_pack(pack_id: str) -> dict:
         "installed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     _save_registry(reg)
+    # Codex 无技能目录：同步 AGENTS.md 托管区块
+    from .codex_skills import rebuild_agents
+
+    rebuild_agents()
     logger.info("岗位包已部署 %s（%d 个技能）→ OpenClaw + Hermes", pack_id, len(files))
     return {"ok": True, "id": str(pack_id), "installed": True, "skills": len(files), "dirs": list(files)}
 
@@ -186,11 +190,16 @@ def uninstall_pack(pack_id: str) -> dict:
     entry = reg.pop(str(pack_id), None) or {}
     targets = {"openclaw": workspace_skills_dir(), "hermes": hermes_skills_root() / HERMES_CATEGORY}
     for engine, target in targets.items():
-        for name in entry.get(engine) or {}:
+        # 兼容旧注册表格式（早期安装只有 "files" 键，仅 OpenClaw 侧）
+        mapping = entry.get(engine) or (entry.get("files") if engine == "openclaw" else {}) or {}
+        for name in mapping:
             dst = target / name
             if dst.is_dir():
                 shutil.rmtree(dst)
     _save_registry(reg)
+    from .codex_skills import rebuild_agents
+
+    rebuild_agents()
     logger.info("岗位包已卸载 %s（双引擎）", pack_id)
     return {"ok": True, "id": str(pack_id), "installed": False}
 

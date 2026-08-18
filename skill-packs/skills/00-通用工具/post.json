@@ -6,8 +6,8 @@
   "priority": "P0",
   "icon": "🧰",
   "locked": false,
-  "version": "2.0.0",
-  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理与办公能力:文档办公、数据图表、图片处理、文件整理、写作润色、开发辅助与实用小工具,共 48 个技能。",
+  "version": "2.1.0",
+  "description": "龙虾优盘出厂预装的通用能力型技能包(免费、不锁)。不针对具体岗位,扩展纯对话做不到的真实文件处理与办公能力:文档办公、数据图表、图片处理、文件整理、写作润色、开发辅助与实用小工具,共 45 个技能。",
   "skills": [
     {
       "file": "01-PDF处理.SKILL.md",
@@ -491,19 +491,7 @@
       ]
     },
     {
-      "file": "36-正则表达式生成.SKILL.md",
-      "name": "正则表达式生成",
-      "scripts": [],
-      "triggers": [
-        "正则",
-        "正则表达式",
-        "regex",
-        "匹配规则",
-        "校验规则"
-      ]
-    },
-    {
-      "file": "37-本地知识检索.SKILL.md",
+      "file": "36-本地知识检索.SKILL.md",
       "name": "本地知识检索",
       "scripts": [],
       "triggers": [
@@ -515,7 +503,7 @@
       ]
     },
     {
-      "file": "38-论文长文速读.SKILL.md",
+      "file": "37-论文长文速读.SKILL.md",
       "name": "论文长文速读",
       "scripts": [],
       "triggers": [
@@ -527,7 +515,7 @@
       ]
     },
     {
-      "file": "39-代码审查.SKILL.md",
+      "file": "38-代码审查.SKILL.md",
       "name": "代码审查",
       "scripts": [],
       "triggers": [
@@ -539,7 +527,7 @@
       ]
     },
     {
-      "file": "40-数据脱敏.SKILL.md",
+      "file": "39-数据脱敏.SKILL.md",
       "name": "数据脱敏",
       "scripts": [
         "mask_tool.py"
@@ -553,7 +541,7 @@
       ]
     },
     {
-      "file": "41-日志分析排障.SKILL.md",
+      "file": "40-日志分析排障.SKILL.md",
       "name": "日志分析排障",
       "scripts": [],
       "triggers": [
@@ -566,7 +554,7 @@
       ]
     },
     {
-      "file": "42-JSON工具.SKILL.md",
+      "file": "41-JSON工具.SKILL.md",
       "name": "JSON工具",
       "scripts": [
         "json_tool.py"
@@ -581,7 +569,7 @@
       ]
     },
     {
-      "file": "43-文本差异对比.SKILL.md",
+      "file": "42-文本差异对比.SKILL.md",
       "name": "文本差异对比",
       "scripts": [
         "diff_tool.py"
@@ -595,7 +583,7 @@
       ]
     },
     {
-      "file": "44-表格转换.SKILL.md",
+      "file": "43-表格转换.SKILL.md",
       "name": "表格转换",
       "scripts": [
         "table_tool.py"
@@ -609,7 +597,7 @@
       ]
     },
     {
-      "file": "45-联系方式提取.SKILL.md",
+      "file": "44-联系方式提取.SKILL.md",
       "name": "联系方式提取",
       "scripts": [
         "contact_tool.py"
@@ -623,7 +611,7 @@
       ]
     },
     {
-      "file": "46-二维码生成解析.SKILL.md",
+      "file": "45-二维码生成解析.SKILL.md",
       "name": "二维码生成解析",
       "scripts": [
         "qr_tool.py"
@@ -634,33 +622,6 @@
         "扫码",
         "二维码内容",
         "QR码"
-      ]
-    },
-    {
-      "file": "47-单位换算.SKILL.md",
-      "name": "单位换算",
-      "scripts": [],
-      "triggers": [
-        "换算",
-        "单位转换",
-        "几斤",
-        "多少公里",
-        "英寸",
-        "存储单位"
-      ]
-    },
-    {
-      "file": "48-财务计算.SKILL.md",
-      "name": "财务计算",
-      "scripts": [],
-      "triggers": [
-        "个税",
-        "贷款",
-        "月供",
-        "复利",
-        "理财计算",
-        "投资收益",
-        "折扣"
       ]
     }
   ]

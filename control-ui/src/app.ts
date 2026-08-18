@@ -66,7 +66,7 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
     sections = [
       { heading: L('sections.Monitor'), tabs: ['ai','chat'] },
       { heading: L('sections.Config'), tabs: ['codex','sandbox'] },
-      { heading: L('sections.Extensions'), tabs: ['settings'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','settings'] },
     ];
   } else {
     sections = [
@@ -203,8 +203,8 @@ export class OpenClawApp extends LitElement {
         const s = JSON.parse(raw);
         if (s.page && TAB_ICONS[s.page]) this._page = s.page;
         if (s.engine && (s.engine==='openclaw'||s.engine==='hermes'||s.engine==='codex')) this._engine = s.engine;
-        // codex 引擎没有 dashboard/models/logs/skills/memory 等页，恢复状态时回落到 codex 配置页
-        if (this._engine === 'codex' && !['ai','chat','codex','sandbox','settings'].includes(this._page)) this._page = 'codex';
+        // codex 引擎没有 dashboard/models/logs/memory 等页，恢复状态时回落到 codex 配置页
+        if (this._engine === 'codex' && !['ai','chat','codex','sandbox','settings','skills2'].includes(this._page)) this._page = 'codex';
       }
       const theme = localStorage.getItem('openclaw-control-theme');
       if (theme) { const t = JSON.parse(theme); this._theme = t.theme||'claw'; this._themeMode = t.mode||'dark'; }
@@ -237,7 +237,7 @@ export class OpenClawApp extends LitElement {
         return html`<memory-page title=${title('memory')} subtitle=${sub('memory')}></memory-page>`;
       case 'cron': return html`<cron-page title=${title('cron')} .engine=${this._engine}></cron-page>`;
       case 'extensions': return html`<extensions-page title=${title('extensions')}></extensions-page>`;
-      case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')}></ai-page>`;
+      case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')} .engine=${this._engine}></ai-page>`;
       case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
       case 'settings': return html`<settings-page title=${title('settings')} subtitle=${sub('settings')} .theme=${this._theme} .themeMode=${this._themeMode} .snapshot=${this._snapshot} @set-theme=${(e:CustomEvent)=>this._setTheme(e.detail.value)} @set-mode=${(e:CustomEvent)=>this._setThemeMode(e.detail.value)}></settings-page>`;
       case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')} .engine=${this._engine}></channels-page>`;

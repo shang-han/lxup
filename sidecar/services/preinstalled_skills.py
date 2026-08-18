@@ -84,11 +84,14 @@ _lib_cache: dict[str, bool] = {}
 
 
 def _missing_libs(requires: list) -> list[str]:
-    """用便携解释器真实 import 校验，返回缺失的库（进程级缓存：库不会凭空变化）"""
+    """用便携解释器真实 import 校验，返回缺失的库。
+
+    只缓存「已存在」的结果；缺失不缓存——agent 可能自行 pip 安装依赖
+    （如生成 PPT 时自装 python-pptx），下次检测需反映真实状态。"""
     missing: list[str] = []
     for lib in requires or []:
         key = str(lib).lower()
-        if key not in _lib_cache:
+        if not _lib_cache.get(key):
             mod = _IMPORT_NAMES.get(key, str(lib))
             try:
                 subprocess.run(
@@ -97,8 +100,8 @@ def _missing_libs(requires: list) -> list[str]:
                 )
                 _lib_cache[key] = True
             except Exception:  # noqa: BLE001
-                _lib_cache[key] = False
-        if not _lib_cache[key]:
+                pass  # 缺失不缓存，每次重新检测
+        if not _lib_cache.get(key):
             missing.append(str(lib))
     return missing
 
@@ -202,6 +205,10 @@ def install(skill_id: str) -> dict:
     _copy_to(s, skill_id, dst_oc)
     dst_hm = hermes_skills_root() / HERMES_CATEGORY / skill_id
     _copy_to(s, skill_id, dst_hm)
+    # Codex 无技能目录：同步 AGENTS.md 托管区块（本地导入避免模块级循环）
+    from .codex_skills import rebuild_agents
+
+    rebuild_agents()
     logger.info("预装技能已部署 %s → %s + %s", skill_id, dst_oc, dst_hm)
     return {"ok": True, "id": skill_id, "installed": True, "path": str(dst_oc), "hermes_path": str(dst_hm)}
 
@@ -212,6 +219,9 @@ def uninstall(skill_id: str) -> dict:
     for dst in (_skills_dir() / skill_id, hermes_skills_root() / HERMES_CATEGORY / skill_id):
         if dst.is_dir():
             shutil.rmtree(dst)
+    from .codex_skills import rebuild_agents
+
+    rebuild_agents()
     logger.info("预装技能已卸载 %s（双引擎）", skill_id)
     return {"ok": True, "id": skill_id, "installed": False}
 

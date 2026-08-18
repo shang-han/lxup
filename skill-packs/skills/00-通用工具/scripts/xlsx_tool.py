@@ -10,9 +10,15 @@ except Exception:
 import argparse, csv, json, sys
 try:
     import openpyxl
-    from openpyxl.styles import Font
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
 except ImportError:
     sys.stderr.write('[xlsx_tool] 缺少依赖 openpyxl,请先执行: pip install "openpyxl>=3.0"\n'); sys.exit(1)
+
+THIN = Side(style='thin')
+BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+HEADER_FILL = PatternFill('solid', fgColor='DDEBF7')
+HEADER_FONT = Font(bold=True)
 
 def rows_csv(path):
     with open(path, 'r', encoding='utf-8-sig', newline='') as f:
@@ -30,15 +36,46 @@ def rows_json(path):
     header = list(data[0].keys())
     return [header] + [[str(d.get(k,'')) for k in header] for d in data]
 
+def append_row(ws, row):
+    """写入一行;以 = 开头的字符串写为真实公式(如 =SUM(B2:B10))"""
+    ws.append(row)
+    r = ws.max_row
+    for idx, val in enumerate(row, 1):
+        if isinstance(val, str) and val.startswith('='):
+            ws.cell(row=r, column=idx).value = val
+
+def style_sheet(ws):
+    """表头加粗+着色+居中、全表边框、按内容自动列宽(上限 40)、冻结首行"""
+    for c in ws[1]:
+        c.font = HEADER_FONT
+        c.fill = HEADER_FILL
+        c.alignment = Alignment(horizontal='center')
+    for row in ws.iter_rows():
+        for c in row:
+            c.border = BORDER
+    widths = {}
+    for row in ws.iter_rows(values_only=True):
+        for i, v in enumerate(row, 1):
+            if v is None:
+                continue
+            s = str(v)
+            if s.startswith('='):  # 公式文本不参与列宽估算
+                continue
+            w = sum(2 if ord(ch) > 127 else 1 for ch in s)
+            widths[i] = max(widths.get(i, 0), w)
+    for i, w in widths.items():
+        ws.column_dimensions[get_column_letter(i)].width = min(w + 2, 40)
+    ws.freeze_panes = 'A2'
+
 def cmd_create(a):
     wb = openpyxl.Workbook(); wb.remove(wb.active)
     for src in (a.csv or []) + (a.json or []):
         name = src.rsplit('/',1)[-1].rsplit('\\',1)[-1].split('.')[0][:31] or 'Sheet'
         rows = rows_csv(src) if src in (a.csv or []) else rows_json(src)
         ws = wb.create_sheet(title=name)
-        for r in rows: ws.append(r)
-        for c in ws[1]: c.font = Font(bold=True)
-        ws.freeze_panes = 'A2'
+        for r in rows:
+            append_row(ws, r)
+        style_sheet(ws)
     if not wb.sheetnames:
         sys.stderr.write('[xlsx_tool] 未提供数据源(--csv/--json)\n'); sys.exit(1)
     wb.save(a.output)

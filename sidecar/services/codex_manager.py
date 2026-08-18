@@ -73,6 +73,33 @@ class CodexManager:
         # sid -> 活跃子进程（一个会话同时只允许一轮）
         self._active: dict[str, asyncio.subprocess.Process] = {}
 
+    def run_cli_sync(self, args: list[str], timeout: int = 180) -> dict:
+        """同步跑一次 codex CLI 管理命令（plugin marketplace/list 等），供路由桥接。
+        返回 {ok, code, stdout, stderr}。"""
+        binary = self.binary_path()
+        if not binary:
+            return {"ok": False, "code": -1, "stdout": "", "stderr": "codex 未安装"}
+        try:
+            proc = subprocess.run(
+                [binary, *args],
+                env=self._codex_env(),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+            return {
+                "ok": proc.returncode == 0,
+                "code": proc.returncode,
+                "stdout": proc.stdout or "",
+                "stderr": proc.stderr or "",
+            }
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "code": -2, "stdout": "", "stderr": f"命令超时（{timeout}s）"}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "code": -1, "stdout": "", "stderr": str(e)}
+
     # ── 二进制发现 ──
 
     def binary_path(self) -> str | None:

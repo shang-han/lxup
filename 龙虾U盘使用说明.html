@@ -475,7 +475,8 @@ taskkill /PID 查到的数字 /T /F</pre>
   <ul>
     <li><strong>我的技能</strong>：分「我的岗位技能 / 预装通用工具 / 其他可用」，顶部统计「N 项可用 · N 项待修复 · N 项已停用」。待修复=缺依赖，点「补齐依赖」一键修（需联网）；停用的点击恢复启用。</li>
     <li>每个技能有「试一下」：把示例问题预填进聊天页直接体验。</li>
-    <li><strong>岗位技能包商店</strong>：购买（当前为演示模式）→ 自动部署到 OpenClaw 与 Hermes 双引擎工作台；已购包可下载 / 卸载、看技能清单与触发词。</li>
+    <li><strong>岗位技能包商店</strong>：购买（当前为演示模式）→ 自动部署到 OpenClaw 与 Hermes 双引擎工作台，并同步进 Codex 的全局 AGENTS.md——三个引擎都可调用；已购包可下载 / 卸载、看技能清单与触发词。</li>
+    <li><strong>Codex 引擎</strong>：技能页同样有「我的技能 / 岗位包商店 / 插件市场」；已装技能以原生 SKILL.md 目录部署（runtime\codex-home\skills）按需加载，AGENTS.md 自动同步，安装 / 卸载即生效；插件市场可添加 Git 仓库地址或本地目录作为市场源，安装 / 卸载 Codex 插件（需联网）。</li>
     <li><strong>市场（ClawHub）</strong>：OpenClaw 官方社区技能市场，英文关键词搜索命中率高；安装即装即用、无需重启；<strong>社区技能未经官方审核，看清名称与下载量再装</strong>；需联网。</li>
   </ul>
 </div>

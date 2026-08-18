@@ -339,7 +339,7 @@
       "industry": "创意设计",
       "category": "创意设计",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/34-平面设计师"
     },
@@ -459,7 +459,7 @@
       "industry": "蓝海/自由职业",
       "category": "蓝海/自由职业",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/46-旅游定制师"
     },
@@ -659,7 +659,7 @@
       "industry": "互联网/新经济",
       "category": "互联网/新经济",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/66-短视频编导"
     },
@@ -679,7 +679,7 @@
       "industry": "互联网/新经济",
       "category": "互联网/新经济",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/68-前端开发"
     },
@@ -719,7 +719,7 @@
       "industry": "互联网/新经济",
       "category": "互联网/新经济",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/72-AI应用工程师"
     },
@@ -729,7 +729,7 @@
       "industry": "互联网/新经济",
       "category": "互联网/新经济",
       "priority": "P1",
-      "skills": 5,
+      "skills": 4,
       "locked": true,
       "dir": "skills/73-产品经理"
     },

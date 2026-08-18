@@ -386,7 +386,7 @@ export class SkillpackPanel extends LitElement {
     const totalSkills = this._catalog.reduce((n, p) => n + p.skills.length, 0);
 
     return html`
-      <div class="summary">${L('skills.packCount', { total: this._catalog.length, skills: Math.round(totalSkills / Math.max(this._catalog.length, 1)) })}</div>
+      <div class="summary">${L('skills.packCount', { total: this._catalog.length, skills: totalSkills })}</div>
 
       ${this._renderInstalledSection()}
 

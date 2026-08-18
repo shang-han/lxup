@@ -92,6 +92,14 @@ async def lifespan(app: FastAPI):
     await init_database(config)
     logger.info("Sidecar 就绪，监听 %s:%d", config.host, config.port)
 
+    # Codex 技能同步：启动时对齐一次 AGENTS.md 托管区块（内容一致则不动文件）
+    try:
+        from .services.codex_skills import rebuild_agents
+
+        rebuild_agents()
+    except Exception:  # noqa: BLE001
+        logger.exception("Codex AGENTS.md 同步失败")
+
     # 就绪信号写到数据库同目录（runtime/data/），保持项目根目录清爽
     ready_path = os.path.join(
         os.path.dirname(os.path.abspath(config.db_path)) or ".", ".sidecar.ready"

@@ -1,26 +1,26 @@
 ---
 name: 图片PDF转换
-description: "图片转 PDF、PDF 转图片。
-  适用于证件扫描件合并成 PDF、把 PDF 每页导出为图片的场景(调用本地脚本,需 pillow、pypdf)"
-version: 1.0.0
+description: "图片转 PDF、PDF 转图片(逐页真实渲染,任意类型 PDF 均可)。
+  适用于证件扫描件合并成 PDF、把 PDF 每页导出为图片的场景(调用本地脚本,需 pillow、pymupdf)"
+version: 1.1.0
 triggers: [图片转PDF, PDF转图片, 扫描件合并, 导出PDF为图片]
 platform: all
-requires: [pillow, pypdf]
+requires: [pillow, pymupdf]
 ---
 
 # 图片PDF转换
 
 ## 定义
-在图片与 PDF 之间做批量转换:多张图片按顺序合成一份 PDF,或把 PDF 每页渲染为图片。
+在图片与 PDF 之间做批量转换:多张图片按顺序合成一份 PDF;把 PDF 每页渲染为 PNG 图片(基于 pymupdf 真渲染,纯文本页/扫描页都能导出)。
 
 ## 适用场景
-- 多张证件/单据照片要合成一个 PDF 发出去
+- 多张证件/单据照片合成一个 PDF 发出去
 - 把 PDF 的某一页或全部导出为图片用于分享
 - 扫描件图片归档成 PDF
 
 ## 核心能力
 - img2pdf:jpg/png 按输入顺序合成 PDF(自动转 RGB)
-- pdf2img:每页渲染为 PNG,可指定 DPI
+- pdf2img:pymupdf 逐页渲染为 PNG,可指定 DPI 与页码范围——任何 PDF 都能导出
 - 支持指定页码范围
 
 ## 边界
@@ -29,7 +29,7 @@ requires: [pillow, pypdf]
 - 超大 PDF(>500 页)先提示可能耗时
 
 ## 执行流程
-脚本位于本技能目录 `scripts/imgpdf_tool.py`,依赖 `pillow`、`pypdf`(缺失时脚本提示安装命令)。
+脚本位于本技能目录 `scripts/imgpdf_tool.py`,依赖 `pillow`、`pypdf`、`pymupdf`(缺失时脚本提示安装命令)。
 
 - 图片转 PDF:`python scripts/imgpdf_tool.py img2pdf 1.jpg 2.jpg 3.jpg -o 合并.pdf`
 - PDF 转图片:`python scripts/imgpdf_tool.py pdf2img 文档.pdf --outdir ./图片 --dpi 150`
@@ -41,10 +41,10 @@ requires: [pillow, pypdf]
 回报输出路径、页数/图片数、文件大小。
 
 ## 示例
-输入:「把这三张身份证照片合成一个 PDF」
-动作:`python scripts/imgpdf_tool.py img2pdf 1.jpg 2.jpg 3.jpg -o 证件.pdf`
-回报:「已生成 证件.pdf,3 页,860KB。」
+输入:「把这个 PDF 每页导出成图片」
+动作:pdf2img --dpi 150
+回报:「已导出 12 页图片到 ./图片(page_001.png ~ page_012.png)。」
 
 ## 注意事项
 - 输出路径不与输入文件重名
-- 依赖缺失时按脚本提示安装,不要静默失败
+- 依赖缺失时按脚本提示安装(`pip install "pymupdf"`),不要静默失败
