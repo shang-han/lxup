@@ -1,10 +1,9 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { property, state, query } from 'lit/decorators.js';
-import { L, sidecarHeaders } from '../i18n/index.js';
+import { L } from '../i18n/index.js';
 import { icons } from '../components/icons.js';
-import { getActiveModel, listModels, type ResolvedModel } from '../utils/model-config.js';
 import {
-  getStatus, saveConfig, listConversations, createConversation, getConversation,
+  getStatus, listConversations, createConversation, getConversation,
   deleteConversation, chat, type AssistantEvent,
 } from '../services/ai.js';
 import '../components/oc-toast.js';
@@ -13,10 +12,9 @@ import pageStyles from './styles.css?raw';
 
 /** 聊天里展示的一次命令（工具）调用 */
 type ToolCardView = { name: string; command: string; ok?: boolean; result?: string; running: boolean };
-/** 本地聊天消息（assistant 可携带命令卡片） */
-type AiMessage = { role: 'user' | 'assistant'; text: string; ts: string; tools?: ToolCardView[]; error?: boolean };
+/** 本地聊天消息（assistant 可携带命令卡片；user 可携带图片） */
+type AiMessage = { role: 'user' | 'assistant'; text: string; ts: string; tools?: ToolCardView[]; error?: boolean; image?: string };
 
-const modelKey = (m: { providerId: string; model: string }) => `${m.providerId}::${m.model}`;
 const cmdOf = (args: Record<string, unknown>) =>
   typeof args.command === 'string' && args.command ? args.command : JSON.stringify(args);
 
@@ -25,23 +23,9 @@ export class AiPage extends LitElement {
     :host { display: flex; flex-direction: column; height: 100%; }
     ${unsafeCSS(pageStyles)}
 
-    /* ── 模型选择（简化设置）── */
-    .model-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; max-height: 320px; overflow-y: auto; }
-    .model-row {
-      display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-      border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
-      transition: border-color .15s, background .15s;
-    }
-    .model-row:hover { background: var(--bg-hover); }
-    .model-row.selected { border-color: var(--accent); background: var(--accent-subtle); }
-    .model-row input { accent-color: var(--accent); margin: 0; }
-    .model-provider { font-weight: 600; font-size: 13px; color: var(--text-strong); }
-    .model-id { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }
-    .model-primary { margin-left: auto; font-size: 11px; color: var(--warn); white-space: nowrap; }
     .assistant-status-line { font-size: 12px; color: var(--text-soft); padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border); }
     .status-on { color: var(--success); }
     .status-off { color: var(--danger); }
-    .ai-empty-models { padding: 22px 16px; text-align: center; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); color: var(--text-soft); }
 
     /* ── 命令卡片 ── */
     .ai-chat__tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
@@ -60,36 +44,32 @@ export class AiPage extends LitElement {
     @keyframes ai-blink { 50% { opacity: 0; } }
     .ai-thinking { color: var(--text-soft); opacity: .75; }
     .ai-chat__msg-text.is-error { color: var(--danger); }
-    .ai-chat__msg-md { min-width: 0; }
+    .ai-chat__msg-md { min-width: 0; overflow-x: auto; }
+    .ai-chat__msg-image {
+      display: block; max-width: 240px; max-height: 240px; object-fit: contain;
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+      background: var(--bg); margin-bottom: 6px;
+    }
   `;
 
   @property({ type: String }) title = '';
   @property({ type: String }) subtitle = '';
-  /** 当前引擎（app.ts 传入）：模型选择列表按引擎取——openclaw=网关模型 / hermes=Hermes 模型 / codex=Codex 模型 */
+  /** 当前引擎（app.ts 传入）：首页功能卡片与内置说明按引擎切换 */
   @property({ type: String }) engine = 'openclaw';
 
   get _isHermes(): boolean { return this.engine === 'hermes'; }
   get _isCodex(): boolean { return this.engine === 'codex'; }
-  get _sidecarBase(): string {
-    const host = window.location.hostname || '127.0.0.1';
-    return `http://${host}:7889`;
-  }
 
   @state() _view: 'home' | 'chat' = 'home';
   @query('oc-toast') _toast!: HTMLElement & { show: (msg: string) => void };
   @state() _showConvList = false;
   @state() _settingsOpen = false;
   @state() _input = '';
-  @state() _saved = false;
 
   // 助手服务状态
   @state() _assistantOnline = false;
   @state() _configured = false;
   @state() _assistantModel = '';
-
-  // 模型选择（来自「模型配置」页）
-  @state() _models: ResolvedModel[] = [];
-  @state() _selectedModelKey = '';
 
   // 会话（真实，来自助手服务）
   @state() _conversations: import('../services/types.js').Conversation[] = [];
@@ -148,13 +128,6 @@ export class AiPage extends LitElement {
   }
 
   async _boot() {
-    await this._loadModels();
-    if (!this._selectedModelKey) {
-      const active = getActiveModel();
-      if (active && this._models.some((x) => modelKey(x) === modelKey(active))) {
-        this._selectedModelKey = modelKey(active);
-      }
-    }
     try {
       const s = await getStatus();
       this._assistantOnline = true;
@@ -206,23 +179,40 @@ export class AiPage extends LitElement {
     }
   }
 
+  /** 历史消息内容解析：支持纯文本字符串与视觉多段格式（text + image_url） */
+  _parseContent(c: unknown): { text: string; image?: string } {
+    if (typeof c === 'string') return { text: c };
+    if (Array.isArray(c)) {
+      let text = '';
+      let image = '';
+      for (const p of c) {
+        if (!p || typeof p !== 'object') continue;
+        if (p.type === 'text') text += String(p.text ?? '');
+        else if (p.type === 'image_url') image = String(p.image_url?.url ?? '');
+      }
+      return { text, ...(image ? { image } : {}) };
+    }
+    return { text: String(c ?? '') };
+  }
+
   async _switchConv(id: string) {
     this._setActiveConv(id);
     this._showConvList = false;
     try {
       const detail = await getConversation(id);
-      this._messages = (detail.messages || []).map((m): AiMessage =>
-        m.role === 'user'
-          ? { role: 'user', text: m.content, ts: '' }
+      this._messages = (detail.messages || []).map((m): AiMessage => {
+        const parsed = this._parseContent(m.content);
+        return m.role === 'user'
+          ? { role: 'user', text: parsed.text, ts: '', ...(parsed.image ? { image: parsed.image } : {}) }
           : {
               role: 'assistant',
-              text: m.content,
+              text: parsed.text,
               ts: '',
               tools: (m.toolCalls || []).map((tc) => ({
                 name: tc.name, command: cmdOf(tc.args), ok: tc.ok, result: tc.result, running: false,
               })),
-            },
-      );
+            };
+      });
     } catch {
       this._messages = [];
     }
@@ -261,10 +251,12 @@ export class AiPage extends LitElement {
       return;
     }
 
+    const image = this._uploadedImage;
+    this._uploadedImage = null;
     const ts = new Date().toLocaleTimeString();
     this._messages = [
       ...this._messages,
-      { role: 'user', text, ts },
+      { role: 'user', text, ts, ...(image ? { image } : {}) },
       { role: 'assistant', text: '', ts, tools: [] },
     ];
     this._input = '';
@@ -277,7 +269,7 @@ export class AiPage extends LitElement {
     this._scrollChat();
 
     const convId = this._activeConv || null;
-    this._chatAbort = chat(convId, text, (ev) => this._onChatEvent(ev));
+    this._chatAbort = chat(convId, text, (ev) => this._onChatEvent(ev), this.engine, image);
   }
 
   _mutateLastAssistant(fn: (m: AiMessage) => AiMessage) {
@@ -330,86 +322,42 @@ export class AiPage extends LitElement {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this._send(); }
   }
 
+  /** 滚动到最新消息：置标记，待本周期渲染完成后由 updated() 兜底滚动
+   * （双 rAF 等布局稳定 + 定时兜底等 markdown 异步渲染，避免拿到旧 DOM） */
+  _scrollToBottom = false;
+
   _scrollChat() {
-    requestAnimationFrame(() => {
-      const el = this.querySelector('.ai-chat__messages');
-      if (el) el.scrollTop = el.scrollHeight;
-    });
+    this._scrollToBottom = true;
+    this.requestUpdate();
   }
 
-  // ── 设置（模型选择）──
-
-  /** 按当前引擎加载可选模型：
-   *   openclaw → 网关模型配置；hermes → /api/hermes/model；codex → /api/codex/config */
-  async _loadModels() {
-    if (this._isHermes) {
-      try {
-        const r = await fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const c = await r.json();
-        const name = (c.name || '').trim();
-        this._models = name || c.baseUrl
-          ? [{
-              providerId: 'hermes',
-              providerName: 'Hermes',
-              baseUrl: String(c.baseUrl || ''),
-              apiKey: String(c.apiKey || ''), // 打码值，助手服务保存时会保留原 Key
-              apiType: 'openai',
-              model: name,
-              isPrimary: true,
-            }]
-          : [];
-      } catch { this._models = []; }
-    } else if (this._isCodex) {
-      try {
-        const r = await fetch(`${this._sidecarBase}/api/codex/config`, { headers: sidecarHeaders() });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const c = await r.json();
-        const model = String(c.model || '').trim();
-        this._models = model
-          ? [{
-              providerId: 'codex',
-              providerName: 'Codex',
-              baseUrl: String(c.baseUrl || ''),
-              apiKey: String(c.apiKey || ''),
-              apiType: 'openai',
-              model,
-              isPrimary: true,
-            }]
-          : [];
-      } catch { this._models = []; }
-    } else {
-      this._models = listModels();
+  _doScroll() {
+    // 优先滚动最后一条消息本身：scrollIntoView 会自动找到真正可滚动的祖先
+    const msgs = this.shadowRoot ? this.shadowRoot.querySelectorAll('.ai-chat__msg') : [];
+    const last = msgs.length ? msgs[msgs.length - 1] : null;
+    if (last) {
+      last.scrollIntoView({ block: 'end', behavior: 'auto' });
+      return;
     }
-    // 引擎切换/模型变化后，当前选中项不在列表里则回退到主模型或第一个
-    if (this._models.length && !this._models.some((x) => modelKey(x) === this._selectedModelKey)) {
-      const a = this._models.find((x) => x.isPrimary) || this._models[0];
-      this._selectedModelKey = modelKey(a);
+    const el = this.querySelector('.ai-chat__messages');
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  updated() {
+    if (this._scrollToBottom) {
+      this._scrollToBottom = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => this._doScroll()));
+      setTimeout(() => this._doScroll(), 120);
     }
   }
 
-  async _openSettings() {
-    await this._loadModels();
+  // ── 设置（仅状态展示，模型由助手服务自身配置）──
+
+  _openSettings() {
     this._settingsOpen = true;
   }
 
   _closeSettings() { this._settingsOpen = false; }
-
-  async _saveSettings() {
-    const m = this._models.find((x) => modelKey(x) === this._selectedModelKey);
-    if (!m) return;
-    try {
-      await saveConfig({ baseUrl: m.baseUrl, apiKey: m.apiKey, model: m.model });
-      this._configured = true;
-      this._assistantModel = m.model;
-      this._saved = true;
-      this._settingsOpen = false;
-      this._toast?.show(L('ai.saved'));
-      setTimeout(() => { this._saved = false; this.requestUpdate(); }, 2000);
-    } catch (e) {
-      this._toast?.show(e instanceof Error ? e.message : String(e));
-    }
-  }
 
   // ── 其他 ──
 
@@ -501,7 +449,7 @@ export class AiPage extends LitElement {
         </div>
         <div class="ai-home__grid">
           ${this._functionCards.map((c) => html`
-            <div class="ai-home__card" @click=${() => { this._input = L(c.descKey); this._view = 'chat'; }}>
+            <div class="ai-home__card" @click=${() => { this._input = L(c.descKey); this._view = 'chat'; this._scrollChat(); }}>
               <div class="ai-home__card-inner">
                 <div class="ai-home__card-icon">${icons[c.icon] || icons['circle']}</div>
                 <div>
@@ -533,6 +481,7 @@ export class AiPage extends LitElement {
               <div class="ai-chat__msg ${m.role}">
                 <div class="ai-chat__msg-avatar">${m.role === 'user' ? 'U' : 'AI'}</div>
                 <div class="ai-chat__msg-body">
+                  ${m.image ? html`<img class="ai-chat__msg-image" src=${m.image} alt="attachment" />` : ''}
                   <div class="ai-chat__msg-meta">${m.role === 'user' ? 'You' : 'Assistant'}${m.ts ? ` · ${m.ts}` : ''}</div>
                   ${(m.tools && m.tools.length) ? html`<div class="ai-chat__tools">${m.tools.map((t) => this._renderToolCard(t))}</div>` : ''}
                   ${m.text
@@ -570,29 +519,6 @@ export class AiPage extends LitElement {
         <div class="modal-dialog">
           <div class="modal-header">${L('ai.settingsTitle')}</div>
           <div class="modal-body">
-            <div class="settings-section-title">${L('ai.selectModel')}</div>
-            <div class="settings-hint" style="margin-bottom:12px;">${this._isCodex ? L('ai.selectModelHintCodex') : L('ai.selectModelHint')}</div>
-            <div class="settings-hint" style="margin-bottom:12px;">${L('ai.modelSource', { engine: this._isHermes ? 'Hermes' : this._isCodex ? 'Codex' : 'OpenClaw' })}</div>
-            ${this._models.length === 0 ? html`
-              <div class="ai-empty-models">
-                <div style="font-weight:600;margin-bottom:6px;color:var(--text);">${L('ai.noModels')}</div>
-                <div class="settings-hint">${this._isCodex ? L('ai.noModelsHintCodex') : L('ai.noModelsHint')}</div>
-              </div>
-            ` : html`
-              <div class="model-list">
-                ${this._models.map((m) => {
-                  const key = modelKey(m);
-                  return html`
-                    <label class="model-row ${this._selectedModelKey === key ? 'selected' : ''}">
-                      <input type="radio" name="ai-model" .checked=${this._selectedModelKey === key}
-                        @change=${() => { this._selectedModelKey = key; this.requestUpdate(); }} />
-                      <span class="model-provider">${m.providerName || m.providerId}</span>
-                      <span class="model-id">${m.model}</span>
-                      ${m.isPrimary ? html`<span class="model-primary">★ ${L('ai.primaryTag')}</span>` : ''}
-                    </label>`;
-                })}
-              </div>
-            `}
             <div class="assistant-status-line">
               ${L('ai.assistantStatus')}：
               ${!this._assistantOnline
@@ -604,9 +530,6 @@ export class AiPage extends LitElement {
           </div>
           <div class="modal-footer">
             <button @click=${this._closeSettings}>${L('ai.cancel')}</button>
-            <button class="btn-primary" ?disabled=${this._models.length === 0} @click=${this._saveSettings}>
-              ${this._saved ? '✓ ' + L('ai.saved') : L('ai.save')}
-            </button>
           </div>
         </div>
       </div>

@@ -158,6 +158,8 @@ export class DashboardPage extends LitElement {
 
   // 网关 WS 侧真实数据（hello / agents.list / sessions.list / skills.status）
   @state() _gwVersion = '';
+  /** 版本变体：sinicized=汉化版 / upstream=上游版 / ''=未知（Sidecar 未返回时） */
+  @state() _versionKind: 'sinicized' | 'upstream' | '' = '';
   @state() _agentCount: number | null = null;
   @state() _defaultAgent = '';
   @state() _agentIds: string[] = [];
@@ -182,6 +184,7 @@ export class DashboardPage extends LitElement {
     super.connectedCallback();
     this._refreshModelInfo();
     this._refreshGatewayStatus().then(() => this._refreshServiceHealth());
+    this._refreshVersionKind();
     this._refreshLicense();
     this._refreshWsInfo();
     const store = getSharedStore();
@@ -222,6 +225,17 @@ export class DashboardPage extends LitElement {
   }
 
   _gwMsgTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 版本变体（汉化/上游）：Sidecar /api/gateway/version 读 vendored 包标记 */
+  async _refreshVersionKind() {
+    try {
+      const r = await fetchTimeout(`${this._sidecarBase}/api/gateway/version`, {}, 5000);
+      const d = await r.json();
+      this._versionKind = d?.sinicized ? 'sinicized' : d?.version !== undefined ? 'upstream' : '';
+    } catch {
+      this._versionKind = '';
+    }
+  }
 
   /** 设置网关操作消息，6 秒后自动清除（避免陈旧消息顶替端口/PID 显示） */
   _setGwMessage(msg: string, sticky = false) {
@@ -369,7 +383,7 @@ export class DashboardPage extends LitElement {
             <div class="dashboard-stat__hint">${this._gwPid ? 'PID: ' + this._gwPid : '—'}</div>
           </div>
           <div class="dashboard-stat">
-            <div class="dashboard-stat__label">${L('dashboard.versionSinicized')}</div>
+            <div class="dashboard-stat__label">${this._versionKind === 'sinicized' ? L('dashboard.versionSinicized') : this._versionKind === 'upstream' ? L('dashboard.versionUpstream') : L('dashboard.versionPlain')}</div>
             <div class="dashboard-stat__value">${this._gwVersion || '—'}</div>
             <div class="dashboard-stat__hint">${L('dashboard.port')} ${this._gwPort ?? '—'}${this._gwPid ? ' · PID ' + this._gwPid : ''}</div>
           </div>

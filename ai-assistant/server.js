@@ -42,6 +42,8 @@ const DATA_DIR = path.join(ROOT, 'data');
 const CONV_DIR = path.join(DATA_DIR, 'conversations');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 const OPENCLAW_CONFIG_PATH = path.join(ROOT, '..', 'runtime', 'openclaw-home', 'openclaw.json');
+const CODEX_HOME = path.join(ROOT, '..', 'runtime', 'codex-home');
+const HERMES_CONFIG_PATH = path.join(ROOT, '..', 'runtime', 'hermes-home', 'config.yaml');
 const isWindows = process.platform === 'win32';
 
 function ensureDirs() {
@@ -160,6 +162,35 @@ function maskKey(k) {
   return k.slice(0, 3) + '****' + k.slice(-4);
 }
 
+/** 复用 Codex 配置：auth.json 的 OPENAI_API_KEY + config.toml 的 base_url/model（宽松匹配） */
+function getCodexModelConfig() {
+  try {
+    const auth = JSON.parse(fs.readFileSync(path.join(CODEX_HOME, 'auth.json'), 'utf-8'));
+    const key = String(auth?.OPENAI_API_KEY || auth?.apiKey || '').trim();
+    if (!key || isSecretPlaceholder(key)) return null;
+    const toml = fs.readFileSync(path.join(CODEX_HOME, 'config.toml'), 'utf-8');
+    const baseUrl = (toml.match(/base_url\s*=\s*["']([^"']+)["']/) || [])[1] || '';
+    const model = (toml.match(/^model\s*=\s*["']([^"']+)["']/m) || [])[1] || '';
+    return { apiKey: key, baseUrl, model };
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 复用 Hermes 配置：config.yaml 的 model 段（api_key/base_url/name） */
+function getHermesModelConfig() {
+  try {
+    const yaml = fs.readFileSync(HERMES_CONFIG_PATH, 'utf-8');
+    const key = (yaml.match(/api_key:\s*["']?([^"'\r\n]+)/) || [])[1] || '';
+    if (!key || isSecretPlaceholder(key)) return null;
+    const baseUrl = (yaml.match(/base_url:\s*["']?([^"'\r\n]+)/) || [])[1] || '';
+    const model = (yaml.match(/name:\s*["']?([^"'\r\n]+)/) || [])[1] || '';
+    return { apiKey: key, baseUrl, model };
+  } catch (e) {
+    return null;
+  }
+}
+
 /** 保存设置页面配置。apiKey 为空或为打码串时保留原值。 */
 function saveConfig(newCfg) {
   ensureDirs();
@@ -227,7 +258,14 @@ function newConv(title) {
 function deriveTitle(conv) {
   const firstUser = (conv.messages || []).find((m) => m.role === 'user');
   if (firstUser) {
-    conv.title = String(firstUser.content).replace(/\s+/g, ' ').trim().slice(0, 24) || '新对话';
+    // 视觉多段格式时取文本段做标题
+    const raw = Array.isArray(firstUser.content)
+      ? firstUser.content
+          .filter((p) => p && p.type === 'text')
+          .map((p) => String(p.text || ''))
+          .join(' ')
+      : firstUser.content;
+    conv.title = String(raw).replace(/\s+/g, ' ').trim().slice(0, 24) || '新对话';
   }
 }
 
@@ -252,6 +290,32 @@ const TOOLS = [
     },
   },
 ];
+
+/** 提取 Anthropic 风格 XML 工具调用（模型偶发不走 function calling 时的兜底解析） */
+function extractXmlInvokes(text) {
+  const out = [];
+  const re = /<invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/invoke>/g;
+  let m;
+  while ((m = re.exec(String(text || ''))) !== null) {
+    const body = m[2];
+    const args = {};
+    const pre = /<parameter\s+name=["']([^"']+)["']>([\s\S]*?)<\/parameter>/g;
+    let pm;
+    let found = false;
+    while ((pm = pre.exec(body)) !== null) {
+      found = true;
+      const raw = String(pm[2]).trim();
+      try { args[pm[1]] = JSON.parse(raw); } catch (e) { args[pm[1]] = raw; }
+    }
+    if (!found) args.__raw = body.trim();
+    out.push({ name: m[1], args });
+  }
+  return out;
+}
+
+function stripXmlInvokes(text) {
+  return String(text || '').replace(/<invoke\s+name=["'][^"']+["'][^>]*>[\s\S]*?<\/invoke>/g, '').trim();
+}
 
 function executeTool(name, args) {
   if (name !== 'run_command') return { success: false, error: `未知工具: ${name}` };
@@ -360,20 +424,56 @@ async function testLLM(cfg) {
 
 // ─────────────────────── 系统提示词 ───────────────────────
 
+// LXUP 便携环境路径（随产品目录走，U 盘盘符可变，故动态拼接）
+const LXUP_RUNTIME = path.join(ROOT, '..', 'runtime');
+const LXUP_PYTHON_DIR = path.join(LXUP_RUNTIME, 'python');
+
 const SYSTEM_PROMPT = [
   '你是 LXUP 平台内置的 AI 助手，运行在用户的本地电脑上。',
   '你可以调用 run_command 工具在本地系统执行命令行，帮助用户查看信息、整理文件、运行任务。',
+  '',
+  '## LXUP 便携环境（检测/修复必须围绕它，不要检查系统全局环境）',
+  '龙虾优盘是便携式产品，全部组件都在产品目录下，不依赖系统安装的 Node/Python：',
+  `- 产品根目录：${path.join(ROOT, '..')}`,
+  `- 便携 Node：${path.join(LXUP_RUNTIME, 'data', 'node.exe')}（跑 OpenClaw 网关、控制台前端）`,
+  `- 便携 Python：${LXUP_PYTHON_DIR} 下的 cpython-3.11* 目录`,
+  '- 服务与端口：Sidecar :7889（授权/桥接）、OpenClaw 网关 :18789、Hermes :8642、Codex CLI（按需拉起子进程）、本助手 :8080',
+  `- 配置与数据：${path.join(LXUP_RUNTIME, 'openclaw-home')}（OpenClaw）、${path.join(LXUP_RUNTIME, 'hermes-home')}（Hermes）、${path.join(LXUP_RUNTIME, 'codex-home')}（Codex）、${path.join(LXUP_RUNTIME, 'logs')}（日志）`,
+  '- 技能包：产品根目录 skill-packs\\（预装通用工具 + 岗位包）',
+  '',
+  '检测/修复红线：',
+  '1. 检测或修复产品（龙虾优盘）时，默认只排查上述便携环境：端口是否监听（netstat -ano | findstr 端口号）、进程是否存活（tasklist | findstr）、runtime\\logs 下的日志、上述配置目录。',
+  '2. 用户明确要求检查电脑的系统/全局环境时，可以做只读检测（版本、路径、端口、磁盘空间、进程等），照实报告结果，不要自作主张去「修复」。',
+  '3. 用户电脑上自装的同名工具（如全局 openclaw/node）与产品无关：默认不碰；用户明确要求时才做只读检查。',
+  '4. 修改全局环境（nvm 设置、系统 Node/Python、npm 全局包、PATH、注册表，安装/升级/卸载全局工具）无论用户是否要求，都必须先说明影响并征得同意后再执行。',
+  '',
   '规则：',
   '1. 执行命令前，用一句话简要说明这条命令要做什么。',
   '2. 涉及删除、格式化、结束进程等有风险的操作，先向用户确认再执行。',
   '3. 命令尽量简洁；执行完成后对结果做简要总结。',
   '4. 能用一条命令完成的任务不要拆成多步。',
+  '5. 调用工具必须使用函数调用（function calling）格式，不要用 XML 标签输出工具调用。',
 ].join('\n');
 
 // ─────────────────────── 对话处理 ───────────────────────────
 
 async function handleChat(body, res) {
   const cfg = getConfig();
+  // 助手自身无 Key 时，按当前浏览的引擎复用其凭据
+  // （OpenClaw 复用已内置于 getConfig()；Codex/Hermes 在此补齐）
+  if (!cfg.apiKey) {
+    const engine = String(body.engine || '');
+    const fallback = engine === 'codex'
+      ? getCodexModelConfig()
+      : engine === 'hermes'
+        ? getHermesModelConfig()
+        : null;
+    if (fallback) {
+      cfg.apiKey = fallback.apiKey;
+      if (!cfg.baseUrl || cfg.baseUrl === DEFAULTS.baseUrl) cfg.baseUrl = fallback.baseUrl;
+      if (cfg.model === DEFAULTS.model && fallback.model) cfg.model = fallback.model;
+    }
+  }
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache',
@@ -386,12 +486,18 @@ async function handleChat(body, res) {
   };
 
   if (!cfg.apiKey) {
-    send({ error: '尚未配置 API Key，请先打开右上角「设置」选择已配置模型后再试。' });
+    const engine = String(body.engine || '');
+    send({
+      error: engine === 'codex'
+        ? '助手暂无可用 API Key：请在「Codex CLI」页配置 API Key（助手自动复用）。'
+        : '助手暂无可用 API Key：请在「模型配置」页配置带 Key 的模型（助手自动复用）。',
+    });
     return finish();
   }
 
   const content = String(body.content || '').trim();
-  if (!content) {
+  const image = typeof body.image === 'string' && body.image.startsWith('data:image/') ? body.image : '';
+  if (!content && !image) {
     send({ error: '消息内容为空' });
     return finish();
   }
@@ -401,7 +507,11 @@ async function handleChat(body, res) {
   const created = !conv;
   if (!conv) conv = newConv();
 
-  conv.messages.push({ role: 'user', content });
+  // 用户消息：有图片时用 OpenAI 视觉多段格式（image_url），纯文本保持字符串
+  const userContent = image
+    ? [...(content ? [{ type: 'text', text: content }] : []), { type: 'image_url', image_url: { url: image } }]
+    : content;
+  conv.messages.push({ role: 'user', content: userContent });
   deriveTitle(conv);
   conv.updatedAt = Date.now();
   saveConv(conv);
@@ -450,11 +560,72 @@ async function handleChat(body, res) {
         continue;
       }
 
-      // 无工具调用 —— 最终答复，流式输出
+      // 无函数调用：先兜底解析 XML 工具调用（模型偶发用 Anthropic 格式调工具）
+      const xmlInvocations = extractXmlInvokes(msg.content || '');
+      if (xmlInvocations.length) {
+        messages.push({ role: 'assistant', content: stripXmlInvokes(msg.content) });
+        xmlInvocations.forEach((inv, i) => {
+          send({ tool: inv.name, args: inv.args });
+          const result = executeTool(inv.name, inv.args);
+          const resultText = (result.output || result.error || '').slice(0, 1000);
+          send({ tool: inv.name, ok: result.success, result: resultText, args: inv.args });
+          messages.push({ role: 'tool', tool_call_id: `xml-${Date.now()}-${i}`, content: JSON.stringify(result) });
+          toolCalls.push({
+            id: `xml-${Date.now()}-${i}`,
+            name: inv.name,
+            args: inv.args,
+            ok: result.success,
+            result: (result.output || result.error || '').slice(0, 2000),
+          });
+        });
+        continue;
+      }
+
+      // 无工具调用 —— 最终答复，流式输出（流中出现 XML 调用时过滤、执行后补一轮）
+      let invokeBuffer = '';
       await streamLLM(cfg, messages, (delta) => {
+        if (invokeBuffer) { invokeBuffer += delta; return; }
+        const idx = delta.indexOf('<invoke');
+        if (idx >= 0) {
+          const head = delta.slice(0, idx);
+          if (head) { answer += head; send({ content: head }); }
+          invokeBuffer = delta.slice(idx);
+          return;
+        }
         answer += delta;
         send({ content: delta });
       });
+      if (invokeBuffer) {
+        const invs = extractXmlInvokes(invokeBuffer);
+        if (!invs.length) {
+          // 解析不出完整调用，按普通文本回显
+          answer += invokeBuffer;
+          send({ content: invokeBuffer });
+          break;
+        }
+        const tail = stripXmlInvokes(invokeBuffer);
+        if (tail) { answer += tail; send({ content: tail }); }
+        if (answer) messages.push({ role: 'assistant', content: answer });
+        invs.forEach((inv, i) => {
+          send({ tool: inv.name, args: inv.args });
+          const result = executeTool(inv.name, inv.args);
+          const resultText = (result.output || result.error || '').slice(0, 1000);
+          send({ tool: inv.name, ok: result.success, result: resultText, args: inv.args });
+          messages.push({ role: 'tool', tool_call_id: `xmls-${Date.now()}-${i}`, content: JSON.stringify(result) });
+          toolCalls.push({
+            id: `xmls-${Date.now()}-${i}`,
+            name: inv.name,
+            args: inv.args,
+            ok: result.success,
+            result: (result.output || result.error || '').slice(0, 2000),
+          });
+        });
+        send({ content: '\n\n' });
+        await streamLLM(cfg, messages, (delta) => {
+          answer += delta;
+          send({ content: delta });
+        });
+      }
       break;
     }
   } catch (e) {
@@ -551,7 +722,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && pn === '/api/config/test') {
     const cfg = getConfig();
-    if (!cfg.apiKey) return sendJson(res, 400, { ok: false, error: '尚未配置 API Key' });
+    if (!cfg.apiKey) return sendJson(res, 400, { ok: false, error: '助手暂无可用 API Key' });
     try {
       await testLLM(cfg);
       return sendJson(res, 200, { ok: true });

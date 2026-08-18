@@ -170,6 +170,8 @@ export function chat(
   conversationId: string | null,
   content: string,
   onEvent: (ev: AssistantEvent) => void,
+  engine?: string,
+  image?: string | null,
 ): AbortController {
   const ctrl = new AbortController();
   void (async () => {
@@ -177,7 +179,7 @@ export function chat(
       const res = await fetch(`${assistantUrl()}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, content }),
+        body: JSON.stringify({ conversationId, content, engine: engine || 'openclaw', image: image || undefined }),
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {

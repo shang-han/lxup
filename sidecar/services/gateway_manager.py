@@ -73,6 +73,24 @@ class GatewayManager:
 
     # ── 状态 ──────────────────────────────────────────
 
+    def version_info(self) -> dict:
+        """OpenClaw 版本信息：数字 + 变体标记（汉化/上游）——供仪表盘版本卡动态文案。
+
+        汉化判定：vendored 包的 package.json 带自定义字段 lxup.sinicized / sinicized，
+        或包目录下有 .lxup-sinicized 标记文件（由汉化打包流程写入）；否则视为上游版。"""
+        pkg_dir = Path(self._oc_entry).parent
+        try:
+            data = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return {"version": "", "sinicized": False, "source": "unknown"}
+        lx = data.get("lxup") if isinstance(data.get("lxup"), dict) else {}
+        sinicized = bool(lx.get("sinicized")) or bool(data.get("sinicized")) or (pkg_dir / ".lxup-sinicized").is_file()
+        return {
+            "version": str(data.get("version") or ""),
+            "sinicized": sinicized,
+            "source": "sinicized" if sinicized else "upstream",
+        }
+
     async def status(self) -> dict:
         """健康检查：网关是否可达 + 监听 PID"""
         reachable, pid = await asyncio.gather(

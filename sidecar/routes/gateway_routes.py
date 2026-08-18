@@ -5,6 +5,7 @@
 OpenClaw 网关进程。
 
   GET    /api/gateway/status             网关是否可达 + PID
+  GET    /api/gateway/version            版本数字 + 变体标记（汉化/上游）
   POST   /api/gateway/start              启动网关
   POST   /api/gateway/stop               停止网关
   POST   /api/gateway/restart            重启网关
@@ -48,6 +49,12 @@ def _manager(request: Request) -> GatewayManager:
 async def gateway_status(request: Request) -> dict:
     """网关状态：是否可达 + 监听 PID"""
     return await _manager(request).status()
+
+
+@router.get("/version")
+async def gateway_version(request: Request) -> dict:
+    """OpenClaw 版本信息：数字 + 变体（汉化/上游）标记"""
+    return _manager(request).version_info()
 
 
 @router.post("/start")
