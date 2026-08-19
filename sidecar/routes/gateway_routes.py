@@ -45,6 +45,24 @@ def _manager(request: Request) -> GatewayManager:
     return request.app.state.gateway_manager
 
 
+def _skills_enabled_map() -> dict:
+    """openclaw.json 的 skills.entries.<skillKey>.enabled（缺省视为启用）。
+
+    前端停用/启用技能经网关 skills.update 写入该配置；这里直接读文件回显。"""
+    try:
+        import json as _json
+
+        cfg = _json.loads((preinstalled_skills._state_dir() / "openclaw.json").read_text(encoding="utf-8"))
+        entries = ((cfg.get("skills") or {}).get("entries") or {})
+        return {
+            str(k): bool((v or {}).get("enabled", True))
+            for k, v in entries.items()
+            if isinstance(v, dict)
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 @router.get("/status")
 async def gateway_status(request: Request) -> dict:
     """网关状态：是否可达 + 监听 PID"""
@@ -104,6 +122,10 @@ async def gateway_skills(request: Request) -> dict:
             s["source_kind"] = "clawhub"
         s["installed"] = True
     data = bundled + workspace + preinstalled
+    # 停用/启用状态来自网关配置 skills.entries.<name>.enabled（skills.update 写入）
+    enabled_map = _skills_enabled_map()
+    for s in data:
+        s["enabled"] = enabled_map.get(str(s.get("name") or ""), True)
     return {"data": data, "count": len(data), "root": str(root)}
 
 

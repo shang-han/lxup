@@ -52,7 +52,8 @@ export class MemoryPage extends LitElement {
           name: e.file.replace(/^memory\//, '').replace(/\.md$/, ''),
           type: this._typeOfFile(e.file),
           content,
-          words: content.trim() ? content.trim().split(/\s+/).length : 0,
+          // 中英文通用的“字数”：去空白后的字符数
+          chars: content.trim() ? content.replace(/\s+/g, '').length : 0,
           updated: e.mtime ? new Date(e.mtime).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—',
         };
       });
@@ -61,9 +62,8 @@ export class MemoryPage extends LitElement {
     }
   }
 
-  /** 创建记忆：今日日志 memory/YYYY-MM-DD.md，已存在则直接打开编辑 */
-  async _create() {
-    const file = `memory/${new Date().toISOString().slice(0, 10)}.md`;
+  /** 创建指定记忆文件（不存在则建空文件），成功后直接打开编辑 */
+  async _createFile(file: string) {
     const existing = this._memories.find(m => m.file === file);
     if (existing) { this._startEdit(existing); return; }
     if (this._busy) return;
@@ -85,21 +85,43 @@ export class MemoryPage extends LitElement {
     }
   }
 
-  get _filtered() {
-    let list = this._memories;
-    if (this._search.trim()) {
-      const q = this._search.toLowerCase();
-      list = list.filter(m => m.name.toLowerCase().includes(q) || m.content.toLowerCase().includes(q));
-    }
-    if (this._filterType) {
-      list = list.filter(m => m.type === this._filterType);
-    }
-    return list;
+  /** 记一笔：今日日志 memory/YYYY-MM-DD.md，已存在则直接打开编辑 */
+  _createToday() {
+    const file = `memory/${new Date().toISOString().slice(0, 10)}.md`;
+    void this._createFile(file);
+  }
+
+  _searchMatches(m: any): boolean {
+    if (!this._search.trim()) return true;
+    const q = this._search.toLowerCase();
+    return m.name.toLowerCase().includes(q) || m.content.toLowerCase().includes(q);
+  }
+
+  _typeMatches(m: any): boolean {
+    return !this._filterType || m.type === this._filterType;
+  }
+
+  /** 三件套固定槽位：存在的显示条目，缺失的显示可创建行 */
+  get _threeSet() {
+    const files = ['MEMORY.md', 'USER.md', 'SOUL.md'];
+    return files.map(f => {
+      const type = this._typeOfFile(f);
+      if (this._filterType && this._filterType !== type) return null;
+      const found = this._memories.find(m => m.file === f);
+      if (found && !this._searchMatches(found)) return null;
+      if (!found && this._search.trim()) return null;
+      if (found) return found;
+      return { file: f, name: f.replace('.md', ''), type, content: '', chars: 0, updated: '', missing: true };
+    }).filter(Boolean);
+  }
+
+  get _logs() {
+    return this._memories.filter(m => m.file.startsWith('memory/') && this._searchMatches(m) && this._typeMatches(m));
   }
 
   _typeBadge(t: string) {
     const labels: Record<string,string> = { user: L('common.typeUser'), note: L('common.typeNote'), soul: L('common.typeSoul') };
-    const variants: Record<string,string> = { user:'success', note:'warning', soul:'danger' };
+    const variants: Record<string,string> = { user: 'success', note: 'warning', soul: 'default' };
     return html`<oc-badge variant="${variants[t]||'default'}">${labels[t]||t}</oc-badge>`;
   }
 
@@ -148,7 +170,37 @@ export class MemoryPage extends LitElement {
     }
   }
 
+  _renderRow(m: any) {
+    if (m.missing) {
+      return html`
+        <div class="mem-row">
+          <span class="mem-row__name">${m.name}</span>
+          ${this._typeBadge(m.type)}
+          <span class="mem-row__preview missing">${L('common.memNotCreated')}</span>
+          <span class="mem-row__meta">—</span>
+          <span class="mem-row__actions">
+            <button class="btn-create" ?disabled=${this._busy} @click=${() => this._createFile(m.file)}>${L('common.memCreate')}</button>
+          </span>
+        </div>
+      `;
+    }
+    return html`
+      <div class="mem-row">
+        <span class="mem-row__name">${m.name}</span>
+        ${this._typeBadge(m.type)}
+        <span class="mem-row__preview">${(m.content || '').replace(/\s+/g, ' ').slice(0, 80) || '—'}</span>
+        <span class="mem-row__meta">${m.chars} ${L('common.memChars')} · ${m.updated}</span>
+        <span class="mem-row__actions">
+          <button @click=${() => this._startEdit(m)}>${L('common.edit')}</button>
+          <button class="btn-danger" ?disabled=${this._busy} @click=${() => this._delete(m)}>${L('common.delete')}</button>
+        </span>
+      </div>
+    `;
+  }
+
   render() {
+    const three = this._threeSet;
+    const logs = this._logs;
     return html`
       <page-header title=${this.title} subtitle=${this.subtitle}></page-header>
       <div class="page-toolbar-lg">
@@ -164,7 +216,7 @@ export class MemoryPage extends LitElement {
             <option value="soul">${L('common.typeSoul')}</option>
           </select>
         </div>
-        <button class="btn-sm" ?disabled=${this._busy} @click=${this._create}>+ ${L('common.createMemory')}</button>
+        <button class="btn-mem-primary" ?disabled=${this._busy} @click=${this._createToday}>${L('common.memToday')}</button>
       </div>
 
       ${this._loadMsg ? html`
@@ -173,39 +225,27 @@ export class MemoryPage extends LitElement {
 
       ${this._editing ? html`
         <oc-card heading="${L('common.edit')}: ${this._editing.name}" style="margin-bottom:16px;">
-          <div class="form-group">
-            <textarea class="form-input" rows="4" .value=${this._editContent} @input=${(e:Event) => this._editContent = (e.target as HTMLTextAreaElement).value}></textarea>
+          <div class="form-group mem-editor">
+            <textarea class="form-input" rows="12" .value=${this._editContent} @input=${(e:Event) => this._editContent = (e.target as HTMLTextAreaElement).value}></textarea>
           </div>
           <div class="page-actions">
-            <button class="btn-sm" @click=${this._saveEdit}>${L('common.save')}</button>
+            <button class="btn-mem-primary" ?disabled=${this._busy} @click=${this._saveEdit}>${L('common.save')}</button>
             <button class="btn-sm ghost" @click=${() => { this._editing = null; this._editContent = ''; }}>${L('common.cancel')}</button>
           </div>
         </oc-card>
       ` : ''}
 
-      <div class="grid2">
-        ${this._filtered.map((m:any) => html`
-          <div class="channel-card">
-            <div style="display:flex;justify-content:space-between;align-items:start;">
-              <div>
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                  <span class="channel-name" style="font-family:var(--font-mono);font-size:13px;">${m.name}</span>
-                  ${this._typeBadge(m.type)}
-                </div>
-                <div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:8px;">${m.content}</div>
-              </div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);">
-              <span>${m.words} ${L('common.wordCount')} · ${m.updated}</span>
-              <div class="page-actions">
-                <button class="btn-sm ghost" @click=${() => this._startEdit(m)}>${L('common.edit')}</button>
-                <button class="btn-sm ghost" style="color:var(--danger);" ?disabled=${this._busy} @click=${() => this._delete(m)}>${L('common.delete')}</button>
-              </div>
-            </div>
+      <div class="mem-section">${L('common.memoryFiles')} <span class="count">(${three.length + logs.length})</span></div>
+      ${three.length || logs.length ? html`
+        <div class="channel-card">
+          <div class="mem-list">
+            ${three.map((m: any) => this._renderRow(m))}
+            ${logs.map((m: any) => this._renderRow(m))}
           </div>
-        `)}
-      </div>
-      ${this._filtered.length === 0 ? html`<div class="empty-state"><p>${L('common.descMemory')}</p></div>` : ''}
+        </div>
+      ` : html`
+        <div class="empty-state" style="padding:20px;"><p style="margin:0;">${L('common.descMemory')}</p></div>
+      `}
     `;
   }
 }

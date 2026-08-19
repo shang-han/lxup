@@ -407,13 +407,14 @@ def _draw_icon_items(cv, cx, cy, kind, color, size=14, tags=()):
     elif kind == "stop":
         _rrect(cv, cx-s*0.55, cy-s*0.55, cx+s*0.55, cy+s*0.55, 3, color, tags=tags)
     elif kind == "globe":
-        cv.create_oval(cx-s, cy-s, cx+s, cy+s, outline=color, width=2, tags=tags)
-        cv.create_oval(cx-s*0.42, cy-s, cx+s*0.42, cy+s, outline=color, width=1, tags=tags)
-        cv.create_line(cx-s, cy, cx+s, cy, fill=color, width=1, tags=tags)
+        # 外径对齐 stop(0.55s):圆形视觉面积大,若与三角同框会显得大一圈
+        cv.create_oval(cx-s*0.55, cy-s*0.55, cx+s*0.55, cy+s*0.55, outline=color, width=2, tags=tags)
+        cv.create_oval(cx-s*0.23, cy-s*0.55, cx+s*0.23, cy+s*0.55, outline=color, width=1, tags=tags)
+        cv.create_line(cx-s*0.55, cy, cx+s*0.55, cy, fill=color, width=1, tags=tags)
     elif kind == "refresh":
-        cv.create_arc(cx-s, cy-s, cx+s, cy+s, start=35, extent=285, style="arc",
+        cv.create_arc(cx-s*0.55, cy-s*0.55, cx+s*0.55, cy+s*0.55, start=35, extent=285, style="arc",
                       outline=color, width=2, tags=tags)
-        cv.create_polygon(cx+s*0.58, cy-s*0.72, cx+s*0.88, cy-s*0.22, cx+s*0.34, cy-s*0.18,
+        cv.create_polygon(cx+s*0.32, cy-s*0.40, cx+s*0.49, cy-s*0.12, cx+s*0.19, cy-s*0.10,
                           fill=color, outline="", tags=tags)
     elif kind == "check":
         cv.create_line(cx-s*0.5, cy, cx-s*0.12, cy+s*0.42, cx+s*0.55, cy-s*0.48,
@@ -459,7 +460,8 @@ class RoundedButton(tk.Canvas):
         pad = max(11, h * 0.24)
         if self._icon:
             ix = pad + 15
-            _draw_icon_items(self, ix, h / 2, self._icon, "#FFFFFF", 14, tags=("icn",))
+            bg0, hov0, prs0, fg0 = self._tone_colors()
+            _draw_icon_items(self, ix, h / 2, self._icon, fg0, 14, tags=("icn",))
             tx = ix + 18
         else:
             tx = w / 2
@@ -480,6 +482,11 @@ class RoundedButton(tk.Canvas):
             bg = ACCENT_HI
         self.itemconfigure("bg", fill=bg, outline=bg)
         self.itemconfigure("txt", fill=fg, text=self._text)
+        # line 类元素不支持 outline,逐项按类型设置
+        for it in self.find_withtag("icn"):
+            self.itemconfigure(it, fill=fg)
+            if self.type(it) != "line":
+                self.itemconfigure(it, outline=fg)
         try: self.itemconfigure("icn", fill=fg)
         except Exception: pass
         try: self.itemconfigure("icn", outline=fg)
@@ -809,7 +816,7 @@ class LauncherApp:
         # 顶部圆角浅色卡 + 悬浮 logo
         self._load_logo()
         self._hdr = HeaderBar(outer, logo_image=self._logo, title="LXUP 龙虾优盘",
-                              subtitle=f"v{self.vs} · 多引擎 AI 控制台", height=72)
+                              subtitle="多引擎 AI 控制台", height=72)
         self._hdr.pack(fill="x")
 
         # 四个圆角主按钮
@@ -842,7 +849,7 @@ class LauncherApp:
 
         # 底部信息栏（先于日志区 pack）
         ft = Frame(outer, bg=BG); ft.pack(fill="x", side="bottom", pady=(6, 0))
-        self._ft = Label(ft, text=f"版本 {self.vs} · 单实例运行 · 点击服务卡片可复制端口",
+        self._ft = Label(ft, text="单实例运行 · 点击服务卡片可复制端口",
                          font=F_FOOT, bg=BG, fg=MUTED)
         self._ft.pack(side="left")
 

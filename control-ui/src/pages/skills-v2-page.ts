@@ -315,12 +315,8 @@ export class SkillsV2Page extends LitElement {
         if (this._isHermes) {
           const er = await fetch(`${this._sidecarBase}/api/hermes/skills/entries`, { headers: sidecarHeaders() });
           this._entries = er.ok ? this._normalizeEntries(await er.json()) : new Map();
-        } else if (!this._isCodex) {
-          const store = getSharedStore();
-          this._entries = store.connected
-            ? this._normalizeEntries(await store.request('skills.entries'))
-            : new Map();
         } else {
+          // OpenClaw/Codex：停用状态由 Sidecar 在技能清单里直接给（读 openclaw.json）
           this._entries = new Map();
         }
       } catch { this._entries = new Map(); }
@@ -342,7 +338,9 @@ export class SkillsV2Page extends LitElement {
           status: s.status || 'available',
           preinstalled: !!s.preinstalled,
           installed: !!s.installed,
-          enabled: this._entries.has(s.name) ? this._entries.get(s.name) : true,
+          enabled: this._isHermes
+            ? (this._entries.has(s.name) ? this._entries.get(s.name) : true)
+            : s.enabled !== false,
           source_kind: s.source_kind || '',
           pack_id: s.pack_id,
           pack_name: s.pack_name,

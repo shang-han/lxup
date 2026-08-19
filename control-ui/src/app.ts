@@ -12,9 +12,7 @@ import './pages/logs-page.js';
 import './pages/skills-v2-page.js';
 import './pages/memory-page.js';
 import './pages/cron-page.js';
-import './pages/extensions-page.js';
 import './pages/agents-page.js';
-import './pages/settings-page.js';
 import './pages/channels-page.js';
 import './pages/models-page.js';
 import './pages/gateway-page.js';
@@ -33,7 +31,7 @@ import './pages/ai-page.js';
 const TAB_ICONS: Record<string, string> = {
   dashboard:'layout-dashboard', chat:'message-square', logs:'scroll-text',
   skills2:'sparkles', memory:'database', cron:'clock',
-  extensions:'palette', ai:'bot', settings:'settings',
+  ai:'bot',
   models:'cpu', agents:'users', gateway:'antenna',
   channels:'share-2', diagnostics:'stethoscope', browser:'globe',
   codex:'terminal', sandbox:'shield',
@@ -51,7 +49,7 @@ function buildRoutes(): Record<string, { label: string; icon: string; subtitle: 
 }
 
 // 侧边栏隐藏的入口:页面组件与路由都保留,仅菜单不展示(恢复时从集合中删掉对应项即可)
-const HIDDEN_TABS = new Set(['logs', 'services', 'gateway', 'settings', 'extensions']);
+const HIDDEN_TABS = new Set(['logs', 'gateway']);
 
 function buildSections(engine: string): Array<{ heading: string | null; tabs: string[] }> {
   let sections: Array<{ heading: string | null; tabs: string[] }>;
@@ -59,20 +57,20 @@ function buildSections(engine: string): Array<{ heading: string | null; tabs: st
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
       { heading: L('sections.Config'), tabs: ['models','channels'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','extensions','settings'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron'] },
     ];
     // hermes 引擎的技能页（skills2）由页面自身按 engine 切换数据源
   } else if (engine === 'codex') {
     sections = [
       { heading: L('sections.Monitor'), tabs: ['ai','chat'] },
       { heading: L('sections.Config'), tabs: ['codex','sandbox'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','settings'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2'] },
     ];
   } else {
     sections = [
       { heading: L('sections.Monitor'), tabs: ['dashboard','ai','chat','logs'] },
       { heading: L('sections.Config'), tabs: ['models','agents','gateway','browser','channels'] },
-      { heading: L('sections.Extensions'), tabs: ['skills2','cron','settings','diagnostics'] },
+      { heading: L('sections.Extensions'), tabs: ['skills2','memory','cron','diagnostics'] },
     ];
   }
   return sections
@@ -165,7 +163,49 @@ export class OpenClawApp extends LitElement {
     a { color: var(--text); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .block_border{ border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
-  `;
+  
+
+    /* ── 记忆文件页 ── */
+    .mem-section { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 10px; font-size: 13px; font-weight: 600; color: var(--text); }
+    .mem-section .count { font-size: 12px; font-weight: 400; color: var(--muted); }
+    .mem-list { padding: 4px 16px; }
+    .mem-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 11px 0; border-bottom: 1px solid var(--border);
+    }
+    .mem-row:last-child { border-bottom: none; }
+    .mem-row__name {
+      width: 130px; flex-shrink: 0; font-family: var(--font-mono);
+      font-size: 13px; font-weight: 600; color: var(--text-strong);
+    }
+    .mem-row__preview {
+      flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-soft);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mem-row__preview.missing { color: var(--muted); }
+    .mem-row__meta { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .mem-row__actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .mem-row__actions button {
+      padding: 3px 10px; border-radius: var(--radius-sm); font-size: 11.5px;
+      font-weight: 500; border: 1px solid var(--border); cursor: pointer;
+      background: transparent; color: var(--text-soft);
+      transition: all var(--duration-fast); white-space: nowrap;
+    }
+    .mem-row__actions button:hover { background: var(--bg-hover); color: var(--text); }
+    .mem-row__actions .btn-create { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); }
+    .mem-row__actions .btn-create:hover { background: var(--accent-hover); color: var(--accent-foreground); }
+    .mem-row__actions .btn-danger { color: var(--danger); border-color: var(--danger); }
+    .mem-row__actions .btn-danger:hover { background: var(--danger-subtle); color: var(--danger); }
+    .btn-mem-primary {
+      display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px;
+      border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600;
+      background: var(--accent); color: var(--accent-foreground); border: none; cursor: pointer;
+      transition: background var(--duration-fast) ease; white-space: nowrap;
+    }
+    .btn-mem-primary:hover { background: var(--accent-hover); }
+    .btn-mem-primary:disabled { opacity: 0.5; cursor: wait; }
+    .mem-editor textarea { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+`;
 
   @state() _initDone = sessionStorage.getItem('openclaw.init-shown') === '1';
   @state() _page = 'dashboard';
@@ -204,7 +244,7 @@ export class OpenClawApp extends LitElement {
         if (s.page && TAB_ICONS[s.page]) this._page = s.page;
         if (s.engine && (s.engine==='openclaw'||s.engine==='hermes'||s.engine==='codex')) this._engine = s.engine;
         // codex 引擎没有 dashboard/models/logs/memory 等页，恢复状态时回落到 codex 配置页
-        if (this._engine === 'codex' && !['ai','chat','codex','sandbox','settings','skills2'].includes(this._page)) this._page = 'codex';
+        if (this._engine === 'codex' && !['ai','chat','codex','sandbox','skills2'].includes(this._page)) this._page = 'codex';
       }
       const theme = localStorage.getItem('openclaw-control-theme');
       if (theme) { const t = JSON.parse(theme); this._theme = t.theme||'claw'; this._themeMode = t.mode||'dark'; }
@@ -213,7 +253,6 @@ export class OpenClawApp extends LitElement {
 
   _saveState() { try { localStorage.setItem('openclaw-control-state', JSON.stringify({ page:this._page, engine:this._engine })); } catch {} }
   _navigate(page: string) { if (TAB_ICONS[page]) { if (page !== this._page) this._prevPage = this._page; this._page = page; this._saveState(); } }
-  _setTheme(t: string) { this._theme = t; document.documentElement.setAttribute('data-theme', t); localStorage.setItem('openclaw-control-theme', JSON.stringify({ theme:t, mode:this._themeMode })); }
   _setThemeMode(m: string) { this._themeMode = m; const r = m==='system'?(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'):m; document.documentElement.setAttribute('data-theme-mode', r); localStorage.setItem('openclaw-control-theme', JSON.stringify({ theme:this._theme, mode:m })); }
   _setLang(l: string) { i18n.setLocale(l); this._lang = l; }
   _setEngine(e: string) { const v = (e==='openclaw'||e==='hermes'||e==='codex')?e:'openclaw'; if (v !== this._engine) { this._engine = v; this._page = v==='codex' ? 'codex' : 'dashboard'; this._prevPage = 'dashboard'; this._saveState(); } }
@@ -236,10 +275,8 @@ export class OpenClawApp extends LitElement {
         if (this._engine === 'hermes') return html`<hermes-memory-page title=${title('memory')} subtitle=${sub('memory')}></hermes-memory-page>`;
         return html`<memory-page title=${title('memory')} subtitle=${sub('memory')}></memory-page>`;
       case 'cron': return html`<cron-page title=${title('cron')} .engine=${this._engine}></cron-page>`;
-      case 'extensions': return html`<extensions-page title=${title('extensions')}></extensions-page>`;
       case 'ai': return html`<ai-page title=${title('ai')} subtitle=${sub('ai')} .engine=${this._engine}></ai-page>`;
       case 'agents': return html`<agents-page title=${title('agents')} .onNavigate=${(p:string)=>this._navigate(p)}></agents-page>`;
-      case 'settings': return html`<settings-page title=${title('settings')} subtitle=${sub('settings')} .theme=${this._theme} .themeMode=${this._themeMode} .snapshot=${this._snapshot} @set-theme=${(e:CustomEvent)=>this._setTheme(e.detail.value)} @set-mode=${(e:CustomEvent)=>this._setThemeMode(e.detail.value)}></settings-page>`;
       case 'channels': return html`<channels-page title=${title('channels')} subtitle=${sub('channels')} .engine=${this._engine}></channels-page>`;
       case 'models': return html`<models-page title=${title('models')} subtitle=${sub('models')} .engine=${this._engine} .backTo=${this._prevPage} .onNavigate=${(p:string)=>this._navigate(p)}></models-page>`;
       case 'gateway': return html`<gateway-page title=${title('gateway')} subtitle=${sub('gateway')}></gateway-page>`;

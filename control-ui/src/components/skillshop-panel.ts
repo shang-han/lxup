@@ -10,22 +10,13 @@ import '../components/oc-toast.js';
  * 与旧版 skillpack-panel 的区别：
  *   - 清单来自 Sidecar `GET /api/gateway/skills/packs`（76-posts.json + 部署注册表），
  *     「已安装」状态真实反映 agent workspace 里的部署情况；
- *   - 「装到工作台」= 真实部署：`POST /api/gateway/skills/packs/{id}/install`
+ *   - 「下载」= 真实部署：`POST /api/gateway/skills/packs/{id}/install`
  *     把包内全部技能的 SKILL.md 拷进 OpenClaw agent workspace skills 目录
  *     （技能 watcher 自动加载，无需重启网关）；卸载同理走 `DELETE`。
  *
- * 购买状态仍持久化在 localStorage（与旧面板共用 key，演示用）。
- *
- * 购买即部署：点「购买」成功后立即部署到工作台，技能马上出现在
- * 「我的技能 · 我的岗位技能」。TODO(正式版)：购买接入 license_server
- * （49.233.171.82:9000）授权/支付接口，成功后串联「服务器下载加密包 →
- * sha256 校验 → 解密 → 部署」，用户视角仍是一步；当前包内容在本地
- * skill-packs/ 目录，部署即文件拷贝。
- *
  * 按钮状态机：
- *   未购买            → [详情] [购买]（购买自动部署）
- *   已购买未部署(异常) → [详情] [已购买(禁用)] [装到工作台]（重试入口）
- *   已部署            → [详情] [已安装] [卸载]
+ *   未安装 → [详情] [下载]（下载即部署）
+ *   已安装 → [详情] [卸载]
  */
 
 type PackSummary = {
@@ -57,7 +48,6 @@ type PackDetail = {
   };
 };
 
-const STORE_KEY = 'lxup.skillpacks.v1'; // 与旧面板共用：购买状态在两版页面间延续
 
 export class SkillshopPanel extends LitElement {
   static styles = css`
@@ -148,13 +138,6 @@ export class SkillshopPanel extends LitElement {
     .btn-detail:hover { background: var(--bg-hover); color: var(--text); }
     .btn-buy { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); }
     .btn-buy:hover { background: var(--accent-hover); }
-    .btn-bought {
-      background: var(--bg-muted); color: var(--muted);
-      cursor: not-allowed; border-color: var(--border);
-    }
-    .btn-install-ws { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); }
-    .btn-install-ws:hover { background: var(--accent-hover); }
-    .btn-install-ws:disabled { opacity: 0.5; cursor: wait; }
     .btn-uninstall { background: transparent; color: var(--danger); border-color: var(--danger); }
     .btn-uninstall:hover { background: var(--danger-subtle); }
 
@@ -222,7 +205,6 @@ export class SkillshopPanel extends LitElement {
   @state() _loaded = false;
   @state() _loadError = '';
   @state() _category: string | null = null;
-  @state() _purchased = new Set<string>();
   @state() _busyPack: string | null = null; // 正在部署/卸载的包 id
   @state() _detail: PackDetail | null = null;
   @state() _detailLoading = false;
@@ -239,7 +221,6 @@ export class SkillshopPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._loadPurchased();
     void this._loadPacks();
   }
 
@@ -256,42 +237,13 @@ export class SkillshopPanel extends LitElement {
     }
   }
 
-  _loadPurchased() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return;
-      const s = JSON.parse(raw);
-      if (Array.isArray(s?.purchased)) this._purchased = new Set(s.purchased);
-    } catch { /* 状态损坏时按空状态处理 */ }
-  }
-
-  _persistPurchased() {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ purchased: [...this._purchased] }));
-    } catch { /* 隐私模式等场景下静默失败 */ }
-  }
-
   _toast(msg: string) {
     (this.renderRoot.querySelector('oc-toast') as any)?.show(msg);
   }
 
-  _isPurchased(id: string) { return this._purchased.has(id); }
-
-  /** 购买：记录购买状态后立即部署（购买即得）。
-   * TODO(正式版)：先调 license_server 授权/支付接口，成功后从服务器下载
-   * 加密包 → sha256 校验 → 解密，再走 _deploy。 */
-  async _buy(pack: PackSummary) {
-    if (this._isPurchased(pack.id) || this._busyPack) return;
-    this._purchased.add(pack.id);
-    this._purchased = new Set(this._purchased); // 触发响应式更新
-    this._persistPurchased();
-    const ok = await this._deploy(pack, L('skills.buyAndDeploySuccess', { name: pack.name }));
-    if (!ok) this._toast(L('skills.buySuccess', { name: pack.name })); // 部署失败时至少确认购买成功，可用「装到工作台」重试
-  }
-
   /** 部署到工作台：SKILL.md 拷入 agent workspace skills 目录；返回是否成功 */
   async _deploy(pack: PackSummary, successMsg: string): Promise<boolean> {
-    if (!this._isPurchased(pack.id) || this._busyPack) return false;
+    if (this._busyPack) return false;
     this._busyPack = pack.id;
     try {
       const r = await fetch(`${this._sidecarBase}/api/gateway/skills/packs/${encodeURIComponent(pack.id)}/install`, { method: 'POST', headers: sidecarHeaders() });
@@ -381,24 +333,14 @@ export class SkillshopPanel extends LitElement {
   }
 
   _renderActions(pack: PackSummary) {
-    const purchased = this._isPurchased(pack.id);
     const busy = this._busyPack === pack.id;
     return html`
       <button class="btn-detail" @click=${() => this._openDetail(pack)}>${L('skills.detail')}</button>
-      ${purchased
-        ? html`<button class="btn-bought" disabled>${L('skills.purchased')}</button>`
-        : html`<button class="btn-buy" ?disabled=${busy || !!this._busyPack} @click=${() => this._buy(pack)}>
-            ${busy ? L('skills.downloading') : L('skills.buy')}
-          </button>`}
-      ${purchased && !pack.installed
-        ? html`<button class="btn-install-ws" ?disabled=${busy || !!this._busyPack}
-            @click=${() => this._deploy(pack, L('skills.downloadSuccess', { name: pack.name }))}>
-            ${busy ? L('skills.downloading') : L('skills.installToWs')}
+      ${!pack.installed
+        ? html`<button class="btn-buy" ?disabled=${busy || !!this._busyPack} @click=${() => this._deploy(pack, L('skills.downloadSuccess', { name: pack.name }))}>
+            ${busy ? L('skills.downloading') : L('skills.download')}
           </button>`
-        : ''}
-      ${pack.installed
-        ? html`<button class="btn-uninstall" ?disabled=${busy} @click=${() => this._uninstall(pack)}>${L('skills.uninstall')}</button>`
-        : ''}
+        : html`<button class="btn-uninstall" ?disabled=${busy} @click=${() => this._uninstall(pack)}>${L('skills.uninstall')}</button>`}
     `;
   }
 
@@ -452,7 +394,6 @@ export class SkillshopPanel extends LitElement {
     const d = this._detail;
     const p = d?.post;
     const summary = this._packs.find(x => x.id === d?.id);
-    const purchased = d ? this._isPurchased(d.id) : false;
     const busy = d ? this._busyPack === d.id : false;
     return html`
       <oc-dialog .open=${d != null} @close=${() => { this._detail = null; }}>
@@ -486,10 +427,10 @@ export class SkillshopPanel extends LitElement {
           ` : ''}
         ` : ''}
         <div slot="footer">
-          ${d && purchased && !d.installed ? html`
+          ${d && !d.installed ? html`
             <button class="primary" ?disabled=${busy || !!this._busyPack}
               @click=${() => this._deploy(d, L('skills.downloadSuccess', { name: p?.name || d.id }))}>
-              ${busy ? L('skills.downloading') : L('skills.installToWs')}
+              ${busy ? L('skills.downloading') : L('skills.download')}
             </button>` : ''}
           <button class="btn-cancel" @click=${() => { this._detail = null; }}>${L('common.dismiss')}</button>
         </div>
@@ -524,7 +465,6 @@ export class SkillshopPanel extends LitElement {
 
     return html`
       <div class="summary">${L('skills.packCount', { total: this._packs.length, skills: totalSkills })} · ${L('skills.installedPacks')} ${installedCount}</div>
-      <div class="demo-note">⚠️ ${L('skills.buyDemoNote')}</div>
 
       ${this._renderInstalledSection()}
 
