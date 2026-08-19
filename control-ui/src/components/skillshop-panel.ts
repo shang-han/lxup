@@ -5,9 +5,8 @@ import '../components/oc-dialog.js';
 import '../components/oc-toast.js';
 
 /**
- * 岗位技能包商店（新版技能页「岗位技能包」tab）。
+ * 岗位技能包商店（技能页「岗位技能包」tab）。
  *
- * 与旧版 skillpack-panel 的区别：
  *   - 清单来自 Sidecar `GET /api/gateway/skills/packs`（76-posts.json + 部署注册表），
  *     「已安装」状态真实反映 agent workspace 里的部署情况；
  *   - 「下载」= 真实部署：`POST /api/gateway/skills/packs/{id}/install`
@@ -56,14 +55,6 @@ export class SkillshopPanel extends LitElement {
     :host *, :host *::before, :host *::after { box-sizing: border-box; }
 
     .summary { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
-    .demo-note {
-      display: flex; align-items: flex-start; gap: 8px;
-      margin-bottom: 16px; padding: 8px 12px;
-      background: rgba(245,158,11,0.09);
-      border: 1px solid rgba(245,158,11,0.28);
-      border-radius: var(--radius-md);
-      font-size: 12px; line-height: 1.5; color: var(--text-soft);
-    }
 
     /* === category chips === */
     .cat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }

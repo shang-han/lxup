@@ -187,11 +187,13 @@ class ServiceManager:
                        "--port", str(SIDECAR_PORT)],
                        cwd=ROOT, se=env, lf="sidecar.log", port=SIDECAR_PORT): return False
         if os.path.isfile(OPENCLAW_ENTRY) and os.path.isfile(NODE):
-            ge = dict(env); ge["PATH"] = os.path.dirname(py) + os.pathsep + ge.get("PATH", "")
+            ge = dict(env)
+            ge["PATH"] = os.pathsep.join([os.path.dirname(NODE), os.path.dirname(py), ge.get("PATH", "")])
             if not launch("OpenClaw", [NODE, OPENCLAW_ENTRY, "gateway", "--port", "18789", "--force"],
                           cwd=ROOT, se=ge, lf="openclaw-gateway.log", port=18789, timeout=120): return False
         hh = os.path.join(RUNTIME, "hermes-home"); os.makedirs(hh, exist_ok=True)
-        he = dict(env); he["PATH"] = os.path.dirname(py) + os.pathsep + he.get("PATH", "")
+        he = dict(env)
+        he["PATH"] = os.pathsep.join([os.path.dirname(NODE), os.path.dirname(py), he.get("PATH", "")])
         he.update({"HERMES_HOME": hh, "PYTHONPATH": os.path.join(RUNTIME, "hermes-libs"),
                    "API_SERVER_ENABLED": "true", "API_SERVER_HOST": "127.0.0.1",
                    "API_SERVER_PORT": "8642", "API_SERVER_KEY": "lxup-hermes-dev-2026",

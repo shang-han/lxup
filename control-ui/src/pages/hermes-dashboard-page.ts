@@ -10,7 +10,7 @@ const TERMINAL_COMMANDS = [
   { cmd: 'hermes version', desc: L('hermesDashboard.cmdVersionDesc'), subdesc: L('hermesDashboard.cmdVersionSub') },
   { cmd: 'hermes gateway run', desc: L('hermesDashboard.cmdGatewayRunDesc'), subdesc: L('hermesDashboard.cmdGatewayRunSub') },
   { cmd: 'hermes gateway stop', desc: L('hermesDashboard.cmdGatewayStopDesc'), subdesc: L('hermesDashboard.cmdGatewayStopSub') },
-  { cmd: 'explorer %USERPROFILE%\\.hermes', desc: L('hermesDashboard.cmdExplorerDesc'), subdesc: L('hermesDashboard.cmdExplorerSub') },
+  { cmd: 'explorer runtime/hermes-home', desc: L('hermesDashboard.cmdExplorerDesc'), subdesc: L('hermesDashboard.cmdExplorerSub') },
 ];
 
 export class HermesDashboardPage extends LitElement {
@@ -172,6 +172,8 @@ export class HermesDashboardPage extends LitElement {
   @state() _hasKey = false;
   @state() _hermesOnline = false;
   @state() _hermesVersion = '';
+  /** 刚复制成功的命令(显示对勾反馈,2 秒后复位) */
+  @state() _copiedCmd = '';
 
   /** Sidecar HTTP 基址（Hermes 模型配置经 Sidecar 写入 config.yaml） */
   get _sidecarBase(): string {
@@ -198,6 +200,29 @@ export class HermesDashboardPage extends LitElement {
     }
     void this._loadCurrentConfig();
     void this._loadStatus();
+  }
+
+  /** 复制终端命令：clipboard API 失败时降级 execCommand,成功给对勾反馈 */
+  async _copyCmd(cmd: string) {
+    try {
+      await navigator.clipboard.writeText(cmd);
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = cmd;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        this._copiedCmd = '__failed__';
+        this.requestUpdate();
+        return;
+      }
+    }
+    this._copiedCmd = cmd;
+    this.requestUpdate();
+    setTimeout(() => { this._copiedCmd = ''; this.requestUpdate(); }, 2000);
   }
 
   /** 应用连接目标：自定义地址写入 localStorage（聊天客户端每次请求读取，立即生效） */
@@ -400,8 +425,13 @@ export class HermesDashboardPage extends LitElement {
                     <div class="cmd-subdesc">${c.subdesc}</div>
                   </td>
                   <td>
-                    <button class="cmd-copy" title="${L('hermesDashboard.copy')}">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <button class="cmd-copy" title="${this._copiedCmd === c.cmd ? L('hermesDashboard.copied') : L('hermesDashboard.copy')}"
+                      @click=${() => this._copyCmd(c.cmd)}>
+                      ${this._copiedCmd === c.cmd ? html`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      ` : html`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      `}
                     </button>
                   </td>
                 </tr>

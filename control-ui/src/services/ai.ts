@@ -55,6 +55,7 @@ export type AssistantMessage = {
   role: 'user' | 'assistant';
   content: string;
   toolCalls?: ToolCallCard[];
+  ts?: number;
 };
 
 export type ConversationDetail = {

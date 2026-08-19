@@ -511,7 +511,7 @@ async function handleChat(body, res) {
   const userContent = image
     ? [...(content ? [{ type: 'text', text: content }] : []), { type: 'image_url', image_url: { url: image } }]
     : content;
-  conv.messages.push({ role: 'user', content: userContent });
+  conv.messages.push({ role: 'user', content: userContent, ts: Date.now() });
   deriveTitle(conv);
   conv.updatedAt = Date.now();
   saveConv(conv);
@@ -633,7 +633,7 @@ async function handleChat(body, res) {
   }
 
   // 持久化助手消息（附带本轮工具记录，供前端回放）
-  conv.messages.push({ role: 'assistant', content: answer, toolCalls });
+  conv.messages.push({ role: 'assistant', content: answer, toolCalls, ts: Date.now() });
   conv.updatedAt = Date.now();
   saveConv(conv);
   send({

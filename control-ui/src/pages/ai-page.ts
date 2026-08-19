@@ -65,6 +65,8 @@ export class AiPage extends LitElement {
   @state() _showConvList = false;
   @state() _settingsOpen = false;
   @state() _input = '';
+  @state() _confirmDeleteConv: string | null = null;
+  @state() _deletingConv = false;
 
   // 助手服务状态
   @state() _assistantOnline = false;
@@ -172,11 +174,22 @@ export class AiPage extends LitElement {
       this._conversations = [c, ...this._conversations];
       this._setActiveConv(c.id);
       this._messages = [];
-      this._view = 'chat';
+      this._view = 'home';
       this._showConvList = false;
     } catch (e) {
       this._toast?.show(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /** 消息时间格式化：当天 HH:MM，跨天 MM-DD HH:MM */
+  _fmtMsgTime(ts?: number): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const sameDay = d.toDateString() === new Date().toDateString();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return sameDay
+      ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+      : `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   /** 历史消息内容解析：支持纯文本字符串与视觉多段格式（text + image_url） */
@@ -202,12 +215,13 @@ export class AiPage extends LitElement {
       const detail = await getConversation(id);
       this._messages = (detail.messages || []).map((m): AiMessage => {
         const parsed = this._parseContent(m.content);
+        const ts = this._fmtMsgTime(m.ts);
         return m.role === 'user'
-          ? { role: 'user', text: parsed.text, ts: '', ...(parsed.image ? { image: parsed.image } : {}) }
+          ? { role: 'user', text: parsed.text, ts, ...(parsed.image ? { image: parsed.image } : {}) }
           : {
               role: 'assistant',
               text: parsed.text,
-              ts: '',
+              ts,
               tools: (m.toolCalls || []).map((tc) => ({
                 name: tc.name, command: cmdOf(tc.args), ok: tc.ok, result: tc.result, running: false,
               })),
@@ -216,22 +230,29 @@ export class AiPage extends LitElement {
     } catch {
       this._messages = [];
     }
+    // 有内容 → 对话视图；空会话 → 首页快捷卡片
+    this._view = this._messages.length ? 'chat' : 'home';
     this._scrollChat();
   }
 
-  async _deleteConv(id: string, e: Event) {
-    e.stopPropagation();
+  async _deleteConv(id: string) {
+    this._deletingConv = true;
     try {
       await deleteConversation(id);
     } catch {
       // 服务端删除失败时不假装成功,列表保持不变并提示
+      this._deletingConv = false;
+      this._confirmDeleteConv = null;
       this._toast?.show(L('chat.deleteFailed'));
       return;
     }
+    this._deletingConv = false;
+    this._confirmDeleteConv = null;
     this._conversations = this._conversations.filter((c) => c.id !== id);
     if (this._activeConv === id) {
       this._setActiveConv(this._conversations[0]?.id || '');
       this._messages = [];
+      this._view = 'home';
     }
   }
 
@@ -253,7 +274,7 @@ export class AiPage extends LitElement {
 
     const image = this._uploadedImage;
     this._uploadedImage = null;
-    const ts = new Date().toLocaleTimeString();
+    const ts = this._fmtMsgTime(Date.now());
     this._messages = [
       ...this._messages,
       { role: 'user', text, ts, ...(image ? { image } : {}) },
@@ -415,7 +436,17 @@ export class AiPage extends LitElement {
                 <div class="ai-sidebar__item ${this._activeConv === c.id ? 'active' : ''}" @click=${() => this._switchConv(c.id)}>
                   <div class="ai-sidebar__item-header">
                     <span class="ai-sidebar__item-title">${c.title}</span>
-                    <button class="ai-sidebar__item-delete" @click=${(e: Event) => this._deleteConv(c.id, e)}>×</button>
+                    ${this._confirmDeleteConv === c.id ? html`
+                      <span class="ai-sidebar__item-confirm" @click=${(e: Event) => e.stopPropagation()}>
+                        <button class="yes" ?disabled=${this._deletingConv} @click=${() => this._deleteConv(c.id)}>${L('chat.deleteConfirmYes')}</button>
+                        <button class="no" ?disabled=${this._deletingConv} @click=${() => { this._confirmDeleteConv = null; }}>${L('chat.deleteConfirmNo')}</button>
+                      </span>
+                    ` : html`
+                      <button class="ai-sidebar__item-delete" title=${L('chat.deleteSession')}
+                        @click=${(e: Event) => { e.stopPropagation(); this._confirmDeleteConv = c.id; }}>
+                        ${icons['trash']}
+                      </button>
+                    `}
                   </div>
                   <div class="ai-sidebar__item-preview">${c.count ? `${c.count} ${L('ai.msgCount')}` : L('ai.newConv')}</div>
                   <div class="ai-sidebar__item-time">${c.ts}</div>
@@ -449,7 +480,7 @@ export class AiPage extends LitElement {
         </div>
         <div class="ai-home__grid">
           ${this._functionCards.map((c) => html`
-            <div class="ai-home__card" @click=${() => { this._input = L(c.descKey); this._view = 'chat'; this._scrollChat(); }}>
+            <div class="ai-home__card" @click=${() => { this._input = L(c.descKey); }}>
               <div class="ai-home__card-inner">
                 <div class="ai-home__card-icon">${icons[c.icon] || icons['circle']}</div>
                 <div>

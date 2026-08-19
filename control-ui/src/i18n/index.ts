@@ -717,7 +717,6 @@ const en = {
     uninstallFailed: 'Uninstall failed: ',
     viewSkill: 'View',
     packLoadFailed: 'Failed to load pack: ',
-    buyDemoNote: 'Demo mode: purchases are stored locally only. Production will use the license server.',
     skillsUnit: 'skills',
   },
   diagnostics: {
@@ -872,7 +871,7 @@ const en = {
     terminalCmdHint: 'Use the following commands to manage Hermes Agent in terminal, click to copy',
     cmdHeader: 'Command',
     descHeader: 'Description',
-    copy: 'Copy',
+    copy: 'Copy', copied: 'Copied!',
     cmdChatDesc: 'Terminal Chat',
     cmdChatSub: 'Chat with Agent directly in terminal',
     cmdDoctorDesc: 'Diagnostics',
@@ -1817,7 +1816,6 @@ const zhCN = {
     uninstallFailed: '卸载失败：',
     viewSkill: '查看',
     packLoadFailed: '岗位包加载失败：',
-    buyDemoNote: '演示模式：购买仅保存在本地。正式版将接入授权服务器（license server）。',
     skillsUnit: '个技能',
   },
   cron: {
@@ -1972,7 +1970,7 @@ const zhCN = {
     terminalCmdHint: '在终端中使用以下命令管理 Hermes Agent，点击复制',
     cmdHeader: '命令',
     descHeader: '说明',
-    copy: '复制',
+    copy: '复制', copied: '已复制！',
     cmdChatDesc: '终端对话',
     cmdChatSub: '在终端中直接与 Agent 对话',
     cmdDoctorDesc: '诊断检查',

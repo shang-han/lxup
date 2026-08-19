@@ -30,7 +30,7 @@ function formatRelTime(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-type ViewMessage = { role: 'user' | 'assistant'; text: string; tools?: ToolEvent[]; images?: string[] };
+type ViewMessage = { role: 'user' | 'assistant'; text: string; tools?: ToolEvent[]; images?: string[]; ts?: number };
 
 export class ChatPage extends LitElement {
   static styles = css`
@@ -77,12 +77,13 @@ export class ChatPage extends LitElement {
     }
     .session-item__time { flex-shrink: 0; font-size: 10px; color: var(--muted); }
     .session-item__del {
-      flex-shrink: 0; width: 20px; height: 20px;
+      flex-shrink: 0; width: 26px; height: 26px;
       display: inline-flex; align-items: center; justify-content: center;
       background: transparent; border: none; border-radius: var(--radius-sm);
       color: var(--muted); cursor: pointer; opacity: 0;
       transition: opacity var(--duration-fast), color var(--duration-fast);
     }
+    .session-item__del svg { width: 18px; height: 18px; }
     .session-item:hover .session-item__del { opacity: 1; }
     .session-item__del:hover { color: var(--danger); background: var(--danger-subtle); }
     .session-item__confirm { flex-shrink: 0; display: inline-flex; gap: 4px; }
@@ -262,6 +263,8 @@ export class ChatPage extends LitElement {
     .message.user .message__avatar {
       background: var(--bg-hover); color: var(--text-soft);
     }
+    .message__time { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+    .message.user .message__time { color: var(--accent-foreground); opacity: 0.72; }
     .message__body {
       padding: 10px 14px; border-radius: var(--radius-md);
       font-size: 14px; line-height: 1.6; min-width: 0;
@@ -573,7 +576,7 @@ export class ChatPage extends LitElement {
     this._loadingHistory = true;
     try {
       const msgs = await this._engineAdapter.getHistory(this._sessionKey);
-      this._messages = msgs.map((m) => ({ role: m.role, text: m.text }));
+      this._messages = msgs.map((m) => ({ role: m.role, text: m.text, ...(m.ts ? { ts: m.ts } : {}) }));
       this._scrollToBottom();
     } catch { /* ignore */ } finally {
       this._loadingHistory = false;
@@ -664,7 +667,7 @@ export class ChatPage extends LitElement {
       const flat = this._scCommands().flatMap(g => g.items);
       const hit = flat.find(it => it.cmd === text || (it.needsArg && text.startsWith(`${it.cmd} `)));
       if (hit) {
-        this._messages = [...this._messages, { role: 'user', text }];
+        this._messages = [...this._messages, { role: 'user', text, ts: Date.now() }];
         this._input = '';
         this._scrollToBottom();
         void this._execSlash(text);
@@ -672,7 +675,7 @@ export class ChatPage extends LitElement {
       }
     }
     if (!this._engineAdapter.ready()) {
-      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}`, ts: Date.now() }];
       this._scrollToBottom();
       return;
     }
@@ -687,6 +690,7 @@ export class ChatPage extends LitElement {
     this._messages = [...this._messages, {
       role: 'user', text,
       images: imgs.length ? imgs.map(p => p.dataUrl) : undefined,
+      ts: Date.now(),
     }];
     this._input = '';
     this._pendingImages = [];
@@ -696,7 +700,7 @@ export class ChatPage extends LitElement {
     const sid = await this._ensureSession();
     if (!sid) {
       this._streaming = false;
-      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}` }];
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.engineOffline')}`, ts: Date.now() }];
       this._scrollToBottom();
       return;
     }
@@ -704,7 +708,7 @@ export class ChatPage extends LitElement {
       sid, text, (ev) => this._onEngineEvent(ev),
       supportsImg && attachments.length ? attachments : undefined);
     if (!supportsImg && attachments.length) {
-      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgUnsupported')}` }];
+      this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgUnsupported')}`, ts: Date.now() }];
       this._scrollToBottom();
     }
   }
@@ -715,7 +719,7 @@ export class ChatPage extends LitElement {
     for (const f of Array.from(input.files || [])) {
       if (!f.type.startsWith('image/')) continue;
       if (f.size > 10 * 1024 * 1024) {
-        this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgTooLarge', { name: f.name })}` }];
+        this._messages = [...this._messages, { role: 'assistant', text: `⚠️ ${L('chat.imgTooLarge', { name: f.name })}`, ts: Date.now() }];
         this._scrollToBottom();
         continue;
       }
@@ -734,10 +738,10 @@ export class ChatPage extends LitElement {
       const last = msgs[msgs.length - 1];
       if (ev.replace) {
         if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: ev.text };
-        else msgs.push({ role: 'assistant', text: ev.text });
+        else msgs.push({ role: 'assistant', text: ev.text, ts: Date.now() });
       } else if (ev.text) {
         if (last && last.role === 'assistant') msgs[msgs.length - 1] = { ...last, text: last.text + ev.text };
-        else msgs.push({ role: 'assistant', text: ev.text });
+        else msgs.push({ role: 'assistant', text: ev.text, ts: Date.now() });
       }
       this._messages = msgs;
       this._scrollToBottom();
@@ -1379,6 +1383,15 @@ export class ChatPage extends LitElement {
     `;
   }
 
+  _fmtTime(ts?: number): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const sameDay = d.toDateString() === new Date().toDateString();
+    return sameDay
+      ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
   _renderMessages() {
     if (!this._messages.length) return '';
     return html`
@@ -1386,6 +1399,7 @@ export class ChatPage extends LitElement {
         <div class="message ${m.role}">
           <div class="message__avatar">${m.role === 'user' ? 'U' : 'A'}</div>
           <div class="message__body">
+            ${m.ts ? html`<div class="message__time">${this._fmtTime(m.ts)}</div>` : ''}
             ${m.role === 'assistant' && m.tools && m.tools.length
               ? html`<div class="msg-tools">${m.tools.map(t => this._renderToolCard(t))}</div>` : ''}
             ${m.text ? (m.role === 'assistant'

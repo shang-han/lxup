@@ -18,7 +18,7 @@ import * as codex from './codex-client.js';
 export type EngineId = 'openclaw' | 'hermes' | 'codex';
 
 export type ChatSession = { id: string; name: string; updatedAt: number | null };
-export type ChatHistoryMessage = { role: 'user' | 'assistant'; text: string };
+export type ChatHistoryMessage = { role: 'user' | 'assistant'; text: string; ts?: number | null };
 export type ToolEvent = {
   name: string;
   args?: Record<string, unknown>;
@@ -79,6 +79,19 @@ function extractText(content: unknown): string {
   return '';
 }
 
+/** 从原始消息对象里兼容提取时间戳（ts / createdAt / created_at / timestamp / at，秒级自动×1000） */
+function msgTs(m: Record<string, unknown>): number | null {
+  for (const k of ['ts', 'createdAt', 'created_at', 'timestamp', 'at']) {
+    const v = (m as Record<string, unknown>)[k];
+    if (typeof v === 'number') return v < 1e12 ? Math.round(v * 1000) : Math.round(v);
+    if (typeof v === 'string') {
+      const t = Date.parse(v);
+      if (!Number.isNaN(t)) return t;
+    }
+  }
+  return null;
+}
+
 function normalizeTs(v: unknown): number | null {
   if (typeof v === 'number') return v < 1e12 ? Math.round(v * 1000) : Math.round(v);
   if (typeof v === 'string') {
@@ -134,7 +147,7 @@ export class OpenClawChatEngine implements ChatEngine {
     );
     return (res?.messages || [])
       .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content) }))
+      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content), ts: msgTs(m) }))
       .filter((m) => m.text);
   }
 
@@ -252,7 +265,7 @@ export class HermesChatEngine implements ChatEngine {
     const msgs = await hermes.getMessages(sessionId);
     return msgs
       .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content) }))
+      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content), ts: msgTs(m as unknown as Record<string, unknown>) }))
       .filter((m) => m.text);
   }
 
@@ -403,7 +416,7 @@ export class CodexChatEngine implements ChatEngine {
     const msgs = await codex.getMessages(sessionId);
     return msgs
       .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content) }))
+      .map((m) => ({ role: m.role as 'user' | 'assistant', text: extractText(m.content), ts: msgTs(m as unknown as Record<string, unknown>) }))
       .filter((m) => m.text);
   }
 

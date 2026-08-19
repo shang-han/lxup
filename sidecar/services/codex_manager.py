@@ -410,7 +410,7 @@ class CodexManager:
     async def _append_message(self, sid: str, role: str, text: str) -> None:
         def _do(sess: dict) -> None:
             msgs = sess.setdefault("messages", [])
-            msgs.append({"role": role, "content": text})
+            msgs.append({"role": role, "content": text, "ts": int(time.time() * 1000)})
             if role == "user" and (not sess.get("title") or sess["title"] == DEFAULT_TITLE):
                 sess["title"] = text.strip().replace("\n", " ")[:30] or DEFAULT_TITLE
 
