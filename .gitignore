@@ -17,3 +17,6 @@ docs/
 
 node_modules/
 runtime/
+
+# AI 助手运行时数据(会话/配置)
+ai-assistant/data/
