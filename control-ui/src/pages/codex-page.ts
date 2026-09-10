@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
+import { icons } from '../components/icons.js';
 import { PROVIDER_PRESETS } from './provider-presets.js';
 import { getStatus, getConfig, saveConfig } from '../services/codex-client.js';
 import '../components/page-header.js';
@@ -27,8 +28,6 @@ export class CodexPage extends LitElement {
     apiKey: '',
     baseUrl: '',
     model: '',
-    approval: 'on-failure',
-    sandbox: 'workspace-write',
   };
   @state() _status = { installed: false, version: '', hasKey: false, loaded: false };
   @state() _saving = false;
@@ -53,33 +52,22 @@ export class CodexPage extends LitElement {
         apiKey: cfg.apiKey || '',
         baseUrl: cfg.baseUrl || '',
         model: cfg.model || '',
-        approval: cfg.approvalPolicy || 'on-failure',
-        sandbox: cfg.sandboxMode || 'workspace-write',
       };
     } catch { /* Sidecar 不可达时保留默认值 */ }
     this.requestUpdate();
-  }
-
-  _approvalModes() {
-    return [
-      { value:'untrusted', label:L('common.approvalUntrusted') },
-      { value:'on-failure', label:L('common.approvalOnFailure') },
-      { value:'on-request', label:L('common.approvalOnRequest') },
-      { value:'never', label:L('common.approvalNever') },
-    ];
   }
 
   async _save() {
     this._saving = true;
     this._saveMsg = '';
     try {
+      // 只保存连接配置；沙箱模式/审批策略由「沙箱配置」页负责（同为 /api/codex/config，
+      // 字段缺席时 Sidecar 不改动对应项）
       const r = await saveConfig({
         workspace: this._config.workspace,
         apiKey: this._config.apiKey,
         baseUrl: this._config.baseUrl,
         model: this._config.model,
-        approvalPolicy: this._config.approval,
-        sandboxMode: this._config.sandbox,
       });
       if (r.success) {
         this._saveMsg = '✓ ' + L('common.save');
@@ -97,7 +85,7 @@ export class CodexPage extends LitElement {
 
   _resetDefaults() {
     // 不硬编码机器路径；workspace 留空由 Sidecar 侧默认值兜底
-    this._config = { workspace: '', apiKey: this._config.apiKey, baseUrl: '', model: '', approval: 'on-failure', sandbox: 'workspace-write' };
+    this._config = { workspace: '', apiKey: this._config.apiKey, baseUrl: '', model: '' };
     this.requestUpdate();
   }
 
@@ -115,69 +103,43 @@ export class CodexPage extends LitElement {
       ` : ''}
 
       <div class="page-toolbar-lg">
+        <div class="cdx-toolbar">
+          <button class="btn-save" ?disabled=${this._saving} @click=${this._save}>${icons['check']} ${this._saveMsg || L('common.save')}</button>
+          <button class="btn-reset" @click=${this._resetDefaults}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            ${L('common.resetDefaults')}
+          </button>
+        </div>
         <span class="text-soft text-base">
           ${st.installed ? html`<oc-badge variant="success">${st.version || 'Codex CLI'}</oc-badge>` : ''}
           ${st.installed && !st.hasKey ? html` <oc-badge variant="warning">${L('common.codexNoKey')}</oc-badge>` : ''}
           ${st.installed && st.hasKey ? html` <oc-badge variant="success">${L('common.codexHasKey')}</oc-badge>` : ''}
         </span>
-        <div class="page-actions">
-          <button class="btn-sm" ?disabled=${this._saving} @click=${this._save}>${this._saveMsg || L('common.save')}</button>
-          <button class="btn-sm ghost" @click=${this._resetDefaults}>${L('common.resetDefaults')}</button>
-        </div>
       </div>
 
-      <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:320px;">
-          <oc-card heading="Codex CLI ${L('common.config')}">
-            <p style="font-size:12px;color:var(--text-soft);margin:0 0 16px;line-height:1.6;">${L('common.codexConfigHint')}</p>
-            <div class="form-group">
-              <label class="form-label">${L('common.workspaceDir')}</label>
-              <input class="form-input" .value=${this._config.workspace} placeholder=".\workspace" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
-            </div>
-            <div class="form-group">
-              <label class="form-label">${L('common.apiKey')}</label>
-              <input class="form-input" type="password" .value=${this._config.apiKey} placeholder="sk-... (OPENAI_API_KEY)" @input=${(e:Event) => { this._config = {...this._config, apiKey:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
-            </div>
-            <div class="form-group">
-              <label class="form-label">${L('common.baseUrl')}</label>
-              <input class="form-input" .value=${this._config.baseUrl} list="lxup-codex-baseurls" placeholder="https://api.openai.com/v1" @input=${(e:Event) => { this._config = {...this._config, baseUrl:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
-              <datalist id="lxup-codex-baseurls">
-                ${PROVIDER_PRESETS.filter(p => p.baseUrl && p.key !== 'anthropic-official').map(p => html`<option value=${p.baseUrl}></option>`)}
-              </datalist>
-              <p style="font-size:12px;color:var(--text-soft);margin:6px 0 0;line-height:1.5;">${L('common.baseUrlHint')}</p>
-            </div>
-            <div class="form-group">
-              <label class="form-label">${L('common.defaultModel')}</label>
-              <input class="form-input" .value=${this._config.model} placeholder="gpt-5-codex" @input=${(e:Event) => { this._config = {...this._config, model:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
-            </div>
-            <div class="form-group">
-              <label class="form-label">${L('common.sandboxMode')}</label>
-              <select class="form-input" .value=${this._config.sandbox} @change=${(e:Event) => { this._config = {...this._config, sandbox:(e.target as HTMLSelectElement).value}; this.requestUpdate(); }}>
-                <option value="read-only">read-only</option>
-                <option value="workspace-write">workspace-write</option>
-                <option value="danger-full-access">danger-full-access</option>
-              </select>
-            </div>
-          </oc-card>
+      <oc-card heading="Codex CLI ${L('common.config')}">
+        <p style="font-size:12px;color:var(--text-soft);margin:0 0 16px;line-height:1.6;">${L('common.codexConfigHint')}</p>
+        <div class="form-group">
+          <label class="form-label">${L('common.baseUrl')}</label>
+          <input class="form-input" .value=${this._config.baseUrl} list="lxup-codex-baseurls" placeholder="https://api.openai.com/v1" @input=${(e:Event) => { this._config = {...this._config, baseUrl:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+          <datalist id="lxup-codex-baseurls">
+            ${PROVIDER_PRESETS.filter(p => p.baseUrl && p.key !== 'anthropic-official').map(p => html`<option value=${p.baseUrl}></option>`)}
+          </datalist>
+          <p style="font-size:12px;color:var(--text-soft);margin:6px 0 0;line-height:1.5;">${L('common.baseUrlHint')}</p>
         </div>
-
-        <div style="flex:1;min-width:320px;">
-          <oc-card heading="${L('common.approvalPolicy')}">
-            ${this._approvalModes().map((m:any) => html`
-              <div class="toggle-row" @click=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }}
-                style="cursor:pointer;user-select:none;margin-bottom:12px;padding:10px;border-radius:var(--radius-md);background:${this._config.approval===m.value?'var(--accent-subtle)':'transparent'};border:1px solid ${this._config.approval===m.value?'var(--accent)':'transparent'};">
-                <div style="flex:1;">
-                  <div style="font-size:13px;font-weight:500;color:var(--text);font-family:var(--font-mono);">${m.value}</div>
-                  <div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${m.label}</div>
-                </div>
-                <input type="radio" name="approval_policy" ?checked=${this._config.approval===m.value}
-                  @click=${(e: Event) => e.stopPropagation()}
-                  @change=${() => { this._config = {...this._config, approval:m.value}; this.requestUpdate(); }} />
-              </div>
-            `)}
-          </oc-card>
+        <div class="form-group">
+          <label class="form-label">${L('common.apiKey')}</label>
+          <input class="form-input" type="password" .value=${this._config.apiKey} placeholder="sk-... (OPENAI_API_KEY)" @input=${(e:Event) => { this._config = {...this._config, apiKey:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
         </div>
-      </div>
+        <div class="form-group">
+          <label class="form-label">${L('common.defaultModel')}</label>
+          <input class="form-input" .value=${this._config.model} placeholder="gpt-5-codex" @input=${(e:Event) => { this._config = {...this._config, model:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+        </div>
+        <div class="form-group">
+          <label class="form-label">${L('common.workspaceDir')}</label>
+          <input class="form-input" .value=${this._config.workspace} placeholder=".\workspace" @input=${(e:Event) => { this._config = {...this._config, workspace:(e.target as HTMLInputElement).value}; this.requestUpdate(); }} />
+        </div>
+      </oc-card>
     `;
   }
 }

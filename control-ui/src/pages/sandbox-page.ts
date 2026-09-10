@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { L } from '../i18n/index.js';
+import { icons } from '../components/icons.js';
 import { fetchTimeout } from '../utils/net.js';
 import '../components/page-header.js';
 import '../components/oc-card.js';
@@ -15,7 +16,7 @@ import '../components/oc-badge.js';
  *
  * Codex 真实的沙箱模型只有两维：
  *   sandboxMode   : read-only / workspace-write / danger-full-access
- *   approvalPolicy: untrusted / on-request / never
+ *   approvalPolicy: untrusted / on-failure / on-request / never
  */
 
 type CodexConfig = {
@@ -57,6 +58,7 @@ export class SandboxPage extends LitElement {
   get _approvalPolicies() {
     return [
       { value: 'untrusted', label: L('sandbox.untrusted'), desc: L('sandbox.untrustedDesc') },
+      { value: 'on-failure', label: L('sandbox.onFailure'), desc: L('sandbox.onFailureDesc') },
       { value: 'on-request', label: L('sandbox.onRequest'), desc: L('sandbox.onRequestDesc') },
       { value: 'never', label: L('sandbox.never'), desc: L('sandbox.neverDesc') },
     ];
@@ -137,6 +139,16 @@ export class SandboxPage extends LitElement {
         </div>
       ` : ''}
 
+      <div class="cdx-toolbar" style="margin-bottom:16px;">
+        <button class="btn-save" ?disabled=${this._saving || this._offline} @click=${() => this._save()}>
+          ${icons['check']} ${this._saving ? L('models.saving') : L('common.save')}
+        </button>
+        <button class="btn-reset" ?disabled=${this._offline} @click=${() => this._load()}>
+          ${icons['refresh-cw']} ${L('common.refresh')}
+        </button>
+        ${this._msg ? html`<span style="font-size:12px;color:${this._msgCls === 'ok' ? 'var(--success)' : 'var(--danger)'};">${this._msg}</span>` : ''}
+      </div>
+
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
         <div style="flex:1;min-width:340px;">
           <oc-card heading="${L('sandbox.modeTitle')}">
@@ -205,14 +217,6 @@ export class SandboxPage extends LitElement {
               </div>
             `}
           </oc-card>
-
-          <div class="page-actions" style="margin-top:16px;display:flex;align-items:center;gap:10px;">
-            <button class="btn-sm" ?disabled=${this._saving || this._offline} @click=${() => this._save()}>
-              ${this._saving ? L('models.saving') : L('common.save')}
-            </button>
-            <button class="btn-sm ghost" ?disabled=${this._offline} @click=${() => this._load()}>${L('common.refresh')}</button>
-            ${this._msg ? html`<span style="font-size:12px;color:${this._msgCls === 'ok' ? 'var(--success)' : 'var(--danger)'};">${this._msg}</span>` : ''}
-          </div>
         </div>
       </div>
     `;

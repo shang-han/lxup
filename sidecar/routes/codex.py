@@ -41,7 +41,7 @@ def _manager(request: Request):
 
 class CodexConfigRequest(BaseModel):
     model: str = Field(default="", description="模型名，如 gpt-5-codex")
-    approvalPolicy: str = Field(default="", description="untrusted / on-request / never")
+    approvalPolicy: str = Field(default="", description="untrusted / on-failure / on-request / never")
     sandboxMode: str = Field(
         default="", description="read-only / workspace-write / danger-full-access"
     )

@@ -205,6 +205,24 @@ export class OpenClawApp extends LitElement {
     .btn-mem-primary:hover { background: var(--accent-hover); }
     .btn-mem-primary:disabled { opacity: 0.5; cursor: wait; }
     .mem-editor textarea { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+
+    /* === codex 页工具栏（保存/恢复默认，样式对齐模型配置页的添加/撤销）=== */
+    .cdx-toolbar { display: flex; gap: 8px; align-items: center; }
+    .cdx-toolbar .btn-save {
+      padding: 6px 16px; border-radius: var(--radius-sm); font-size: 13px;
+      font-weight: 600; border: none; cursor: pointer;
+      background: var(--accent); color: var(--accent-foreground);
+      transition: background var(--duration-fast); display: inline-flex; align-items: center; gap: 4px;
+    }
+    .cdx-toolbar .btn-save:hover { background: var(--accent-hover); }
+    .cdx-toolbar .btn-save:disabled { opacity: 0.6; cursor: default; }
+    .cdx-toolbar .btn-reset {
+      padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px;
+      font-weight: 500; border: 1px solid var(--border); cursor: pointer;
+      background: transparent; color: var(--text-soft); transition: all var(--duration-fast);
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .cdx-toolbar .btn-reset:hover { background: var(--bg-hover); color: var(--text); }
 `;
 
   @state() _initDone = sessionStorage.getItem('openclaw.init-shown') === '1';

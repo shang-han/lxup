@@ -563,8 +563,8 @@ taskkill /PID 查到的数字 /T /F</pre>
 <div class="card">
   <h3>Codex CLI 页</h3>
   <ul>
-    <li>配置经 Sidecar 写入 <code>runtime/codex-home/config.toml</code> 与 <code>auth.json</code>：工作目录、模型、<strong>OPENAI_API Key</strong>（没配 Key 会有红色提示，对应故障⑤）。</li>
-    <li>审批策略与沙箱见下。</li>
+    <li>配置经 Sidecar 写入 <code>runtime/codex-home/config.toml</code> 与 <code>auth.json</code>：<strong>API 地址</strong>（留空走 OpenAI 官方接口）、<strong>API Key</strong>（没配 Key 会有红色提示，对应故障⑤）、<strong>默认模型</strong>、<strong>工作目录</strong>；页面上方「保存」「恢复默认」。</li>
+    <li>沙箱模式与审批策略在「沙箱配置」页，见下。</li>
   </ul>
   <h3>沙箱配置页</h3>
   <table>
@@ -576,13 +576,14 @@ taskkill /PID 查到的数字 /T /F</pre>
   <table>
     <tr><th>审批策略</th><th>含义</th></tr>
     <tr><td>每次都问</td><td>每条命令/文件操作都人工批准</td></tr>
+    <tr><td>失败时询问</td><td>命令执行失败时才问</td></tr>
     <tr><td>按需询问</td><td>Codex 显式请求时才问</td></tr>
     <tr><td>从不询问</td><td>全自动，依赖沙箱保护</td></tr>
   </table>
-  <p class="muted">日常建议：工作区可写 + 按需询问；页底「当前配置」回显模型 / 工作目录 / Key 状态。</p>
+  <p class="muted">日常建议：工作区可写 + 按需询问；页面上方「保存」「刷新」，右侧「当前配置」回显模型 / 工作目录 / Key 状态。</p>
 </div>
 
-<footer>龙虾U盘（LXUP）· 使用说明 · 更新于 2026-08-18</footer>
+<footer>龙虾U盘（LXUP）· 使用说明 · 更新于 2026-09-10</footer>
 </div>
 
 <script>
