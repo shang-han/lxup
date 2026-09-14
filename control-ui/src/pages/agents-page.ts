@@ -518,7 +518,7 @@ export class AgentsPage extends LitElement {
 
   _renderFileEditDialog() {
     return html`
-      <oc-dialog .open=${this._fileEditOpen} @close=${this._closeFileEdit}>
+      <oc-dialog .open=${this._fileEditOpen} noBackdropClose @close=${this._closeFileEdit}>
         <span slot="title">${L('agents.editFile', { file: this._editingFile })}</span>
         <div style="margin:0 10px;">
           <textarea class="detail-textarea" style="min-height:400px;width:100%;"
@@ -537,7 +537,7 @@ export class AgentsPage extends LitElement {
   _renderNewAgentDialog() {
     const editing = !!this._editingAgentId;
     return html`
-      <oc-dialog .open=${this._dialogOpen} @close=${this._closeDialog}>
+      <oc-dialog .open=${this._dialogOpen} noBackdropClose @close=${this._closeDialog}>
         <span slot="title">${editing ? L('agents.editAgent') : L('common.newAgent')}</span>
         <div class="channel-dialog">
           <div class="form-group">

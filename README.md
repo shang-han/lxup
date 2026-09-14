@@ -8,24 +8,65 @@
 ```
 .\
 ├── control-ui/        控制台前端（Lit + Vite，:5173）
+│   ├── src/app.ts     应用根组件
+│   ├── src/main.ts    入口
+│   ├── src/pages/     页面集合（约 23 个：聊天 / 仪表盘 / Hermes / Codex / 模型配置 / 初始化 / 授权 …）
+│   ├── src/components/ 通用组件（oc-* 系列 + sidebar）
+│   ├── src/services/  引擎适配与 API 客户端（chat-engine / hermes-client / codex-client / license / ai / types）
+│   ├── src/store/     状态管理（gateway-store / shared）
+│   ├── src/utils/     通用工具函数
+│   └── src/i18n/      前端文案国际化
 ├── ai-assistant/      独立 AI 助手 JS 服务（对话 + 命令行工具，不经过网关，:8080）
 ├── sidecar/           Python 伴侣服务（授权客户端 + 微信扫码登录桥接，:7889）
-├── license_server/    授权服务器（云端，激活码校验，:9000）
-├── engines/           上游引擎参考源码（bootstrap-codex.bat 克隆 openai/codex 至此，供协议参考；openclaw / hermes 均已打包进 runtime，不需源码）
-├── bootstrap-openclaw.bat / bootstrap-hermes.bat / bootstrap-codex.bat   三引擎便携运行时引导（一次性，需联网）
-├── runtime/           运行时数据（不入库）
-│   ├── data/          SQLite 数据库 + 便携 node.exe（v24，OpenClaw/前端/AI助手共用）
+│   ├── main.py        FastAPI 入口（健康检查 / 授权 / 网关 / Hermes / Codex / 微信登录）
+│   ├── config.py      配置集中定义（含 license_server_url）
+│   ├── database.py    数据访问层
+│   ├── models.py      数据模型
+│   ├── i18n.py        文案国际化
+│   ├── routes/        HTTP / WebSocket 路由（health / license / gateway / hermes / codex / models-auth / browser / weixin-login）
+│   └── services/      业务服务（codex / gateway / hermes 管理器、license、技能包与技能扫描、微信登录）
+├── skill-packs/       岗位技能包仓库（Hermes / OpenClaw / Codex 三引擎共享）
+│   ├── manifest.json  技能包索引（版本号 + 内容指纹 sha256）
+│   ├── 76-posts.json  岗位总表
+│   ├── README.md
+│   └── skills/        技能包目录（共 77 个：1 个通用工具包 + 76 个岗位包，两者同层级）
+│       ├── 00-通用工具/    通用工具包（免费预装）
+│       ├── 01-餐饮店长/    岗位包：post.json + skills/ + knowledge/ + scripts/
+│       ├── …            02-连锁加盟运营 … 75-室内设计师
+│       └── 76-社区工作者/  岗位包（最后一个）
+├── runtime/           运行时数据与便携引擎（不入库）
+│   ├── version.json   版本信息
+│   ├── data/          SQLite（gateway.db）+ 便携 node.exe（v24）+ 日志
+│   ├── python/        便携 Python 运行时（bootstrap 生成）
+│   ├── hermes-libs/   Hermes 依赖（bootstrap 生成，含 hermes_cli/main.py）
+│   ├── hermes-home/   Hermes 家目录（config.yaml / 会话 / 日志 / kanban.db）
 │   ├── openclaw/      打包的 openclaw npm 包（便携 node 运行，即搬即用）
+│   ├── openclaw-home/ OpenClaw 状态目录（固定项目内，不写用户目录）
 │   ├── codex/         @openai/codex npm 包（内含预编译 codex.exe，经 Sidecar 按需拉起）
-│   ├── codex-home/    Codex 便携家目录（config.toml / auth.json / 会话注册表）
+│   ├── codex-home/    Codex 便携家目录（config.toml / 会话注册表 / auth.json 首次保存后生成）
 │   ├── workspace/     main agent 人格文件（AGENTS.md / SOUL.md …）
-│   ├── python/        Hermes 便携 Python 运行时（bootstrap 生成）
-│   ├── hermes-libs/   Hermes 依赖（bootstrap 生成）
-│   ├── hermes-home/   Hermes 家目录（config.yaml / 会话 / 日志）
 │   └── logs/          各服务日志
+├── scripts/           维护脚本
+│   ├── apply_hermes_patches.py Hermes 补丁脚本
+│   └── build-portable.ps1      便携包构建脚本
+├── LXUP启动器.exe     一键启动入口（GUI 启动器）
+├── start-all.bat      启动全部服务（转调 launcher_gui.py，与 LXUP启动器.exe 同一套单实例逻辑）
+├── stop-all.bat       停止全部服务（按 LXUP 端口终止进程树）
+├── launcher_gui.py    启动器 GUI 源码（Tkinter v3，单实例锁端口 :47889，逐个等待各服务端口就绪）
+├── 龙虾U盘使用说明.html 便携 U 盘离线使用说明
+├── LXUP-icon.ico      启动器 / 便携包图标
+├── .sidecar.ready     Sidecar 就绪标记
+├── .gitignore         Git 忽略规则（runtime 等不入库）
+├── bootstrap-openclaw.bat / bootstrap-hermes.bat / bootstrap-codex.bat   三引擎便携运行时引导（一次性，需联网）
 ├── start-hermes.bat   单独启动 Hermes 网关
 └── README.md
 ```
+
+> **以下两项不在本仓库目录里**（保留说明以免误配部署，均不影响正常运行）：
+> - `license_server/`（授权服务器，:9000）——目录不在本仓库，bootstrap 也不会生成；
+>   Sidecar 仍保留其地址配置（`sidecar/config.py` 的 `license_server_url`，默认 `http://127.0.0.1:9000`）。
+> - `engines/`——上游引擎参考源码，`bootstrap-codex.bat` 才会浅克隆 openai/codex 至此
+>   （供协议参考，不参与运行）；openclaw / hermes 均已打包进 `runtime/`，不需源码。
 
 ## 架构
 

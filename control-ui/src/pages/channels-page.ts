@@ -1056,7 +1056,7 @@ export class ChannelsPage extends LitElement {
     const qqVals = (this._formValues['qqbot'] || {}) as Record<string, string>;
     const qqResult = this._formResult['qqbot'];
     return html`
-      <oc-dialog .open=${this._dialogChannel === 'qq'} @close=${this._closeDialog}>
+      <oc-dialog .open=${this._dialogChannel === 'qq'} noBackdropClose @close=${this._closeDialog}>
         <span slot="title">${L('channels.connecting')} ${L('channels.qqBot')}</span>
         <div class="channel-dialog">
           <!-- Steps toggle -->
@@ -1158,7 +1158,7 @@ export class ChannelsPage extends LitElement {
 
   _renderWeChatDialog() {
     return html`
-      <oc-dialog .open=${this._dialogChannel === 'wechat'} @close=${this._closeDialog}>
+      <oc-dialog .open=${this._dialogChannel === 'wechat'} noBackdropClose @close=${this._closeDialog}>
         <span slot="title">${L('channels.wechatIntegration')}</span>
         <div class="channel-dialog">
           <!-- Steps -->
@@ -1248,7 +1248,7 @@ export class ChannelsPage extends LitElement {
     const vals = this._formValues[realId] || {};
     const result = this._formResult[realId];
     return html`
-      <oc-dialog .open=${this._dialogChannel === channelId} @close=${this._closeDialog}>
+      <oc-dialog .open=${this._dialogChannel === channelId} noBackdropClose @close=${this._closeDialog}>
         <span slot="title">${L('channels.connecting')} ${ch.name}</span>
         <div class="channel-dialog">
           ${live ? html`

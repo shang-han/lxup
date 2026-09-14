@@ -379,6 +379,7 @@ export class ModelsPage extends LitElement {
   @state() _formSelectedPreset = '';
   @state() _formModels: string[] = [];
   @state() _formModelInput = '';
+  @state() _formError = '';
 
   // 获取模型列表状态
   @state() _formFetchingModels = false;
@@ -719,6 +720,7 @@ export class ModelsPage extends LitElement {
     this._formModelInput = '';
     this._formFetchingModels = false;
     this._formFetchError = '';
+    this._formError = '';
     this._dialogOpen = true;
   }
 
@@ -733,6 +735,7 @@ export class ModelsPage extends LitElement {
     this._formSelectedPreset = '';
     this._formModels = p.models.map(m => m.id);
     this._formModelInput = '';
+    this._formError = '';
     this._dialogOpen = true;
   }
 
@@ -748,12 +751,17 @@ export class ModelsPage extends LitElement {
 
   // ── Hermes 模式：数据层适配（页面 UI 与 OpenClaw 完全一致，只换后端读写）──
 
-  /** 读取 Hermes 当前模型配置 → 映射成本页的「服务商 + 模型」结构 */
+  /** 读取 Hermes 当前模型配置 → 映射成本页的「服务商 + 模型」结构：
+   *  主卡片 = model 段（★ 主模型 + 继承主端点的备选）；
+   *  其余 = 自带 base_url/api_key 的备选链条目，按 baseUrl 分组为独立服务商卡片 */
   async _loadHermesConfig() {
     try {
       const r = await fetch(`${this._sidecarBase}/api/hermes/model`, { headers: sidecarHeaders() });
       if (!r.ok) return;
-      const c = (await r.json()) as { name?: string; baseUrl?: string; apiKey?: string; hasKey?: boolean };
+      const c = (await r.json()) as {
+        name?: string; baseUrl?: string; apiKey?: string; hasKey?: boolean;
+        fallbacks?: { provider?: string; model?: string; baseUrl?: string; apiKey?: string }[];
+      };
       const name = (c.name || '').trim();
       if (!name && !c.baseUrl) {
         this._providers = [];
@@ -761,37 +769,79 @@ export class ModelsPage extends LitElement {
         return;
       }
       this._defaultModelRef = name ? `hermes/${name}` : '';
-      this._providers = [{
+      const fb = c.fallbacks || [];
+      const inherited = fb.filter(f => !f.baseUrl);
+      const own = fb.filter(f => !!f.baseUrl);
+      const cards: ProviderConfig[] = [{
         id: 'hermes',
         name: name || 'Hermes',          // 卡片标题直接显示模型名（与 OpenClaw 一致）
         baseUrl: String(c.baseUrl || ''),
         apiKey: String(c.apiKey || ''),  // 打码值，保存时后端会保留原 Key
-        models: name ? [{ id: name, isPrimary: true }] : [],
+        models: name ? [
+          { id: name, isPrimary: true },
+          ...inherited
+            .map(f => ({ id: String(f.model || '').trim(), isPrimary: false }))
+            .filter(m => m.id && m.id !== name),
+        ] : [],
       }];
+      const groups = new Map<string, typeof fb>();
+      for (const f of own) {
+        const bu = String(f.baseUrl || '').trim();
+        if (!bu) continue;
+        groups.set(bu, [...(groups.get(bu) || []), f]);
+      }
+      for (const [bu, list] of groups) {
+        cards.push({
+          id: `fb:${bu}`,
+          name: String(list[0].model || '').trim() || bu,
+          baseUrl: bu,
+          apiKey: String(list[0].apiKey || ''),
+          models: list
+            .map(f => ({ id: String(f.model || '').trim(), isPrimary: false }))
+            .filter(m => m.id),
+        });
+      }
+      this._providers = cards;
       this._rawProviders = {};
       this._rawModels = {};
       this._saveError = '';
     } catch { /* Sidecar 离线时忽略，保存时会报错 */ }
   }
 
-  /** 保存 Hermes 模型配置：取页面上第一个服务商的主模型（或第一个模型）写 config.yaml；
+  /** 保存 Hermes 模型配置：★ 主模型所在卡片 = 主端点（model 段），
+   *  该卡片其余模型 → 继承主端点的备选（provider=auto）；
+   *  其他卡片 → 内联 base_url/api_key 的备选链条目（内核按条目凭据解析）；
    *  模型已删空时调用 DELETE /api/hermes/model 清空配置（对应 OpenClaw 的删除语义） */
   async _saveToHermes() {
     this._saving = true;
     this._saveError = '';
     try {
       let name = '', baseUrl = '', apiKey = '';
-      for (const p of this._providers) {
-        const m = p.models.find(x => x.isPrimary) || p.models[0];
-        if (!m) continue;
-        name = m.id; baseUrl = p.baseUrl; apiKey = p.apiKey; break;
+      const fallbacks: { provider: string; model: string; baseUrl?: string; apiKey?: string }[] = [];
+      // 主卡片 = 列表里第一个含 ★ 主模型的卡片（无 ★ 则取第一个有模型的卡片）
+      let primaryCard: ProviderConfig | undefined = this._providers.find(
+        p => p.models.some(m => m.isPrimary));
+      if (!primaryCard) primaryCard = this._providers.find(p => p.models.length > 0);
+      if (primaryCard) {
+        const pm = primaryCard.models.find(x => x.isPrimary) || primaryCard.models[0];
+        name = pm.id; baseUrl = primaryCard.baseUrl; apiKey = primaryCard.apiKey;
+        for (const m of primaryCard.models) {
+          if (m === pm) continue;
+          fallbacks.push({ provider: 'auto', model: m.id });
+        }
+        for (const p of this._providers) {
+          if (p === primaryCard) continue;
+          for (const m of p.models) {
+            fallbacks.push({ provider: 'auto', model: m.id, baseUrl: p.baseUrl, apiKey: p.apiKey });
+          }
+        }
       }
       let d: { success?: boolean } = {};
       if (name) {
         const r = await fetch(`${this._sidecarBase}/api/hermes/model`, {
           method: 'POST',
           headers: sidecarHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim() }),
+          body: JSON.stringify({ name, baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), fallbacks }),
         });
         d = (await r.json()) as { success?: boolean };
       } else {
@@ -872,6 +922,7 @@ export class ModelsPage extends LitElement {
     if (preset.baseUrl) this._formBaseUrl = preset.baseUrl;
     this._formModels = [];
     this._formFetchError = '';
+    this._formError = '';
     // 仅当用户已填写 API Key 时才自动获取模型列表
     if (preset.baseUrl && this._formApiKey.trim()) {
       this._formFetchingModels = true;
@@ -910,18 +961,31 @@ export class ModelsPage extends LitElement {
 
   _confirmProvider() {
     const name = this._formProviderName.trim();
-    if (!name) return;
+    if (this._isHermes) {
+      // Hermes 单服务商卡片：新增时校验模型列表（名称字段仅作卡片标题，可留空）
+      if (!this._editingId && !this._formModels.length) {
+        this._formError = L('models.hermesNeedModel');
+        return;
+      }
+    } else if (!name) {
+      // 不给反馈直接 return 会显得「点了没反应」，显式提示
+      this._formError = L('models.nameRequired');
+      return;
+    }
 
     if (this._editingId) {
       // 编辑模式：服务商 id（网关配置键）不变，更新其余字段，保留主模型标记
       this._providers = this._providers.map(p => {
         if (p.id !== this._editingId) return p;
         const oldPrimary = p.models.find(m => m.isPrimary)?.id;
-        let models: ModelEntry[] = this._formModels.map(id => ({
+        const models: ModelEntry[] = this._formModels.map(id => ({
           id,
           isPrimary: id === oldPrimary,
         }));
-        if (models.length && !models.some(m => m.isPrimary)) models[0].isPrimary = true;
+        // ★ 全局唯一：只有原来就是主卡片的卡片，编辑后才自动顶上第一个
+        if (models.length && !models.some(m => m.isPrimary) && oldPrimary) {
+          models[0].isPrimary = true;
+        }
         return {
           ...p,
           baseUrl: this._formBaseUrl.trim(),
@@ -930,12 +994,28 @@ export class ModelsPage extends LitElement {
           models,
         };
       });
+    } else if (this._isHermes) {
+      // Hermes：追加为独立端点卡片（主端点之外的服务商 → 备选链内联凭据条目）。
+      // ★ 全局唯一：全局已有主模型时新卡片不打 ★，避免 UI 与保存结果不一致
+      const uid = `fb-${this._providers.length + 1}-${name || this._formModels[0]}`;
+      const globalHasPrimary = this._providers.some(p => p.models.some(m => m.isPrimary));
+      this._providers = [...this._providers, {
+        id: uid,
+        name: name || this._formModels[0],
+        baseUrl: this._formBaseUrl.trim(),
+        apiKey: this._formApiKey.trim(),
+        apiType: this._formApiType,
+        models: this._formModels.map((mid, i) => ({ id: mid, isPrimary: i === 0 && !globalHasPrimary })),
+      }];
+      this._expanded = { ...this._expanded, [uid]: true };
     } else {
       // 新增模式：名称转成合法配置键作为 id
       const baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'provider';
       let id = baseId, n = 2;
       while (this._providers.some(p => p.id === id)) id = `${baseId}_${n++}`;
-      const models: ModelEntry[] = this._formModels.map((mid, i) => ({ id: mid, isPrimary: i === 0 }));
+      // ★ 全局唯一：全局已有主模型时，新服务商的模型不自动打 ★
+      const globalHasPrimary = this._providers.some(p => p.models.some(m => m.isPrimary));
+      const models: ModelEntry[] = this._formModels.map((mid, i) => ({ id: mid, isPrimary: i === 0 && !globalHasPrimary }));
       this._providers = [...this._providers, {
         id, name: id,
         baseUrl: this._formBaseUrl.trim(),
@@ -993,16 +1073,17 @@ export class ModelsPage extends LitElement {
   // ── 模型：主模型 / 删除 / 行内添加 ──────────────────
 
   _togglePrimary(providerId: string, modelId: string) {
-    this._providers = this._providers.map(p => {
-      if (p.id !== providerId) return p;
-      return {
-        ...p,
-        models: p.models.map(m => ({ ...m, isPrimary: m.id === modelId ? !m.isPrimary : false })),
-      };
-    });
-    // 若取消后没有任何主模型，第一个自动顶上
-    const p = this._providers.find(x => x.id === providerId);
-    if (p && p.models.length && !p.models.some(m => m.isPrimary)) {
+    // ★ 全局唯一：主模型只有一个（OpenClaw 保存为 agents.defaults.model，Hermes 为 model 段）。
+    // 切换时清除其他卡片上的 ★；取消后全局无 ★ 则该卡片第一个自动顶上
+    const target = this._providers.find(x => x.id === providerId);
+    const wasPrimary = !!target?.models.find(m => m.id === modelId)?.isPrimary;
+    this._providers = this._providers.map(p => ({
+      ...p,
+      models: p.id === providerId
+        ? p.models.map(m => ({ ...m, isPrimary: !wasPrimary && m.id === modelId }))
+        : p.models.map(m => ({ ...m, isPrimary: false })),
+    }));
+    if (!this._providers.some(p => p.models.some(m => m.isPrimary))) {
       this._providers = this._providers.map(x => x.id !== providerId ? x : {
         ...x, models: x.models.map((m, i) => ({ ...m, isPrimary: i === 0 })),
       });
@@ -1026,11 +1107,15 @@ export class ModelsPage extends LitElement {
     const input = this._inlineInputs[providerId]?.trim();
     if (!input) return;
     const ids = input.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+    // ★ 全局唯一：空卡片补模型时若全局已有主模型则不自动打 ★
+    const globalHasPrimary = this._providers.some(p => p.models.some(m => m.isPrimary));
     this._providers = this._providers.map(p => {
       if (p.id !== providerId) return p;
       const existing = new Set(p.models.map(m => m.id));
       const models = [...p.models];
-      for (const id of ids) if (!existing.has(id)) models.push({ id, isPrimary: models.length === 0 });
+      for (const id of ids) if (!existing.has(id)) {
+        models.push({ id, isPrimary: models.length === 0 && !globalHasPrimary });
+      }
       return { ...p, models };
     });
     this._inlineInputs[providerId] = '';
@@ -1173,7 +1258,7 @@ export class ModelsPage extends LitElement {
     const preset = PROVIDER_PRESETS.find(p => p.name === this._formSelectedPreset);
 
     return html`
-      <oc-dialog .open=${this._dialogOpen} @close=${this._closeDialog}>
+      <oc-dialog .open=${this._dialogOpen} noBackdropClose @close=${this._closeDialog}>
         <span slot="title">${isEdit ? L('models.editDialogTitle') : L('models.dialogTitle')}</span>
         <div class="provider-form">
           ${!isEdit ? html`
@@ -1195,22 +1280,18 @@ export class ModelsPage extends LitElement {
             <label class="form-label">${L('models.providerName')}</label>
             <input class="form-input" type="text" .value=${this._formProviderName}
               placeholder=${L('models.providerNamePlaceholder')} ?disabled=${isEdit}
-              @input=${(e: Event) => { this._formProviderName = (e.target as HTMLInputElement).value; this._formSelectedPreset = ''; }}
+              @input=${(e: Event) => { this._formProviderName = (e.target as HTMLInputElement).value; this._formSelectedPreset = ''; this._formError = ''; }}
             />
             <div class="form-hint">${isEdit ? L('models.providerIdLocked') : L('models.providerNameHint')}</div>
           </div>
 
-          <!-- 接口地址 -->
+          <!-- 接口地址（无 datalist：原生下拉弹层会导致点击被重定向到弹框外、误关对话框） -->
           <div class="form-group">
             <label class="form-label">${L('models.apiUrl')}</label>
             <input class="form-input" type="text" .value=${this._formBaseUrl}
-              list="lxup-models-baseurls"
               placeholder="https://api.deepseek.com/v1"
               @input=${(e: Event) => { this._formBaseUrl = (e.target as HTMLInputElement).value; }}
             />
-            <datalist id="lxup-models-baseurls">
-              ${PROVIDER_PRESETS.filter(p => p.baseUrl).map(p => html`<option value=${p.baseUrl}></option>`)}
-            </datalist>
             <div class="form-hint">${L('models.apiUrlHint')}</div>
           </div>
 
@@ -1282,6 +1363,9 @@ export class ModelsPage extends LitElement {
             <div class="form-hint">${L('models.modelListHint')}</div>
           </div>
         </div>
+        ${this._formError ? html`
+          <div style="padding:0 22px;margin:-4px 0 2px;font-size:12px;color:var(--danger);">${this._formError}</div>
+        ` : ''}
         <div slot="footer">
           <oc-btn size="lg" @click=${this._closeDialog}>${L('common.cancel')}</oc-btn>
           <oc-btn size="lg" variant="accent" @click=${this._confirmProvider}>${L('common.confirm')}</oc-btn>

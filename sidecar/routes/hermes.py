@@ -98,6 +98,10 @@ class HermesModelRequest(BaseModel):
     name: str = Field(default="", description="模型名，如 deepseek-chat")
     baseUrl: str = Field(default="", description="OpenAI 兼容接口基址，如 https://api.deepseek.com/v1")
     apiKey: str = Field(default="", description="API Key；留空或为打码值时保留原有 Key")
+    fallbacks: list[dict] | None = Field(
+        default=None,
+        description="备选模型链 fallback_model：[{provider, model}]；None=不改动，[]=清空链",
+    )
 
 
 # ── 端点 ──
@@ -105,18 +109,37 @@ class HermesModelRequest(BaseModel):
 
 @router.get("/model")
 async def get_model(request: Request):
-    """读取当前 Hermes 模型配置（Key 打码返回）"""
+    """读取当前 Hermes 模型配置（Key 打码返回，含备选模型链）"""
     cfg = _load_config(_config_path(request))
     model = cfg.get("model") or {}
     if not isinstance(model, dict):
         model = {}
     api_key = str(model.get("api_key") or "")
+    # fallback_model：单 dict（旧格式）或 list（链）
+    fb = cfg.get("fallback_model")
+    fb_list: list = []
+    if isinstance(fb, dict):
+        if fb.get("provider") and fb.get("model"):
+            fb_list = [fb]
+    elif isinstance(fb, list):
+        fb_list = fb
     return {
         "name": str(model.get("name") or ""),
         "baseUrl": str(model.get("base_url") or ""),
         "provider": str(model.get("provider") or "auto"),
         "apiKey": _mask_key(api_key),
         "hasKey": bool(api_key),
+        "fallbacks": [
+            {
+                "provider": str(e.get("provider") or "auto"),
+                "model": str(e.get("model") or ""),
+                # 条目自带端点（内联 base_url/api_key）→ 前端映射为独立服务商卡片
+                "baseUrl": str(e.get("base_url") or ""),
+                "apiKey": _mask_key(str(e.get("api_key") or "")),
+            }
+            for e in fb_list
+            if isinstance(e, dict) and e.get("model")
+        ],
     }
 
 
@@ -146,12 +169,52 @@ async def set_model(request: Request, body: HermesModelRequest):
     # provider=auto + base_url + api_key → Hermes 走 OpenAI 兼容直连
     model.setdefault("provider", "auto")
 
+    # 备选模型链（fallback_model）：provider=auto 时内核继承主模型运行时（base_url/api_key）
+    if body.fallbacks is not None:
+        # 同名（provider, model）旧条目原样保留，避免丢掉用户手写的额外字段
+        existing_map: dict = {}
+        old_fb = cfg.get("fallback_model")
+        if isinstance(old_fb, dict) and old_fb.get("provider") and old_fb.get("model"):
+            existing_map[(str(old_fb.get("provider")), str(old_fb.get("model")))] = old_fb
+        elif isinstance(old_fb, list):
+            for e in old_fb:
+                if isinstance(e, dict) and e.get("provider") and e.get("model"):
+                    existing_map[(str(e.get("provider")), str(e.get("model")))] = e
+        chain = []
+        for f in body.fallbacks:
+            if not isinstance(f, dict):
+                continue
+            prov = str(f.get("provider") or "auto").strip() or "auto"
+            mid = str(f.get("model") or "").strip()
+            if not mid:
+                continue
+            entry = existing_map.get((prov, mid)) or {"provider": prov, "model": mid}
+            entry = dict(entry)
+            entry["provider"] = prov
+            entry["model"] = mid
+            # 条目自带端点（独立服务商卡片）：写内联 base_url；apiKey 留空或打码 → 保留旧 Key
+            f_base = str(f.get("baseUrl") or "").strip()
+            f_key = str(f.get("apiKey") or "").strip()
+            if f_base:
+                entry["base_url"] = f_base
+            else:
+                entry.pop("base_url", None)
+            if f_key and "****" not in f_key:
+                entry["api_key"] = f_key
+            elif not f_key:
+                entry.pop("api_key", None)
+            chain.append(entry)
+        if chain:
+            cfg["fallback_model"] = chain
+        else:
+            cfg.pop("fallback_model", None)
+
     cfg["model"] = model
     path.write_text(
         yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
-    logger.info("Hermes 模型配置已更新: model=%s baseUrl=%s", model.get("name"), model.get("base_url"))
+    logger.info("Hermes 模型配置已更新: model=%s baseUrl=%s fallbacks=%d", model.get("name"), model.get("base_url"), len(cfg.get("fallback_model") or []))
     return {
         "success": True,
         "name": str(model.get("name") or ""),
@@ -168,6 +231,7 @@ async def clear_model(request: Request):
 
     cfg = _load_config(path)
     cfg.pop("model", None)
+    cfg.pop("fallback_model", None)
     path.write_text(
         yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False),
         encoding="utf-8",

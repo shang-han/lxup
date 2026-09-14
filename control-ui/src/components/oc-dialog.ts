@@ -76,6 +76,8 @@ export class OcDialog extends LitElement {
   `;
 
   @property({ type: Boolean }) open = false;
+  /** 表单类弹框设 true：点击遮罩不关闭，避免误点丢失已填写内容（Esc/取消/× 仍可关） */
+  @property({ type: Boolean }) noBackdropClose = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -94,13 +96,19 @@ export class OcDialog extends LitElement {
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
   }
 
+  /** 仅当点击直接落在遮罩层上才关闭；datasheet/原生弹层等重定向的点击不应误关 */
+  _onBackdropClick = (e: Event) => {
+    if (this.noBackdropClose) return;
+    if (e.target === e.currentTarget) this._close();
+  };
+
   _stopPropagation(e: Event) {
     e.stopPropagation();
   }
 
   render() {
     return html`
-      <div class="dialog-backdrop ${this.open ? 'open' : ''}" @click=${this._close}>
+      <div class="dialog-backdrop ${this.open ? 'open' : ''}" @click=${this._onBackdropClick}>
         <div class="dialog" @click=${this._stopPropagation}>
           <div class="dialog__header">
             <div class="dialog__title"><slot name="title"></slot></div>
