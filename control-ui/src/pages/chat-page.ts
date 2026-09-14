@@ -563,6 +563,8 @@ export class ChatPage extends LitElement {
       }
     }
     await this._loadHistory();
+    // 初始恢复的会话也同步下拉（刷新后不被 localStorage 的全局选择带偏）
+    if (this._sessionKey) this._syncSessionModel(this._sessionKey);
   }
 
   async _loadSessions() {
@@ -650,10 +652,42 @@ export class ChatPage extends LitElement {
   _onSelectModel(e: Event) {
     const key = (e.target as HTMLSelectElement).value;
     const found = this._models.find(m => `${m.providerId}::${m.model}` === key);
-    if (found) {
-      setSelectedModel(found);
-      this._activeModel = found;
-    }
+    if (!found) return;
+    setSelectedModel(found);
+    this._activeModel = found;
+    // OpenClaw：真实会话级切换（sessions.patch；设备缺 operator.admin 时网关会拒绝）
+    const store = getSharedStore();
+    const sid = this._sessionKey || 'agent:main:main';
+    store.request<any>('sessions.patch', { key: sid, model: `${found.providerId}/${found.model}` })
+      .then((r) => {
+        const res = r?.resolved || {};
+        const hit = res.model
+          ? this._models.find(m => m.model === res.model && (!res.modelProvider || m.providerId === res.modelProvider))
+          : found;
+        if (hit) {
+          setSelectedModel(hit);
+          this._activeModel = hit;
+          this._writeSessionModelRecord(sid, { providerId: hit.providerId, model: hit.model });
+        }
+      })
+      .catch((err: unknown) => {
+        this._messages = [...this._messages, {
+          role: 'assistant',
+          text: `⚠️ ${L('chat.modelSwitchFailed')}: ${this._gwErrText(err)}`,
+          ts: Date.now(),
+        }];
+        this._scrollToBottom();
+      });
+  }
+
+  /** GatewayError 的 message 可能是 JSON 串，提取可读信息 */
+  _gwErrText(e: unknown): string {
+    const raw = e instanceof Error ? e.message : String(e);
+    try {
+      const j = JSON.parse(raw) as { message?: string };
+      if (j?.message) return String(j.message);
+    } catch { /* 非 JSON，原样返回 */ }
+    return raw;
   }
 
   // ── 发送 / 流式事件 ──
@@ -831,6 +865,48 @@ export class ChatPage extends LitElement {
     try { if (key) localStorage.setItem(this._sessionStorageKey, key); } catch { /* ignore */ }
   }
 
+  /** 会话级模型选择记录（按引擎隔离）：切模型成功后写入，刷新/切会话后下拉优先恢复。
+   *  网关 sessions.describe 只回 runtime 模型（首轮前为空、切换后是旧值），不能直接当显示源 */
+  get _sessionModelStorageKey(): string { return `lxup.chat.sessionModel.${this.engine}`; }
+  _readSessionModelRecords(): Record<string, { providerId: string; model: string }> {
+    try { return (JSON.parse(localStorage.getItem(this._sessionModelStorageKey) || '{}') || {}) as Record<string, { providerId: string; model: string }>; } catch { return {}; }
+  }
+  _writeSessionModelRecord(sessionKey: string, m: { providerId: string; model: string }) {
+    try {
+      const recs = this._readSessionModelRecords();
+      recs[sessionKey] = m;
+      localStorage.setItem(this._sessionModelStorageKey, JSON.stringify(recs));
+    } catch { /* ignore */ }
+  }
+  _clearSessionModelRecord(sessionKey: string) {
+    try {
+      const recs = this._readSessionModelRecords();
+      if (sessionKey in recs) {
+        delete recs[sessionKey];
+        localStorage.setItem(this._sessionModelStorageKey, JSON.stringify(recs));
+      }
+    } catch { /* ignore */ }
+  }
+  /** 下拉同步为该会话的真实模型：本地切换记录优先，其次网关 runtime 模型（sessions.describe） */
+  _syncSessionModel(key: string) {
+    const rec = this._readSessionModelRecords()[key];
+    if (rec) {
+      const hit = this._models.find(m => m.providerId === rec.providerId && m.model === rec.model);
+      if (hit) { this._activeModel = hit; return; }
+    }
+    if (this.engine !== 'openclaw') return;
+    const store = getSharedStore();
+    store.request<{ session?: Record<string, any> }>('sessions.describe', { key })
+      .then((d) => {
+        const m = typeof d?.session?.model === 'string' ? d.session.model : '';
+        if (!m) return;
+        const [prov, mid] = m.includes('/') ? m.split('/') : ['', m];
+        const hit = this._models.find(x => x.model === mid && (!prov || x.providerId === prov));
+        if (hit) this._activeModel = hit;
+      })
+      .catch(() => { /* 静默：下拉保留当前选择 */ });
+  }
+
   @state() _confirmDeleteId: string | null = null;
   @state() _deleting = false;
 
@@ -852,12 +928,17 @@ export class ChatPage extends LitElement {
       this._streaming = false;
     }
     await this._loadSessions();
+    // 会话已删：清掉它的模型切换记录，避免下拉串会话
+    this._clearSessionModelRecord(id);
     if (wasActive) {
       const next = this._sessions.find(s => s.id !== id);
       const fallback = next?.id || this._engineAdapter.defaultSessionId();
       this._setSessionKey(fallback || '');
       this._messages = [];
-      if (this._sessionKey) await this._loadHistory();
+      if (this._sessionKey) {
+        await this._loadHistory();
+        this._syncSessionModel(this._sessionKey);
+      }
     }
   }
 
@@ -872,6 +953,8 @@ export class ChatPage extends LitElement {
     this._chatCancel?.abort();
     this._chatCancel = null;
     void this._loadHistory();
+    // 下拉同步为该会话的真实模型（本地切换记录 > 网关 runtime）
+    this._syncSessionModel(id);
   }
 
   async _newChat() {
@@ -1316,9 +1399,19 @@ export class ChatPage extends LitElement {
       if (cmd.startsWith('/model ')) {
         const model = cmd.slice('/model '.length).trim();
         if (!model) return;
-        await store.request('sessions.patch', { key: sid, model });
-        note(`✅ /model → ${model}`);
-        void this._refreshModels();
+        const r = await store.request<{ resolved?: Record<string, any> }>('sessions.patch', { key: sid, model });
+        const res = r?.resolved || {};
+        const ref = res.model ? `${res.modelProvider ? `${res.modelProvider}/` : ''}${res.model}` : model;
+        note(`✅ /model → ${ref}`);
+        // 同步本地选中显示（以网关解析结果为准）+ 会话级记录（刷新/切会话后恢复）
+        if (res.model) {
+          const hit = this._models.find(m => m.model === res.model && (!res.modelProvider || m.providerId === res.modelProvider));
+          if (hit) {
+            setSelectedModel(hit);
+            this._activeModel = hit;
+            this._writeSessionModelRecord(sid, { providerId: hit.providerId, model: hit.model });
+          }
+        }
         return;
       }
       if (cmd.startsWith('/think ')) {

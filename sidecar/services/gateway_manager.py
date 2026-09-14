@@ -34,6 +34,17 @@ PROJECT_ROOT = os.path.dirname(_SIDECAR_DIR)
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
+def _resolve_state_dir() -> str:
+    """OpenClaw 状态目录，与 openclaw 自身的路径解析保持一致：
+    OPENCLAW_STATE_DIR（状态目录本体）> OPENCLAW_HOME/.openclaw > ~/.openclaw"""
+    state_env = os.environ.get("OPENCLAW_STATE_DIR")
+    if state_env:
+        return state_env
+    if os.environ.get("OPENCLAW_HOME"):
+        return os.path.join(os.environ["OPENCLAW_HOME"], ".openclaw")
+    return str(Path.home() / ".openclaw")
+
+
 class GatewayManager:
     """管理受管的 OpenClaw 网关进程"""
 
@@ -96,11 +107,62 @@ class GatewayManager:
         reachable, pid = await asyncio.gather(
             self._is_reachable(), self._find_pid_on_port(self.port)
         )
+        # 顺手自愈：网关可达时确保控制台设备持有 operator.admin（会话级切模型需要）
+        if reachable:
+            self.ensure_controlui_admin_scope()
         return {
             "running": reachable,
             "pid": pid,
             "port": self.port,
         }
+
+    def ensure_controlui_admin_scope(self) -> None:
+        """仅网关开启设备鉴权时需要：给控制台引导设备补 operator.admin scope。
+
+        sessions.patch 带 model 字段要求 operator.admin（网关方法作用域 fail-closed），
+        而引导设备默认 profile 只有 approvals/read/talk.secrets/write（引导边界故意
+        不含 admin）。网关每次鉴权都从磁盘读记录，补完控制台重连即生效。
+
+        当 gateway.controlUi.dangerouslyDisableDeviceAuth=true 时，网关完全绕过设备
+        身份（connect 策略 device=null、allowBypass），此补丁无意义，直接跳过。
+        状态目录解析与网关一致（_resolve_state_dir，三段）。
+        """
+        try:
+            state_dir = Path(_resolve_state_dir())
+            # 设备鉴权关闭（本产品默认）→ 控制台不走设备记录，无需补 scope
+            cfg_path = state_dir / "openclaw.json"
+            if cfg_path.exists():
+                try:
+                    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                except Exception:  # noqa: BLE001
+                    cfg = {}
+                if (
+                    isinstance(cfg, dict)
+                    and ((cfg.get("gateway") or {}).get("controlUi") or {}).get("dangerouslyDisableDeviceAuth") is True
+                ):
+                    return
+            p = state_dir / "devices" / "bootstrap.json"
+            if not p.exists():
+                return
+            data = json.loads(p.read_text(encoding="utf-8"))
+            changed = False
+            for dev in data.values():
+                if not isinstance(dev, dict):
+                    continue
+                profile = dev.get("profile")
+                if not isinstance(profile, dict):
+                    continue
+                scopes = profile.get("scopes")
+                if isinstance(scopes, list) and "operator.admin" not in scopes:
+                    scopes.append("operator.admin")
+                    changed = True
+            if changed:
+                p.write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                logger.info("已为控制台设备补充 operator.admin scope: %s", p)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("升级控制台设备 scope 失败: %s", e)
 
     async def _is_reachable(self) -> bool:
         try:
@@ -265,15 +327,8 @@ class GatewayManager:
         def _fallback_cleanup() -> dict:
             done = []
             try:
-                # 与 openclaw 自身的路径解析保持一致：
-                # OPENCLAW_STATE_DIR（状态目录本体）> OPENCLAW_HOME/.openclaw > ~/.openclaw
-                state_env = os.environ.get("OPENCLAW_STATE_DIR")
-                if state_env:
-                    home = state_env
-                elif os.environ.get("OPENCLAW_HOME"):
-                    home = os.path.join(os.environ["OPENCLAW_HOME"], ".openclaw")
-                else:
-                    home = str(Path.home() / ".openclaw")
+                # 与 openclaw 自身的路径解析保持一致（三段，见 _resolve_state_dir）
+                home = _resolve_state_dir()
                 cfg_path = Path(home) / "openclaw.json"
                 try:
                     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))

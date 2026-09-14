@@ -337,7 +337,7 @@ export class ModelsPage extends LitElement {
     .fetch-msg-err { color: var(--danger); }
 
     /* === confirm dialog === */
-    .confirm-msg { font-size: 13px; color: var(--text); line-height: 1.7; padding: 4px 0; }
+    .confirm-msg { font-size: 13px; color: var(--text); line-height: 1.7; padding: 4px 0; white-space: pre-wrap; }
     .btn-danger {
       background: var(--danger) !important; color: #fff !important; border-color: var(--danger) !important;
     }
@@ -1033,12 +1033,18 @@ export class ModelsPage extends LitElement {
 
   // ── 服务商：删除 / 清空 ─────────────────────────────
 
-  _askDeleteProvider(id: string) {
+  async _askDeleteProvider(id: string) {
     const p = this._providers.find(x => x.id === id);
     if (!p) return;
+    // 该服务商下所有模型的会话引用数
+    let n = 0;
+    if (!this._isHermes) {
+      for (const m of p.models) n += await this._sessionsUsingModel(id, m.id);
+    }
     this._confirm = {
       title: L('models.deleteProviderTitle'),
-      message: L('models.deleteProviderConfirm', { name: p.name, count: p.models.length }),
+      message: L('models.deleteProviderConfirm', { name: p.name, count: p.models.length })
+        + (n > 0 ? `\n\n${L('models.sessionsUsingModel', { count: n })}` : ''),
       onConfirm: () => {
         this._providers = this._providers.filter(x => x.id !== id);
         this._pendingDeletes.add(id);
@@ -1092,15 +1098,42 @@ export class ModelsPage extends LitElement {
     this._save();
   }
 
-  _deleteModel(providerId: string, modelId: string) {
-    // 删除的若是主模型，网关侧引用一并清除（保存时按当前状态重算引用）
-    this._providers = this._providers.map(p => {
-      if (p.id !== providerId) return p;
-      const models = p.models.filter(m => m.id !== modelId);
-      return { ...p, models };
-    });
-    this.requestUpdate();
-    this._save();
+  async _deleteModel(providerId: string, modelId: string) {
+    // 有会话正在用该模型时先预警（sessions.list 返回 effective model，已含粘性 override）
+    const n = await this._sessionsUsingModel(providerId, modelId);
+    const doDelete = () => {
+      // 删除的若是主模型，网关侧引用一并清除（保存时按当前状态重算引用）
+      this._providers = this._providers.map(p => {
+        if (p.id !== providerId) return p;
+        const models = p.models.filter(m => m.id !== modelId);
+        return { ...p, models };
+      });
+      this.requestUpdate();
+      this._save();
+    };
+    if (n > 0) {
+      this._confirm = {
+        title: L('models.deleteModelTitle'),
+        message: `${L('models.deleteModelConfirm', { model: modelId })}\n\n${L('models.sessionsUsingModel', { count: n })}`,
+        onConfirm: doDelete,
+      };
+      return;
+    }
+    doDelete();
+  }
+
+  /** 统计正在使用某模型的会话数（OpenClaw sessions.list 的 effective model，已含粘性 override） */
+  async _sessionsUsingModel(providerId: string, modelId: string): Promise<number> {
+    if (this._isHermes) return 0;  // Hermes 全局单配置，删除即整体生效，无会话级引用
+    const store = getSharedStore();
+    if (!store.connected) return 0;
+    try {
+      const r = await store.request<{ sessions?: Array<Record<string, any>> }>('sessions.list', {});
+      return (r?.sessions || []).filter((s) =>
+        String(s?.model ?? '') === modelId
+        && (!String(s?.modelProvider ?? '') || String(s.modelProvider) === providerId)
+      ).length;
+    } catch { return 0; }
   }
 
   _addInlineModel(providerId: string) {
