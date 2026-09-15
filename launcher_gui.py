@@ -360,6 +360,28 @@ class UpdateManager:
             try: shutil.rmtree(os.path.dirname(zp))
             except Exception: pass
 
+    def maybe_update_launcher(self, data):
+        """清单里带 launcher 包时下载新 exe 到 .new 文件（自更新协议的 exe 部分）。
+
+        正在运行的 exe 无法覆盖，.new 由启动器退出时的替换助手接管：
+        旧 exe → .old 备份 → .new 改名上位（失败自动回滚）。"""
+        lp = data.get("launcher") or {}
+        url = lp.get("url", "")
+        if not url:
+            return
+        self.log("  📦 正在下载启动器更新...")
+        tmp = self.download_file(url, lp.get("sha256", ""), lp.get("size", 0))
+        if not tmp:
+            self.log("  ⚠️ 启动器下载失败（不影响本次产品更新，可稍后手动替换 exe）")
+            return
+        try:
+            new_path = os.path.join(ROOT, "LXUP启动器.exe.new")
+            shutil.copyfile(tmp, new_path)
+            self.log("  ✅ 启动器更新包已就绪，关闭启动器后自动替换")
+        finally:
+            try: shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
+            except Exception: pass
+
 # ─────────────────────────────────────────────────────────────
 #  现代化启动器 UI（原生 Tk 控件版：低 CPU / 低延迟）
 # ─────────────────────────────────────────────────────────────
@@ -1095,7 +1117,12 @@ class LauncherApp:
                     if not um.apply_update(tmp, False): self._log("  ❌ 补丁应用失败"); self._ui(self._restore); return
                     self._log(f"  ✅ 补丁 {step.get('from')} → {step.get('to')} 已应用")
                 self._save_ver(data.get("version", ""))
-                self._log(f"  🎉 更新完成！新版本：v{data.get('version')}"); self._ui(self._done); return
+                self._log(f"  🎉 更新完成！新版本：v{data.get('version')}")
+                try:
+                    um.maybe_update_launcher(data)
+                except Exception as e:
+                    self._log(f"  ⚠️ 启动器更新处理失败: {e}")
+                self._ui(self._done); return
             else:
                 pkg = pkgs.get("full", {}); url = pkg.get("url", ""); sha = pkg.get("sha256", "")
             if not url: self._log("  ❌ 未找到更新包地址"); self._ui(self._restore); return
@@ -1104,6 +1131,10 @@ class LauncherApp:
             if um.apply_update(tmp, True):
                 self._save_ver(data.get("version", ""))
                 self._log(f"  🎉 更新完成！新版本：v{data.get('version')}"); self._log("  🔄 请关闭并重新启动启动器")
+                try:
+                    um.maybe_update_launcher(data)
+                except Exception as e:
+                    self._log(f"  ⚠️ 启动器更新处理失败: {e}")
                 self._ui(self._done)
             else:
                 self._log("  ❌ 更新失败"); self._ui(self._restore)
@@ -1127,7 +1158,11 @@ class LauncherApp:
     def _done(self):
         self._restore(); self.vi = load_version(); self.vs = self.vi.get("version", "unknown")
         self._ft.configure(text=f"版本 {self.vs} | 更新完成，请重启")
-        messagebox.showinfo("更新完成", f"已更新到 v{self.vs}\n请关闭并重新启动启动器。", parent=self.root)
+        pending = os.path.isfile(os.path.join(ROOT, "LXUP启动器.exe.new"))
+        msg = f"已更新到 v{self.vs}\n请关闭并重新启动启动器。"
+        if pending:
+            msg = f"已更新到 v{self.vs}\n关闭本窗口后将自动替换启动器程序，随后请重新打开启动器。"
+        messagebox.showinfo("更新完成", msg, parent=self.root)
 
     # ── 轻量动画：只改 Label 文字/颜色，不重绘 Canvas ─────
     def _logo_float(self):
@@ -1206,6 +1241,43 @@ class LauncherApp:
             self.root.mainloop()
         finally:
             self._poll_stop = True
+            self._swap_launcher_if_pending()
+
+    def _swap_launcher_if_pending(self):
+        """退出时若存在待替换的 LXUP启动器.exe.new，派发无窗口助手完成替换：
+        等本进程释放 exe 文件锁 → 旧 exe 备份为 .old → .new 改名上位（失败回滚）。
+        助手由 cmd 循环重试，不阻塞本进程退出。"""
+        new_path = os.path.join(ROOT, "LXUP启动器.exe.new")
+        if not os.path.isfile(new_path):
+            return
+        # 纯 ASCII 脚本：用通配符解析出中文文件名（LXUP*.exe 只命中 LXUP启动器.exe，
+        # .new/.old 以 .new/.old 结尾不会被误匹配），不依赖 cmd 代码页。
+        bat = (
+            '@echo off\r\n'
+            'for %%f in ("%~dp0LXUP*.exe") do set "E=%%f"\r\n'
+            'for %%f in ("%~dp0LXUP*.exe.new") do set "N=%%f"\r\n'
+            'set "O=%E%.old"\r\n'
+            ':loop\r\n'
+            'timeout /t 1 /nobreak >nul\r\n'
+            'if not exist "%N%" goto end\r\n'
+            'move /y "%E%" "%O%" >nul 2>&1 || goto loop\r\n'
+            'move /y "%N%" "%E%" >nul 2>&1 || goto restore\r\n'
+            'del "%O%" >nul 2>&1\r\n'
+            'goto end\r\n'
+            ':restore\r\n'
+            'move /y "%O%" "%E%" >nul 2>&1\r\n'
+            'goto loop\r\n'
+            ':end\r\n'
+        )
+        try:
+            helper = os.path.join(ROOT, "_swap_launcher.bat")
+            with open(helper, "w", encoding="utf-8") as f:
+                f.write(bat)
+            subprocess.Popen(["cmd", "/c", helper], cwd=ROOT,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, creationflags=DETACHED)
+        except Exception as e:
+            self._log(f"  ⚠️ 启动器替换助手启动失败: {e}")
 def main():
     if not acquire_lock():
         messagebox.showwarning("LXUP 启动器", "另一个启动器实例正在运行，请勿重复启动。"); return 1
