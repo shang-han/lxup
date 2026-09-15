@@ -178,7 +178,8 @@ class ServiceManager:
             if proc is None:
                 self.progress(name, "error"); return False
             if not self.wait_for_port(port, proc, timeout):
-                self.log(f"  ❌ {name} 未在端口 {port} 上监听")
+                state = "进程已退出" if proc.poll() is not None else f"等待 {timeout}s 超时"
+                self.log(f"  ❌ {name} 未在端口 {port} 上监听（{state}，日志: runtime/logs/{lf}）")
                 self.progress(name, "error"); self.stop_all(); return False
             self.log(f"  ✅ {name} 就绪: 127.0.0.1:{port}")
             self.progress(name, "running"); return True
@@ -192,6 +193,17 @@ class ServiceManager:
             if not launch("OpenClaw", [NODE, OPENCLAW_ENTRY, "gateway", "--port", "18789", "--force"],
                           cwd=ROOT, se=ge, lf="openclaw-gateway.log", port=18789, timeout=120): return False
         hh = os.path.join(RUNTIME, "hermes-home"); os.makedirs(hh, exist_ok=True)
+        # Hermes 启动前清理残留锁文件：上次强杀未清时 --replace 路径会偶发失败。
+        # 仅当 8642 无监听（无存活实例）才删，有存活实例则留给 --replace 处理。
+        if not port_open(8642):
+            for _stale in ("gateway.pid", "gateway.lock"):
+                _fp = os.path.join(hh, _stale)
+                if os.path.isfile(_fp):
+                    try:
+                        os.unlink(_fp)
+                        self.log(f"  🧹 清理残留 {_stale}")
+                    except Exception:
+                        pass
         he = dict(env)
         he["PATH"] = os.pathsep.join([os.path.dirname(NODE), os.path.dirname(py), he.get("PATH", "")])
         he.update({"HERMES_HOME": hh, "PYTHONPATH": os.path.join(RUNTIME, "hermes-libs"),
@@ -199,7 +211,7 @@ class ServiceManager:
                    "API_SERVER_PORT": "8642", "API_SERVER_KEY": "lxup-hermes-dev-2026",
                    "API_SERVER_CORS_ORIGINS": "*"})
         if not launch("Hermes", [py, "-m", "hermes_cli.main", "gateway", "run", "--replace"],
-                      cwd=ROOT, se=he, lf="hermes-gateway.log", port=8642): return False
+                      cwd=ROOT, se=he, lf="hermes-gateway.log", port=8642, timeout=120): return False
         if not launch("AI Assistant", [NODE, "server.js"], cwd=os.path.join(ROOT, "ai-assistant"),
                       se=env, lf="ai-assistant.log", port=8080): return False
         if not launch("Frontend", [NODE, VITE_JS], cwd=os.path.join(ROOT, "control-ui"),

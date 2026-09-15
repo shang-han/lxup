@@ -287,6 +287,14 @@ taskkill /PID 查到的数字 /T /F</pre>
 <h3>故障⑦ 浏览器自动化检测不到 Chrome</h3>
 <div class="card">浏览器自动化不内置浏览器，复用电脑上已有的 Chrome / Edge 等 Chrome 系浏览器。检测页提示找不到时，安装一个 Chrome 或 Edge 即可。</div>
 
+<h3>故障⑧ 启动器提示「Hermes 未在端口 8642 上监听」</h3>
+<div class="card">
+<ul>
+<li>提示「<strong>进程已退出</strong>」：Hermes 启动后崩溃了，打开 <code>runtime\logs\hermes-gateway.log</code> 看末尾的报错定位原因。</li>
+<li>提示「<strong>等待超时</strong>」：冷启动慢（U 盘读取慢、杀毒软件扫描），重试一次通常就好。</li>
+</ul>
+</div>
+
 <h2 id="c8">八、终极办法与求助</h2>
 <div class="card">
   <ol>
@@ -583,7 +591,7 @@ taskkill /PID 查到的数字 /T /F</pre>
   <p class="muted">日常建议：工作区可写 + 按需询问；页面上方「保存」「刷新」，右侧「当前配置」回显模型 / 工作目录 / Key 状态。</p>
 </div>
 
-<footer>龙虾U盘（LXUP）· 使用说明 · 更新于 2026-09-10</footer>
+<footer>龙虾U盘（LXUP）· 使用说明 · 更新于 2026-09-15</footer>
 </div>
 
 <script>

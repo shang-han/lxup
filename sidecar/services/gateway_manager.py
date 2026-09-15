@@ -107,9 +107,10 @@ class GatewayManager:
         reachable, pid = await asyncio.gather(
             self._is_reachable(), self._find_pid_on_port(self.port)
         )
-        # 顺手自愈：网关可达时确保控制台设备持有 operator.admin（会话级切模型需要）
+        # 顺手自愈：网关可达时补产品默认配置（幂等，均不覆盖用户显式配置）
         if reachable:
             self.ensure_controlui_admin_scope()
+            self.ensure_memory_search_disabled()
         return {
             "running": reachable,
             "pid": pid,
@@ -163,6 +164,40 @@ class GatewayManager:
                 logger.info("已为控制台设备补充 operator.admin scope: %s", p)
         except Exception as e:  # noqa: BLE001
             logger.warning("升级控制台设备 scope 失败: %s", e)
+
+    def ensure_memory_search_disabled(self) -> None:
+        """产品默认禁用记忆检索嵌入（DeepSeek 无嵌入接口，缺省时上游默认开启）。
+
+        agents.defaults.memorySearch 字段缺失/null/空对象时补写 enabled=false；
+        用户显式配置过（如 enabled:true 或设了 provider）则不覆盖。幂等，可随
+        status 轮询自愈——覆盖新 U 盘首启生成默认配置、老版本出货等场景。
+        """
+        try:
+            state_dir = Path(_resolve_state_dir())
+            p = state_dir / "openclaw.json"
+            if not p.exists():
+                return
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return
+            agents = data.get("agents")
+            if not isinstance(agents, dict):
+                agents = {}
+                data["agents"] = agents
+            defaults = agents.get("defaults")
+            if not isinstance(defaults, dict):
+                defaults = {}
+                agents["defaults"] = defaults
+            ms = defaults.get("memorySearch")
+            absent = ms is None or (isinstance(ms, dict) and not ms)
+            if absent:
+                defaults["memorySearch"] = {"enabled": False}
+                p.write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                logger.info("已补写产品默认: agents.defaults.memorySearch.enabled=false (%s)", p)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("补写 memorySearch 默认配置失败: %s", e)
 
     async def _is_reachable(self) -> bool:
         try:
