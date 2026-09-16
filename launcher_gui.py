@@ -354,6 +354,10 @@ class UpdateManager:
             self.prog(100, "解压完成")
             self.log("  ✅ 更新包解压完成")
             return True
+        except PermissionError as e:
+            self.log(f"  ❌ 解压更新包失败: {e}")
+            self.log("  💡 文件被占用（服务未完全退出）。请点击「停止全部」后再重试更新。")
+            return False
         except Exception as e:
             self.log(f"  ❌ 解压更新包失败: {e}"); return False
         finally:
@@ -1086,7 +1090,7 @@ class LauncherApp:
                 elif pc and pc[0].get("from") == self.vs and len(pc) <= 3: ut = "chain"
                 else: ut = "full"
                 mm = {"full": "全量下载", "patch": "增量更新", "chain": f"增量链（{len(pc)} 步）"}
-                msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}"
+                msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}\n\n注意：更新时会自动停止所有服务，完成后请重新启动。"
                 if messagebox.askyesno("发现新版本", msg, parent=self.root): self._do_update(ut, data)
             self._ui(_review)
         threading.Thread(target=_do, daemon=True).start()
@@ -1106,9 +1110,20 @@ class LauncherApp:
         self._bs.set_enabled(False); self._bk.set_enabled(False); self._bu.set_enabled(False)
         def _do():
             um = UpdateManager(self.vi, self._log, self._prog); pkgs = data.get("packages", {})
+
+            def _stop_services_for_update():
+                # 运行中的服务会锁住待覆盖文件（如 vite 的 esbuild.exe），
+                # 解压前必须停服；更新完成后用户重启启动器再一键启动。
+                self._log("  🛑 正在停止服务以完成更新...")
+                try:
+                    self.svc.stop_all()
+                except Exception as e:
+                    self._log(f"  ⚠️ 停止服务失败: {e}")
+
             if ut == "patch":
                 pkg = pkgs.get("patch", {}); url = pkg.get("url", ""); sha = pkg.get("sha256", "")
             elif ut == "chain":
+                _stop_services_for_update()
                 for step in pkgs.get("patch_chain", []):
                     url = step.get("url", ""); sha = step.get("sha256", "")
                     self._log(f"  📦 正在应用补丁 {step.get('from')} → {step.get('to')}...")
@@ -1128,6 +1143,7 @@ class LauncherApp:
             if not url: self._log("  ❌ 未找到更新包地址"); self._ui(self._restore); return
             tmp = um.download_file(url, sha, pkg.get("size", 0))
             if not tmp: self._log("  ❌ 下载失败"); self._ui(self._restore); return
+            _stop_services_for_update()
             if um.apply_update(tmp, True):
                 self._save_ver(data.get("version", ""))
                 self._log(f"  🎉 更新完成！新版本：v{data.get('version')}"); self._log("  🔄 请关闭并重新启动启动器")
@@ -1268,6 +1284,7 @@ class LauncherApp:
             'move /y "%O%" "%E%" >nul 2>&1\r\n'
             'goto loop\r\n'
             ':end\r\n'
+            'del "%~f0" >nul 2>&1\r\n'
         )
         try:
             helper = os.path.join(ROOT, "_swap_launcher.bat")
