@@ -1090,7 +1090,7 @@ class LauncherApp:
                 elif pc and pc[0].get("from") == self.vs and len(pc) <= 3: ut = "chain"
                 else: ut = "full"
                 mm = {"full": "全量下载", "patch": "增量更新", "chain": f"增量链（{len(pc)} 步）"}
-                msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}\n\n注意：更新时会自动停止所有服务，完成后请重新启动。"
+                msg = f"发现新版本：{sv}\n\n当前版本：{self.vs}\n更新方式：{mm.get(ut, ut)}\n\n更新内容：\n{cl}\n\n注意：更新时会自动停止所有服务，完成后请重新启动。若更新失败提示文件被占用，请先点「停止全部」再更新。"
                 if messagebox.askyesno("发现新版本", msg, parent=self.root): self._do_update(ut, data)
             self._ui(_review)
         threading.Thread(target=_do, daemon=True).start()
