@@ -32,6 +32,7 @@ export class CodexPage extends LitElement {
   @state() _status = { installed: false, version: '', hasKey: false, loaded: false };
   @state() _saving = false;
   @state() _saveMsg = '';
+  @state() _saveError = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -60,6 +61,7 @@ export class CodexPage extends LitElement {
   async _save() {
     this._saving = true;
     this._saveMsg = '';
+    this._saveError = false;
     try {
       // 只保存连接配置；沙箱模式/审批策略由「沙箱配置」页负责（同为 /api/codex/config，
       // 字段缺席时 Sidecar 不改动对应项）
@@ -70,17 +72,19 @@ export class CodexPage extends LitElement {
         model: this._config.model,
       });
       if (r.success) {
-        this._saveMsg = '✓ ' + L('common.save');
+        this._saveMsg = L('common.saved');
         void this._loadAll();
       } else {
-        this._saveMsg = '✗ ' + (r.message || 'error');
+        this._saveMsg = r.message || 'error';
+        this._saveError = true;
       }
     } catch (e) {
-      this._saveMsg = '✗ ' + (e instanceof Error ? e.message : String(e));
+      this._saveMsg = e instanceof Error ? e.message : String(e);
+      this._saveError = true;
     }
     this._saving = false;
     this.requestUpdate();
-    setTimeout(() => { this._saveMsg = ''; this.requestUpdate(); }, 3000);
+    setTimeout(() => { this._saveMsg = ''; this._saveError = false; this.requestUpdate(); }, 3000);
   }
 
   _resetDefaults() {
@@ -104,7 +108,9 @@ export class CodexPage extends LitElement {
 
       <div class="page-toolbar-lg">
         <div class="cdx-toolbar">
-          <button class="btn-save" ?disabled=${this._saving} @click=${this._save}>${icons['check']} ${this._saveMsg || L('common.save')}</button>
+          <button class="btn-save ${this._saveError ? 'error' : ''}" ?disabled=${this._saving} @click=${this._save}>
+            ${this._saveError ? icons['alert-triangle'] : icons['check']} ${this._saveMsg || L('common.save')}
+          </button>
           <button class="btn-reset" @click=${this._resetDefaults}>
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             ${L('common.resetDefaults')}

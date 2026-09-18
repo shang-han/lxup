@@ -216,6 +216,8 @@ export class OpenClawApp extends LitElement {
     }
     .cdx-toolbar .btn-save:hover { background: var(--accent-hover); }
     .cdx-toolbar .btn-save:disabled { opacity: 0.6; cursor: default; }
+    .cdx-toolbar .btn-save.error { background: var(--danger); }
+    .cdx-toolbar .btn-save.error:hover { background: var(--danger); }
     .cdx-toolbar .btn-reset {
       padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px;
       font-weight: 500; border: 1px solid var(--border); cursor: pointer;
