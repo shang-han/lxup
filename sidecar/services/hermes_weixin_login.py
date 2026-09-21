@@ -20,6 +20,8 @@ import sys
 
 import qrcode
 
+from ..platform import portable_python
+
 logger = logging.getLogger(__name__)
 
 # 登录输出里的微信授权链接（二维码编码的就是它）
@@ -47,13 +49,8 @@ def make_qr_data_url(url: str) -> str:
 
 
 def _portable_python() -> str | None:
-    """便携 Python：runtime/python/cpython-*/python.exe"""
-    import glob
-    matches = glob.glob(os.path.join(PROJECT_ROOT, "runtime", "python", "cpython-*", "python.exe"))
-    if not matches:
-        return None
-    matches.sort(key=len)
-    return matches[-1]
+    """便携 Python：runtime/python/cpython-*（平台差异见 sidecar/platform.py）"""
+    return portable_python(PROJECT_ROOT)
 
 
 def _hermes_cli_main() -> str:

@@ -48,17 +48,20 @@
 │   └── logs/          各服务日志
 ├── scripts/           维护脚本
 │   ├── apply_hermes_patches.py Hermes 补丁脚本
-│   └── build-portable.ps1      便携包构建脚本
-├── LXUP启动器.exe     一键启动入口（GUI 启动器）
-├── start-all.bat      启动全部服务（转调 launcher_gui.py，与 LXUP启动器.exe 同一套单实例逻辑）
-├── stop-all.bat       停止全部服务（按 LXUP 端口终止进程树）
-├── launcher_gui.py    启动器 GUI 源码（Tkinter v3，单实例锁端口 :47889，逐个等待各服务端口就绪）
+│   ├── build-portable.ps1      便携包构建脚本（Windows）
+│   └── build-portable.sh       便携包构建脚本（macOS）
+├── LXUP启动器.exe     一键启动入口（Windows GUI 启动器）
+├── LXUP.app           macOS 启动器（双击即用、无终端，等价 exe）
+├── start-all.bat / start-hermes.bat    Windows 启动脚本
+├── stop-all.bat       Windows 停止全部服务（按 LXUP 端口终止进程树）
+├── stop-all.sh        macOS 停止全部服务（按 LXUP 端口终止进程树）
+├── launcher_gui.py    启动器 GUI 源码（Tkinter v3，跨平台；单实例锁端口 :47889，逐个等待各服务端口就绪）
 ├── 龙虾U盘使用说明.html 便携 U 盘离线使用说明
 ├── LXUP-icon.ico      启动器 / 便携包图标
 ├── .sidecar.ready     Sidecar 就绪标记
 ├── .gitignore         Git 忽略规则（runtime 等不入库）
-├── bootstrap-openclaw.bat / bootstrap-hermes.bat / bootstrap-codex.bat   三引擎便携运行时引导（一次性，需联网）
-├── start-hermes.bat   单独启动 Hermes 网关
+├── bootstrap-openclaw.bat / bootstrap-hermes.bat / bootstrap-codex.bat   三引擎便携运行时引导（Windows，一次性，需联网）
+├── bootstrap-openclaw.sh / bootstrap-hermes.sh / bootstrap-codex.sh      三引擎便携运行时引导（macOS，一次性，需联网）
 └── README.md
 ```
 
@@ -191,6 +194,33 @@ cd control-ui && npm run dev
 > `localStorage.removeItem('openclaw.gateway.url'); location.reload()`
 
 > **微信扫码登录**依赖 Sidecar（:7889）。若提示"无法连接登录服务"，确认 Sidecar 窗口在运行（或重新跑 start-all.bat）。
+
+## Mac 版（macOS）
+
+Mac 版与 Windows 版共用同一套代码（前端 / sidecar / 三引擎运行时 / 技能包完全一致），
+差异只在「启动入口」和「脚本」两个平台壳：
+
+- **启动入口**：双击 `LXUP.app`（等价 Windows 的 `LXUP启动器.exe`），直接打开启动器窗口、不开终端。
+  服务启停、单实例、日志逻辑与 Windows 版一致。首次双击若提示「无法验证开发者」，右键 → 打开（正式签名后不再出现）。
+- **脚本**（与 Windows 的 .bat 同逻辑）：
+
+| macOS | Windows | 用途 |
+|---|---|---|
+| `bootstrap-openclaw.sh` | `bootstrap-openclaw.bat` | 构建 OpenClaw 运行时 |
+| `bootstrap-hermes.sh` | `bootstrap-hermes.bat` | 构建 Hermes 运行时 |
+| `bootstrap-codex.sh` | `bootstrap-codex.bat` | 构建 Codex 运行时 |
+| `stop-all.sh` | `stop-all.bat` | 按端口停止全部服务 |
+
+**三引擎版本号在 bootstrap 脚本顶部统一锁定，与 Windows 版一致**：openclaw `2026.7.1-2`、
+hermes-agent `0.18.2`、codex `0.145.0`。升级产品时三者一起改、一起测、一起发。
+
+**开发者重新构建运行时**需要 `uv`（`brew install uv`）；便携 Node 会打包进 `runtime/data/node`，
+开发机无便携 node 时会回退系统 node。
+
+**macOS 特有注意事项**：
+1. **TCC 隐私保护**：macOS 保护「桌面 / 文稿 / 下载 / U盘」等位置，ad-hoc 签名的 `.app` 访问会被静默拒绝（`Operation not permitted`）。请把便携包放在**主目录等非保护位置**运行；正式签名 + 公证后才会有授权弹框。
+2. **Gatekeeper**：从网上下载的 zip 解压后，首次打开需右键 → 打开；正式签名 + 公证后直接放行。
+3. **正式签名 + 公证**：最终交付前需用 Apple 开发者账号对 `LXUP.app` 签名并公证（`codesign` + `notarytool`，见 `scripts/build-portable.sh` 注释）。
 
 ## 微信扫码登录
 

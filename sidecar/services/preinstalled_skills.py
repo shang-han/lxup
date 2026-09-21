@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from .skills_scan import parse_skill_md, scan_skills
+from ..platform import portable_python
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +69,7 @@ def _skills_dir() -> Path:
 
 def _portable_python() -> str:
     """便携解释器（同启动脚本规则：runtime/python 下最后一个 cpython-*）；找不到时回退当前解释器"""
-    base = _PROJECT_ROOT / "runtime" / "python"
-    if base.is_dir():
-        cands = sorted(d for d in base.iterdir() if d.name.startswith("cpython-"))
-        if cands:
-            exe = cands[-1] / "python.exe"
-            if exe.is_file():
-                return str(exe)
-    return sys.executable
+    return portable_python(str(_PROJECT_ROOT)) or sys.executable
 
 
 # requires 里的 PyPI 包名 → 实际 import 名

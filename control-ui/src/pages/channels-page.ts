@@ -1001,7 +1001,7 @@ export class ChannelsPage extends LitElement {
   _renderLiveChannelCard(id: string) {
     const ch = this._liveChannels[id] || {};
     const accounts = this._bindAccounts[id] || [];
-    const running = !!ch.running;
+    const running = !!ch.running || accounts.some(a => a.running);
     const dialogId = id === 'openclaw-weixin' ? 'wechat' : id;
     const iconName = id === 'openclaw-weixin' ? 'message-circle' : 'hash';
     return html`

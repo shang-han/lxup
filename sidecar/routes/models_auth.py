@@ -13,16 +13,14 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..platform import node_exe
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/models/auth", tags=["models-auth"])
 
 _SERVICES_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROJECT_ROOT = os.path.dirname(_SERVICES_DIR)
-
-
-def _node_exe() -> str:
-    return os.path.join(_PROJECT_ROOT, "runtime", "data", "node.exe")
 
 
 def _oc_entry() -> str:
@@ -55,7 +53,7 @@ async def set_api_key(request: Request, body: SetKeyRequest):
     if not api_key:
         return {"ok": False, "error": "apiKey is required"}
 
-    node = _node_exe()
+    node = node_exe(_PROJECT_ROOT)
     entry = _oc_entry()
     if not os.path.isfile(node) or not os.path.isfile(entry):
         raise HTTPException(status_code=503, detail="OpenClaw runtime not found")

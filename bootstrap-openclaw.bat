@@ -9,6 +9,7 @@ REM  NOTE: ASCII-only on purpose - see start-all.bat.
 REM ============================================================
 cd /d "%~dp0"
 set "ROOT=%CD%"
+set "OPENCLAW_VERSION=2026.7.1-2"
 
 if not exist "%ROOT%\runtime\data\node.exe" (
   echo [ERROR] runtime\data\node.exe not found. Place portable node v24.15.0+ first.
@@ -20,8 +21,8 @@ echo === Portable node version ===
 "%ROOT%\runtime\data\node.exe" --version
 
 echo.
-echo === Installing openclaw into runtime\openclaw - slow the first time ===
-npm install openclaw --prefix "%ROOT%\runtime\openclaw" --no-audit --no-fund
+echo === Installing openclaw@%OPENCLAW_VERSION% into runtime\openclaw - slow the first time ===
+npm install openclaw@%OPENCLAW_VERSION% --prefix "%ROOT%\runtime\openclaw" --no-audit --no-fund
 if errorlevel 1 (
   echo [ERROR] openclaw install failed
   pause

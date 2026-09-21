@@ -111,7 +111,7 @@
   <div class="part">通用</div>
   <a href="#c1">一、产品介绍</a>
   <a href="#c2">二、使用前的准备</a>
-  <a href="#c3">三、启动：只认 exe</a>
+  <a href="#c3">三、启动（Windows/Mac）</a>
   <a href="#c4">四、第一次使用：激活</a>
   <a href="#c5">五、端口一览表</a>
   <a href="#c6">六、正常关闭与重启</a>
@@ -167,12 +167,12 @@
 
 <h2 id="c2">二、使用前的准备</h2>
 <ol>
-  <li>把 U 盘插到电脑上，直接运行盘里的 <code>LXUP启动器.exe</code>。</li>
+  <li>把 U 盘插到电脑上，直接运行盘里的 <code>LXUP启动器.exe</code>（Windows）/ <code>LXUP.app</code>（Mac）。</li>
   <li>杀毒软件可能把便携版 Python / Node 误报拦截。若服务起不来，把 U 盘目录加入<strong>白名单/信任区</strong>后重试。</li>
   <li>日常打开控制台<strong>不联网也行</strong>；AI 对话、微信扫码、补装插件、技能市场需要网络。</li>
 </ol>
 
-<h2 id="c3">三、启动：只认 LXUP启动器.exe</h2>
+<h2 id="c3">三、启动：Windows 认 exe · Mac 认 LXUP.app</h2>
 <div class="card">
   <ol>
     <li>打开文件夹，<strong>双击 <code>LXUP启动器.exe</code></strong> —— 这是<strong>唯一入口</strong>。</li>
@@ -217,6 +217,17 @@
     </ul>
     <p class="muted">自检只校验前端模块与授权状态；引擎（OpenClaw / Hermes）未启动不阻塞进入控制台，可在控制台内按需启动。</p>
   </div>
+</div>
+
+<h3 id="c3m">Mac 版补充（macOS 用户看这里）</h3>
+<div class="card">
+  <ol>
+    <li><strong>入口是 <code>LXUP.app</code></strong>：Mac 上双击 <code>LXUP.app</code>（不是 exe），会弹出启动器窗口，点「一键启动」即可，浏览器同样自动打开 <code>http://localhost:5173</code>。</li>
+    <li><strong>首次打开被拦</strong>：若提示「无法验证开发者」，<strong>右键 LXUP.app → 打开</strong>（正式签名后不再出现）。</li>
+    <li><strong>别放在桌面 / 下载 / U盘里运行</strong>：macOS 隐私保护（TCC）会拦截未授权应用读取这些位置，导致报「未找到便携 Python/Node」或服务起不来。请把整个文件夹放到<strong>主目录</strong>等普通位置再运行。</li>
+    <li><strong>停止服务</strong>：关闭启动器窗口不会停服务（服务是独立进程）；在启动器里点「停止全部」，或运行 <code>stop-all.sh</code>。</li>
+    <li>其余操作（激活、模型配置、微信扫码、聊天）与 Windows 版完全一致。</li>
+  </ol>
 </div>
 
 <h2 id="c4">四、第一次使用：激活</h2>
@@ -302,7 +313,7 @@ taskkill /PID 查到的数字 /T /F</pre>
     <li>还不行：<strong>重启电脑</strong>再双击 exe，能清空一切端口占用。</li>
     <li>仍不行：把文件夹路径、现象、<code>runtime\logs</code> 里最新日志发给提供方。</li>
   </ol>
-  <div class="ok">口诀：<strong>插盘直接跑、入口只认 exe、关机用 stop-all、一台电脑一份龙虾。</strong></div>
+  <div class="ok">口诀：<strong>插盘直接跑、入口认 exe / Mac 认 app、关机用 stop-all、一台电脑一份龙虾。</strong></div>
 </div>
 
 <!-- ══════════════ OpenClaw ══════════════ -->

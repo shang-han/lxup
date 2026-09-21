@@ -22,6 +22,7 @@ from pathlib import Path
 import httpx
 
 from ..config import GatewayConfig
+from ..platform import find_pid_on_port, kill_pid, node_exe, spawn_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,6 @@ logger = logging.getLogger(__name__)
 _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
 _SIDECAR_DIR = os.path.dirname(_SERVICES_DIR)
 PROJECT_ROOT = os.path.dirname(_SIDECAR_DIR)
-
-# Windows 进程创建标志：新建进程组，使其不随 sidecar 退出而被连带结束
-CREATE_NEW_PROCESS_GROUP = 0x00000200
-
 
 def _resolve_state_dir() -> str:
     """OpenClaw 状态目录，与 openclaw 自身的路径解析保持一致：
@@ -54,10 +51,8 @@ class GatewayManager:
         self.cmd = config.openclaw_cmd
         # Prevent concurrent UI requests from killing/restarting the same gateway.
         self._operation_lock = asyncio.Lock()
-        # 便携运行：项目内 node.exe + 打包的 openclaw（留空用默认路径）
-        self._node_exe = config.openclaw_node or os.path.join(
-            PROJECT_ROOT, "runtime", "data", "node.exe"
-        )
+        # 便携运行：项目内 node + 打包的 openclaw（留空用默认路径）
+        self._node_exe = config.openclaw_node or node_exe(PROJECT_ROOT)
         self._oc_entry = config.openclaw_entry or os.path.join(
             PROJECT_ROOT, "runtime", "openclaw", "node_modules", "openclaw", "openclaw.mjs"
         )
@@ -270,7 +265,7 @@ class GatewayManager:
                 cwd=PROJECT_ROOT,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
-                creationflags=CREATE_NEW_PROCESS_GROUP,
+                **spawn_kwargs(),
             )
         except Exception as e:
             logger.exception("启动网关失败")
@@ -304,20 +299,8 @@ class GatewayManager:
         return await asyncio.to_thread(self._find_pid_on_port_sync, port)
 
     def _find_pid_on_port_sync(self, port: int) -> int | None:
-        """通过 netstat 找到监听指定端口的 PID"""
-        try:
-            result = subprocess.run(
-                ["netstat", "-ano", "-p", "TCP"],
-                capture_output=True, text=True, timeout=10,
-            )
-            for line in result.stdout.splitlines():
-                if f":{port}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    if parts:
-                        return int(parts[-1])
-        except Exception:
-            logger.exception("查找端口 PID 失败")
-        return None
+        """找到监听指定端口的 PID（平台差异见 sidecar/platform.py）"""
+        return find_pid_on_port(port)
 
     async def remove_channel(self, channel: str, account: str | None = None) -> dict:
         """删除渠道账号配置。
@@ -404,11 +387,5 @@ class GatewayManager:
         await asyncio.to_thread(self._kill_pid_sync, pid)
 
     def _kill_pid_sync(self, pid: int) -> None:
-        """结束指定 PID 的进程树（/T 连带子进程，避免插件子进程残留）"""
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(pid)],
-                capture_output=True, timeout=10,
-            )
-        except Exception:
-            logger.exception("结束进程失败 (pid=%d)", pid)
+        """结束指定 PID 的进程树（连带子进程，避免插件子进程残留）"""
+        kill_pid(pid)
