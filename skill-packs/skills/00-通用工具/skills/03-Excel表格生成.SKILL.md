@@ -5,7 +5,7 @@ description: "生成 .xlsx 表格文件:CSV/JSON 转带样式的 Excel(表头加
 version: 1.1.0
 triggers: [Excel, 生成表格, 导出xlsx, 多工作表, 表格样式, 公式]
 platform: all
-requires: [openpyxl]
+requires: [openpyxl==3.1.5]
 ---
 
 # Excel表格生成

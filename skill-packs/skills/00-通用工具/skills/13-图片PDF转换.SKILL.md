@@ -5,7 +5,7 @@ description: "图片转 PDF、PDF 转图片(逐页真实渲染,任意类型 PDF 
 version: 1.1.0
 triggers: [图片转PDF, PDF转图片, 扫描件合并, 导出PDF为图片]
 platform: all
-requires: [pillow, pymupdf]
+requires: [pillow==12.3.0, pymupdf==1.28.2]
 ---
 
 # 图片PDF转换

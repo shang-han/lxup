@@ -309,7 +309,30 @@ class UpdateManager:
                 try: shutil.rmtree(td)
                 except Exception: pass
 
-    def apply_update(self, zp, full=True):
+    def _write_zip_entry(self, zf, info, target, stop_cb):
+        """写单个更新文件；被占用时停服 + 退避重试，最多 3 轮。
+
+        Vite 的 esbuild.exe 在端口释放后可能还短暂持锁，单文件失败
+        不该直接废掉整包更新。"""
+        delays = (1.0, 2.0, 3.0)
+        for attempt in range(len(delays) + 1):
+            try:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(info) as src, open(target, "wb") as dst:
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
+                return
+            except PermissionError:
+                if attempt >= len(delays):
+                    raise
+                self.log(f"  🔁 文件被占用，停服后重试 {attempt + 1}/{len(delays)}：{os.path.relpath(target, ROOT)}")
+                if stop_cb:
+                    try:
+                        stop_cb()
+                    except Exception:
+                        pass
+                time.sleep(delays[attempt])
+
+    def apply_update(self, zp, full=True, stop_cb=None):
         self.log("  📦 正在解压更新包..."); self.prog(0, "解压中...")
         preserve = {"runtime/openclaw-home", "runtime/hermes-home", "runtime/codex-home", "runtime/logs"}
         root_real = os.path.realpath(ROOT)
@@ -347,16 +370,14 @@ class UpdateManager:
                     elif current_exe:
                         self.log("  ⏭ 跳过正在运行的 LXUP启动器.exe")
                     else:
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with zf.open(info) as src, open(target, "wb") as dst:
-                            shutil.copyfileobj(src, dst, length=1024 * 1024)
+                        self._write_zip_entry(zf, info, target, stop_cb)
                     self.prog(int((i + 1) * 100 / total) if total else 100, f"解压中 {i + 1}/{total}")
             self.prog(100, "解压完成")
             self.log("  ✅ 更新包解压完成")
             return True
         except PermissionError as e:
             self.log(f"  ❌ 解压更新包失败: {e}")
-            self.log("  💡 文件被占用（服务未完全退出）。请点击「停止全部」后再重试更新。")
+            self.log("  💡 文件仍被占用（已自动停服重试 3 次）。请点击「停止全部」后再重试更新。")
             return False
         except Exception as e:
             self.log(f"  ❌ 解压更新包失败: {e}"); return False
@@ -1129,7 +1150,7 @@ class LauncherApp:
                     self._log(f"  📦 正在应用补丁 {step.get('from')} → {step.get('to')}...")
                     tmp = um.download_file(url, sha, step.get("size", 0))
                     if not tmp: self._log("  ❌ 补丁下载失败"); self._ui(self._restore); return
-                    if not um.apply_update(tmp, False): self._log("  ❌ 补丁应用失败"); self._ui(self._restore); return
+                    if not um.apply_update(tmp, False, stop_cb=_stop_services_for_update): self._log("  ❌ 补丁应用失败"); self._ui(self._restore); return
                     self._log(f"  ✅ 补丁 {step.get('from')} → {step.get('to')} 已应用")
                 self._save_ver(data.get("version", ""))
                 self._log(f"  🎉 更新完成！新版本：v{data.get('version')}")
@@ -1144,7 +1165,7 @@ class LauncherApp:
             tmp = um.download_file(url, sha, pkg.get("size", 0))
             if not tmp: self._log("  ❌ 下载失败"); self._ui(self._restore); return
             _stop_services_for_update()
-            if um.apply_update(tmp, True):
+            if um.apply_update(tmp, True, stop_cb=_stop_services_for_update):
                 self._save_ver(data.get("version", ""))
                 self._log(f"  🎉 更新完成！新版本：v{data.get('version')}"); self._log("  🔄 请关闭并重新启动启动器")
                 try:

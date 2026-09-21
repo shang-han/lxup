@@ -5,7 +5,7 @@ description: "对 PDF 文件做真实操作:合并、拆分、抽取页面、提
 version: 2.0.0
 triggers: [PDF, 合并PDF, 拆分PDF, PDF提取文字, PDF抽取页面, PDF旋转, PDF页数]
 platform: all
-requires: [pypdf]
+requires: [pypdf==6.14.2]
 ---
 
 # PDF处理

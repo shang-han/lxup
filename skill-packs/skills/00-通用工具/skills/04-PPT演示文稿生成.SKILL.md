@@ -5,7 +5,7 @@ description: "按大纲生成 .pptx 演示文稿:封面页、标题+要点页、
 version: 1.1.0
 triggers: [PPT, 演示文稿, 生成幻灯片, 汇报材料, pptx]
 platform: all
-requires: [python-pptx]
+requires: [python-pptx==1.0.2]
 ---
 
 # PPT演示文稿生成

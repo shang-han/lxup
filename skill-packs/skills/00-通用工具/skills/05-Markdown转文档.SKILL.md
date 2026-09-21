@@ -5,7 +5,7 @@ description: "把 Markdown 文件转成 Word 或 HTML 文件。
 version: 1.0.0
 triggers: [Markdown转Word, md转docx, Markdown转HTML, md转html]
 platform: all
-requires: [python-docx, markdown]
+requires: [python-docx==1.2.0, markdown==3.10.3]
 ---
 
 # Markdown转文档

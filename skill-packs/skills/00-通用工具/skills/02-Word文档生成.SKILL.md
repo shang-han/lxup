@@ -5,7 +5,7 @@ description: "按结构化规格生成 .docx 文档:标题、段落、列表、�
 version: 2.0.0
 triggers: [Word, 生成文档, 导出Word, 写报告, 文档排版, docx]
 platform: all
-requires: [python-docx]
+requires: [python-docx==1.2.0]
 ---
 
 # Word文档生成

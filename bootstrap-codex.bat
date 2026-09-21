@@ -26,7 +26,7 @@ echo === Portable node version ===
 
 echo.
 echo === [1/3] Installing @openai/codex@%CODEX_VERSION% into runtime\codex - slow the first time ===
-npm install @openai/codex@%CODEX_VERSION% --prefix "%ROOT%\runtime\codex" --no-audit --no-fund
+call npm install @openai/codex@%CODEX_VERSION% --prefix "%ROOT%\runtime\codex" --no-audit --no-fund
 if errorlevel 1 (
   echo [ERROR] @openai/codex install failed
   pause
