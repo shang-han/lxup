@@ -2,12 +2,16 @@
 # -*- coding: utf-8 -*-
 """LXUP Launcher - Tkinter GUI v3"""
 
-import ctypes, hashlib, json, math, os, shutil, socket, stat, subprocess, sys, tempfile, threading, time, zipfile
+import ctypes, hashlib, json, math, os, queue, shutil, signal, socket, stat, subprocess, sys, tempfile, threading, time, zipfile
 if sys.platform == 'win32':
     try: ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try: ctypes.windll.user32.SetProcessDPIAware()
         except Exception: pass
+IS_WINDOWS = sys.platform == 'win32'
+# 平台字体：Windows 用微软雅黑/Consolas；macOS/Linux 用苹方/Menlo
+_UI_FONT = _UI_FONT if IS_WINDOWS else "PingFang SC"
+_MONO_FONT = _MONO_FONT if IS_WINDOWS else "Menlo"
 from datetime import datetime
 import tkinter as tk
 from tkinter import Tk, Toplevel, Frame, Label, Button, Text, Canvas, Scrollbar, messagebox, ttk
@@ -51,7 +55,20 @@ def root_dir():
 
 ROOT = root_dir(); RUNTIME = os.path.join(ROOT, "runtime"); LOG_DIR = os.path.join(RUNTIME, "logs")
 ICON_PATH = os.path.join(ROOT, "LXUP-icon.ico"); VERSION_FILE = os.path.join(RUNTIME, "version.json")
-NODE = os.path.join(RUNTIME, "data", "node.exe")
+def _resolve_node():
+    """便携 Node：Windows 用 node.exe；POSIX 用 node，缺失时回退系统 node"""
+    if IS_WINDOWS:
+        return os.path.join(RUNTIME, "data", "node.exe")
+    portable = os.path.join(RUNTIME, "data", "node")
+    if os.path.isfile(portable):
+        return portable
+    # .app 由 LaunchServices 启动时 PATH 精简（不含 /usr/local/bin、/opt/homebrew/bin），
+    # 显式探测常见安装位置，再回退 which("node")
+    for cand in ("/usr/local/bin/node", "/opt/homebrew/bin/node"):
+        if os.path.isfile(cand):
+            return cand
+    return shutil.which("node") or "node"
+NODE = _resolve_node()
 OPENCLAW_ENTRY = os.path.join(RUNTIME, "openclaw", "node_modules", "openclaw", "openclaw.mjs")
 VITE_JS = os.path.join(ROOT, "control-ui", "node_modules", "vite", "bin", "vite.js")
 AI_SERVER_JS = os.path.join(ROOT, "ai-assistant", "server.js")
@@ -67,6 +84,41 @@ SERVICES = [
 UPDATE_URL = "https://www.hyx-agent.cn/lxup/update"
 CNW = 0x08000000; CNP = 0x00000200; DETACHED = CNW | CNP
 _lock_sock = None
+
+def _spawn_kwargs():
+    """分离式启动子进程的平台参数：Windows DETACHED；POSIX 新会话（便于整树 kill）"""
+    if IS_WINDOWS:
+        return {"creationflags": DETACHED}
+    return {"start_new_session": True}
+
+def _kill_pid(pid):
+    """杀进程树：Windows taskkill /F /T；POSIX kill 进程组（配合 start_new_session）"""
+    try:
+        if IS_WINDOWS:
+            result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    check=False, creationflags=CNW)
+            return result.returncode == 0
+        try:
+            pgid = os.getpgid(pid)
+            if pgid == pid:
+                os.killpg(pgid, signal.SIGKILL)
+            else:
+                os.kill(pid, signal.SIGKILL)
+            return True
+        except ProcessLookupError:
+            return True  # 已退出
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+def open_browser(url):
+    """用系统默认浏览器打开 URL"""
+    if IS_WINDOWS:
+        subprocess.Popen(["cmd", "/c", "start", "", url], creationflags=CNW)
+    else:
+        subprocess.Popen(["open", url])
 
 def load_version():
     try:
@@ -87,11 +139,14 @@ def acquire_lock():
     _lock_sock = s; return True
 
 def portable_python():
+    """便携 Python：runtime/python/cpython-*（Windows 用 python.exe，POSIX 用 bin/python3）"""
     base = os.path.join(RUNTIME, "python")
     if os.path.isdir(base):
         cands = sorted(d for d in os.listdir(base) if d.startswith("cpython-"))
         if cands:
-            exe = os.path.join(base, cands[-1], "python.exe")
+            name = cands[-1]  # 版本号最长者，避开无版本 junction/软链
+            sub = "python.exe" if IS_WINDOWS else os.path.join("bin", "python3")
+            exe = os.path.join(base, name, sub)
             if os.path.isfile(exe): return exe
     return None
 
@@ -118,7 +173,7 @@ class ServiceManager:
         if env: full_env.update(env)
         try:
             proc = subprocess.Popen(argv, cwd=cwd, env=full_env, stdout=out, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL, creationflags=DETACHED)
+                                    stdin=subprocess.DEVNULL, **_spawn_kwargs())
             self.log(f"  ✅ 已启动 {name} (PID {proc.pid})"); self.processes.append(proc); return proc
         except Exception as e: self.log(f"  ❌ 启动 {name} 失败: {e}"); return None
     def wait_for_port(self, port, process=None, timeout=60):
@@ -131,18 +186,27 @@ class ServiceManager:
     @staticmethod
     def listening_pids():
         pids = set()
+        ports = {str(svc["port"]) for svc in SERVICES}
         try:
-            result = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True,
-                                    text=True, errors="replace", check=False, creationflags=CNW)
-            ports = {str(svc["port"]) for svc in SERVICES}
-            for line in result.stdout.splitlines():
-                fields = line.split()
-                if len(fields) < 5 or fields[0].upper() != "TCP": continue
-                if fields[3].upper() != "LISTENING": continue
-                endpoint = fields[1].strip("[]")
-                if ":" not in endpoint: continue
-                port = endpoint.rsplit(":", 1)[-1]
-                if port in ports and fields[4].isdigit(): pids.add(int(fields[4]))
+            if IS_WINDOWS:
+                result = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True,
+                                        text=True, errors="replace", check=False, creationflags=CNW)
+                for line in result.stdout.splitlines():
+                    fields = line.split()
+                    if len(fields) < 5 or fields[0].upper() != "TCP": continue
+                    if fields[3].upper() != "LISTENING": continue
+                    endpoint = fields[1].strip("[]")
+                    if ":" not in endpoint: continue
+                    port = endpoint.rsplit(":", 1)[-1]
+                    if port in ports and fields[4].isdigit(): pids.add(int(fields[4]))
+            else:
+                # macOS/Linux：对每个关注端口用 lsof 找监听 PID
+                for port in ports:
+                    result = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                                            capture_output=True, text=True, errors="replace", check=False)
+                    for line in result.stdout.splitlines():
+                        if line.strip().isdigit():
+                            pids.add(int(line.strip()))
         except Exception:
             pass
         return pids
@@ -154,16 +218,10 @@ class ServiceManager:
         pids = tracked | found
         stopped = 0
         for pid in sorted(pids, reverse=True):
-            try:
-                result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                        check=False, creationflags=CNW)
-                if result.returncode == 0:
-                    stopped += 1; self.log(f"  ⏹ 已停止 PID {pid}")
-                else:
-                    self.log(f"  ⚠️ 停止 PID {pid} 失败（返回码 {result.returncode}）")
-            except Exception as e:
-                self.log(f"  ⚠️ 停止 PID {pid} 失败: {e}")
+            if _kill_pid(pid):
+                stopped += 1; self.log(f"  ⏹ 已停止 PID {pid}")
+            else:
+                self.log(f"  ⚠️ 停止 PID {pid} 失败")
         deadline = time.time() + 10
         while time.time() < deadline and self.listening_pids(): time.sleep(0.25)
         remaining = self.listening_pids()
@@ -231,9 +289,9 @@ class ServiceManager:
         if len(longest) >= 235: fatals.append(f"路径过长（{len(longest)} 字符），请将 LXUP 移到短路径目录")
         py = portable_python()
         if py is None:
-            if getattr(sys, "frozen", False): fatals.append("便携 Python 缺失，请先运行 bootstrap-hermes.bat")
+            if getattr(sys, "frozen", False): fatals.append("便携 Python 缺失，请先运行 bootstrap-hermes")
             else: py = sys.executable; warns.append("便携 Python 缺失，暂用系统解释器")
-        if not os.path.isfile(NODE): fatals.append("便携 node.exe 缺失，请先运行 bootstrap-openclaw.bat")
+        if not os.path.isfile(NODE): fatals.append("便携 Node 缺失，请先运行 bootstrap-openclaw")
         for name, path in [("Sidecar", SIDECAR_MAIN), ("Hermes", HERMES_MAIN),
                            ("OpenClaw", OPENCLAW_ENTRY), ("前端", VITE_JS), ("AI 助手", AI_SERVER_JS)]:
             if not os.path.isfile(path): fatals.append(f"{name} 不存在 ({path})")
@@ -390,6 +448,8 @@ class UpdateManager:
 
         正在运行的 exe 无法覆盖，.new 由启动器退出时的替换助手接管：
         旧 exe → .old 备份 → .new 改名上位（失败自动回滚）。"""
+        if not IS_WINDOWS:
+            return  # macOS 无 exe 启动器，启动器自更新暂不适用
         lp = data.get("launcher") or {}
         url = lp.get("url", "")
         if not url:
@@ -427,14 +487,14 @@ CONSOLE_BG = "#0B1426"
 CONSOLE_BD = "#1E2A42"
 CONSOLE_FG = "#D6DEEA"
 
-F_TITLE = ("Microsoft YaHei UI", 16, "bold")
-F_SUB   = ("Microsoft YaHei UI", 8)
-F_BTN   = ("Microsoft YaHei UI", 10, "bold")
-F_CARD_N= ("Microsoft YaHei UI", 9, "bold")
-F_CARD_P= ("Consolas", 8)
-F_STAT  = ("Microsoft YaHei UI", 8, "bold")
-F_LOG   = ("Consolas", 9)
-F_FOOT  = ("Microsoft YaHei UI", 8)
+F_TITLE = (_UI_FONT, 16, "bold")
+F_SUB   = (_UI_FONT, 8)
+F_BTN   = (_UI_FONT, 10, "bold")
+F_CARD_N= (_UI_FONT, 9, "bold")
+F_CARD_P= (_MONO_FONT, 8)
+F_STAT  = (_UI_FONT, 8, "bold")
+F_LOG   = (_MONO_FONT, 9)
+F_FOOT  = (_UI_FONT, 8)
 
 _SERVICE_CODES = {
     "Sidecar": "SC", "OpenClaw": "OC", "Hermes": "HE",
@@ -701,7 +761,7 @@ class ServiceCard(tk.Canvas):
         cy = h / 2
         _rrect(self, 12, cy - 17, 46, cy + 17, 12, "#E5F3FF", tags=("bubble",))
         self.create_text(29, cy, text=_SERVICE_CODES.get(self.svc["name"], "??"),
-                         font=("Consolas", 8, "bold"), fill=ACCENT, tags=("code",))
+                         font=(_MONO_FONT, 8, "bold"), fill=ACCENT, tags=("code",))
         self.create_text(54, cy - 9, text=self.svc["name"], font=F_CARD_N, fill=INK,
                          anchor="w", tags=("name",))
         self.create_text(54, cy + 9, text=f":{self.svc['port']}", font=F_CARD_P, fill=MUTED,
@@ -793,7 +853,7 @@ class HeaderBar(tk.Canvas):
         else:
             _rrect(self, 9, h / 2 - 23 + self._float, 47, h / 2 + 23 + self._float, 11,
                    "#E5F3FF", outline="#C9DDF5", tags=("logo",))
-            self.create_text(28, h / 2 + self._float, text="LX", font=("Consolas", 13, "bold"),
+            self.create_text(28, h / 2 + self._float, text="LX", font=(_MONO_FONT, 13, "bold"),
                              fill=ACCENT, tags=("logo",))
         self.create_text(62, h / 2 - 11 + self._float, text=self._title, font=F_TITLE,
                          fill=INK, anchor="w", tags=("logo",))
@@ -856,13 +916,16 @@ class LauncherApp:
         self.root = Tk(); self.root.title("LXUP 启动器")
         self.root.geometry("860x660"); self.root.minsize(720, 560)
         self.root.configure(bg=BG)
-        if os.path.isfile(ICON_PATH): self.root.iconbitmap(ICON_PATH)
+        if os.path.isfile(ICON_PATH):
+            try: self.root.iconbitmap(ICON_PATH)
+            except Exception: pass
         self.vi = load_version(); self.vs = self.vi.get("version", "unknown")
         self._busy = False; self._running_count = 0; self._front_open = False
         self._service_cards = {}; self._toast_win = None; self._logo = None
         self._loading_phase = 0; self._pulse_tick = 0; self._poll_stop = False
+        self._ui_queue = queue.Queue()
         self.svc = ServiceManager(self._log, self._on_service_progress)
-        self._build_ui(); self._start_poll_thread()
+        self._build_ui(); self._poll_ui_queue(); self._start_poll_thread()
         self._logo_float(); self._breathe_primary()
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() - self.root.winfo_reqwidth()) // 2
@@ -893,15 +956,15 @@ class LauncherApp:
         # 圆角细进度条
         pf = Frame(outer, bg=BG); pf.pack(fill="x", pady=(0, 2))
         plrow = Frame(pf, bg=BG); plrow.pack(fill="x")
-        self._pl = Label(plrow, text="就绪", font=("Microsoft YaHei UI", 9, "bold"), bg=BG, fg=INK, anchor="w")
+        self._pl = Label(plrow, text="就绪", font=(_UI_FONT, 9, "bold"), bg=BG, fg=INK, anchor="w")
         self._pl.pack(side="left")
-        self._pct = Label(plrow, text="", font=("Consolas", 9), bg=BG, fg=MUTED, anchor="e")
+        self._pct = Label(plrow, text="", font=(_MONO_FONT, 9), bg=BG, fg=MUTED, anchor="e")
         self._pct.pack(side="right")
         self._pb = RoundedProgress(pf, height=8); self._pb.pack(fill="x", pady=(4, 0))
 
         # 服务卡片
         svch = Frame(outer, bg=BG); svch.pack(fill="x", pady=(8, 2))
-        Label(svch, text="服务状态", font=("Microsoft YaHei UI", 11, "bold"), bg=BG, fg=INK).pack(anchor="w")
+        Label(svch, text="服务状态", font=(_UI_FONT, 11, "bold"), bg=BG, fg=INK).pack(anchor="w")
         self._svc_frame = Frame(outer, bg=BG); self._svc_frame.pack(fill="x", pady=(4, 6))
         for svc in SERVICES:
             self._service_cards[svc["name"]] = ServiceCard(
@@ -917,8 +980,8 @@ class LauncherApp:
         # 日志
         lf = Frame(outer, bg=BG); lf.pack(fill="both", expand=True, pady=(2, 0))
         lhead = Frame(lf, bg=BG); lhead.pack(fill="x")
-        Label(lhead, text="运行日志", font=("Microsoft YaHei UI", 11, "bold"), bg=BG, fg=INK).pack(side="left")
-        clear = Label(lhead, text="清空日志", font=("Microsoft YaHei UI", 8), bg=BG, fg=ACCENT,
+        Label(lhead, text="运行日志", font=(_UI_FONT, 11, "bold"), bg=BG, fg=INK).pack(side="left")
+        clear = Label(lhead, text="清空日志", font=(_UI_FONT, 8), bg=BG, fg=ACCENT,
                       cursor="hand2", padx=4, pady=2)
         clear.pack(side="right"); clear.bind("<Button-1>", lambda e: self._clear_logs())
         self._console = RoundedConsole(lf); self._console.pack(fill="both", expand=True, pady=(4, 0))
@@ -991,7 +1054,22 @@ class LauncherApp:
 
     # ── 线程安全 UI 调度 ─────────────────────────────────
     def _ui(self, fn):
-        try: self.root.after(0, fn)
+        # macOS 上 Tk 的 after() 不能跨线程调用（回调不会触发），
+        # 改为放入队列，由主线程 _poll_ui_queue 轮询执行
+        try: self._ui_queue.put(fn)
+        except Exception: pass
+
+    def _poll_ui_queue(self):
+        try:
+            while True:
+                fn = self._ui_queue.get_nowait()
+                try: fn()
+                except Exception: pass
+        except queue.Empty:
+            pass
+        except Exception:
+            pass
+        try: self.root.after(30, self._poll_ui_queue)
         except Exception: pass
 
     def _on_service_progress(self, name, phase):
@@ -1052,7 +1130,7 @@ class LauncherApp:
             self._pl.configure(text="全部服务已就绪"); self._pct.configure(text="100%")
             self._show_toast("全部服务已就绪，正在打开控制台", "ok")
             try:
-                subprocess.Popen(["cmd", "/c", "start", "", FRONTEND_URL], creationflags=CNW)
+                open_browser(FRONTEND_URL)
                 self._log(f"  🌐 已打开浏览器：{FRONTEND_URL}")
             except Exception as e:
                 self._log(f"  ❌ 打开浏览器失败：{e}")
@@ -1089,7 +1167,7 @@ class LauncherApp:
     def _on_browser(self):
         if self._busy: return
         try:
-            subprocess.Popen(["cmd", "/c", "start", "", FRONTEND_URL], creationflags=CNW)
+            open_browser(FRONTEND_URL)
             self._log(f"  🌐 已打开浏览器：{FRONTEND_URL}")
         except Exception as e:
             self._log(f"  ❌ 打开浏览器失败：{e}")
@@ -1243,8 +1321,7 @@ class LauncherApp:
                 self._lt.see("end"); self._lt.configure(state="disabled")
             except Exception:
                 pass
-        try: self.root.after(0, _do)
-        except Exception: pass
+        self._ui(_do)
 
     def _clear_logs(self):
         try:
@@ -1259,7 +1336,7 @@ class LauncherApp:
         except Exception: pass
         top = Toplevel(self.root); top.overrideredirect(True); top.attributes("-topmost", True)
         color = {"ok": ACCENT, "error": DANGER, "info": "#3B82F6"}.get(kind, ACCENT)
-        Label(top, text=f"  {msg}  ", font=("Microsoft YaHei UI", 9, "bold"),
+        Label(top, text=f"  {msg}  ", font=(_UI_FONT, 9, "bold"),
               bg=color, fg="#FFFFFF", padx=12, pady=8).pack()
         top.update_idletasks()
         w = top.winfo_reqwidth(); h = top.winfo_reqheight()
@@ -1284,6 +1361,8 @@ class LauncherApp:
         """退出时若存在待替换的 LXUP启动器.exe.new，派发无窗口助手完成替换：
         等本进程释放 exe 文件锁 → 旧 exe 备份为 .old → .new 改名上位（失败回滚）。
         助手由 cmd 循环重试，不阻塞本进程退出。"""
+        if not IS_WINDOWS:
+            return  # macOS 启动器形态不同，exe 自替换不适用
         new_path = os.path.join(ROOT, "LXUP启动器.exe.new")
         if not os.path.isfile(new_path):
             return

@@ -1,0 +1,17 @@
+#!/bin/bash
+# LXUP 启动器（macOS）—— .app 入口，双击直接出界面，不开终端
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
+cd "$ROOT" || exit 1
+
+# 找便携 Python（runtime/python/cpython-*/bin/python3，取版本号最长者）
+PY=""
+for d in runtime/python/cpython-*/bin/python3; do
+  [ -x "$d" ] && PY="$d"
+done
+if [ -z "$PY" ]; then
+  osascript -e 'display dialog "未找到便携 Python，请先运行 bootstrap-hermes.sh" buttons {"好"} default button 1 with icon stop' >/dev/null 2>&1
+  exit 1
+fi
+
+exec "$PY" launcher_gui.py

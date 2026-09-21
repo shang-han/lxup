@@ -38,13 +38,11 @@ except ImportError:  # pragma: no cover
     tomli_w = None
 
 from ..config import GatewayConfig
+from ..platform import kill_pid, spawn_kwargs
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
-# Windows 下新建进程组，便于 taskkill /T 杀整棵进程树
-_CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 # 预览/错误尾部截断长度
 _PREVIEW_LIMIT = 2000
@@ -123,9 +121,14 @@ class CodexManager:
         # 其他平台 vendored 目录（darwin/linux）——按 node_modules/@openai/codex-*/vendor 兜底
         base = PROJECT_ROOT / "runtime" / "codex" / "node_modules" / "@openai"
         if base.is_dir():
-            for exe in base.glob("codex-*/vendor/*/bin/codex*"):
-                if exe.is_file() and exe.suffix in ("", ".exe"):
-                    return str(exe)
+            cands = sorted(
+                (exe for exe in base.glob("codex-*/vendor/*/bin/codex*")
+                 if exe.is_file() and exe.suffix in ("", ".exe")),
+                # 主二进制 codex / codex.exe 优先，避开 codex-code-mode-host 等伴生文件
+                key=lambda p: (p.name not in ("codex", "codex.exe"), p.name),
+            )
+            if cands:
+                return str(cands[0])
         # 全局回退
         from shutil import which
 
@@ -450,16 +453,9 @@ class CodexManager:
             proc.kill()
         except ProcessLookupError:
             return
-        # Windows: 杀整棵进程树（codex 可能拉起子命令进程）
-        if os.name == "nt" and proc.pid:
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                    timeout=10,
-                )
-            except Exception:  # noqa: BLE001
-                pass
+        # 杀整棵进程树（codex 可能拉起子命令进程）
+        if proc.pid:
+            kill_pid(proc.pid)
 
     async def run_turn(
         self, sid: str, prompt: str, workspace: str | None = None
@@ -525,8 +521,7 @@ class CodexManager:
                 env=self._codex_env(),
                 cwd=ws,
             )
-            if os.name == "nt":
-                kwargs["creationflags"] = _CREATE_NEW_PROCESS_GROUP
+            kwargs.update(spawn_kwargs())
             proc = await asyncio.create_subprocess_exec(*argv, **kwargs)
             self._active[sid] = proc
             stderr_task = asyncio.create_task(_drain_stderr(proc.stderr))

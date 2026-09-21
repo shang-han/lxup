@@ -12,7 +12,6 @@ engines/hermes/bootstrap-portable.bat 生成（runtime/python + runtime/hermes-l
 """
 
 import asyncio
-import glob
 import logging
 import os
 import subprocess
@@ -21,6 +20,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..config import GatewayConfig
+from ..platform import find_pid_on_port, kill_pid, portable_python, spawn_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,6 @@ logger = logging.getLogger(__name__)
 _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
 _SIDECAR_DIR = os.path.dirname(_SERVICES_DIR)
 PROJECT_ROOT = os.path.dirname(_SIDECAR_DIR)
-
-# Windows：新建进程组，使其不随 sidecar 退出而被连带结束
-CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 # 与前端 hermes-client 默认 Key、start-hermes.bat 保持一致
 DEFAULT_API_SERVER_KEY = "lxup-hermes-dev-2026"
@@ -50,12 +47,8 @@ class HermesManager:
     # ── 运行时定位 ────────────────────────────────────
 
     def _python_exe(self) -> str | None:
-        """便携 Python：runtime/python/cpython-*/python.exe（取版本号最长者，避开无版本 junction）"""
-        matches = glob.glob(os.path.join(PROJECT_ROOT, "runtime", "python", "cpython-*", "python.exe"))
-        if not matches:
-            return None
-        matches.sort(key=len)
-        return matches[-1]
+        """便携 Python：runtime/python/cpython-*（平台差异见 sidecar/platform.py）"""
+        return portable_python(PROJECT_ROOT)
 
     def _installed(self) -> bool:
         return self._python_exe() is not None and os.path.isdir(
@@ -129,7 +122,7 @@ class HermesManager:
                 env=env,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
-                creationflags=CREATE_NEW_PROCESS_GROUP,
+                **spawn_kwargs(),
             )
         except Exception as e:
             logger.exception("启动 Hermes 网关失败")
@@ -157,24 +150,7 @@ class HermesManager:
     # ── 进程工具（Windows）────────────────────────────
 
     def _find_pid_on_port(self, port: int) -> int | None:
-        try:
-            result = subprocess.run(
-                ["netstat", "-ano", "-p", "TCP"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            for line in result.stdout.splitlines():
-                if f":{port}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    if parts:
-                        return int(parts[-1])
-        except Exception:
-            logger.exception("查找端口 PID 失败")
-        return None
+        return find_pid_on_port(port)
 
     def _kill_pid(self, pid: int) -> None:
-        try:
-            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=10)
-        except Exception:
-            logger.exception("结束进程失败 (pid=%d)", pid)
+        kill_pid(pid)
