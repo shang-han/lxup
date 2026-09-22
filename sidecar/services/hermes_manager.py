@@ -111,6 +111,8 @@ class HermesManager:
         env["API_SERVER_PORT"] = str(self.port)
         env["API_SERVER_KEY"] = DEFAULT_API_SERVER_KEY
         env["API_SERVER_CORS_ORIGINS"] = "*"
+        # 放行所有消息发送者（否则未配白名单时微信消息默认被拒）
+        env["GATEWAY_ALLOW_ALL_USERS"] = "true"
 
         command = f'"{python_exe}" -m hermes_cli.main gateway run'
         log_file = open(self._log_path, "a", encoding="utf-8")

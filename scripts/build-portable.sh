@@ -58,10 +58,13 @@ done
 
 # ── 3. 目录树 ─────────────────────────────────────────────
 log "复制目录树 ..."
-copy_tree "$PROJECT_ROOT/ai-assistant" "$STAGE_ROOT/ai-assistant" --exclude='/data/'
+copy_tree "$PROJECT_ROOT/ai-assistant" "$STAGE_ROOT/ai-assistant" --exclude='/data/' --exclude='start.bat'
 copy_tree "$PROJECT_ROOT/control-ui" "$STAGE_ROOT/control-ui" --exclude='/dist/'
 copy_tree "$PROJECT_ROOT/sidecar" "$STAGE_ROOT/sidecar" --exclude='__pycache__/'
-copy_tree "$PROJECT_ROOT/scripts" "$STAGE_ROOT/scripts"
+# 只保留 bootstrap-hermes 运行时依赖的 apply_hermes_patches.py，
+# 打包/发布工具（build-factory/build-release/secret-scan/打包说明/build-portable）不进客户包
+mkdir -p "$STAGE_ROOT/scripts"
+cp "$PROJECT_ROOT/scripts/apply_hermes_patches.py" "$STAGE_ROOT/scripts/"
 copy_tree "$PROJECT_ROOT/skill-packs" "$STAGE_ROOT/skill-packs"
 
 # ── 4. 运行时 ─────────────────────────────────────────────
@@ -90,8 +93,12 @@ fi
 
 # ── 5. workspace 人格文件 ─────────────────────────────────
 mkdir -p "$STAGE_ROOT/runtime/workspace"
-for f in AGENTS.md HEARTBEAT.md IDENTITY.md SOUL.md TOOLS.md; do
-  [ -f "$PROJECT_ROOT/runtime/workspace/$f" ] && cp "$PROJECT_ROOT/runtime/workspace/$f" "$STAGE_ROOT/runtime/workspace/"
+for f in AGENTS.md HEARTBEAT.md IDENTITY.md SOUL.md TOOLS.md USER.md MEMORY.md; do
+  [ -f "$PROJECT_ROOT/runtime/workspace/$f" ] || continue
+  case "$f" in
+    IDENTITY.md|USER.md|MEMORY.md) : > "$STAGE_ROOT/runtime/workspace/$f" ;;  # AI 边用边填的个人文件，进包一律置空
+    *) cp "$PROJECT_ROOT/runtime/workspace/$f" "$STAGE_ROOT/runtime/workspace/" ;;
+  esac
 done
 
 # ── 6. 引擎家目录（只留静态技能，不带登录态/会话）──────────
@@ -153,6 +160,13 @@ done
 log "创建 zip ..."
 mkdir -p "$OUTPUT_DIR"
 ( cd "$OUTPUT_DIR" && zip -qr "$ARCHIVE_PATH" "$PACKAGE_NAME" )
+
+# ── 9.5 密钥泄露扫描（复用 Windows 的 secret-scan.py，硬闸门）──
+# 扫 staging 目录（相对路径无 LXUP 前缀，EXCL 才能正确排除第三方引擎目录）
+log "密钥泄露扫描 ..."
+if [ -f "$PROJECT_ROOT/scripts/secret-scan.py" ]; then
+  python3 "$PROJECT_ROOT/scripts/secret-scan.py" "$STAGE_ROOT" --strict
+fi
 
 log "完成："
 log "  Portable folder: $STAGE_ROOT"

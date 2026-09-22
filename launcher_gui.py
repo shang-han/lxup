@@ -267,7 +267,8 @@ class ServiceManager:
         he.update({"HERMES_HOME": hh, "PYTHONPATH": os.path.join(RUNTIME, "hermes-libs"),
                    "API_SERVER_ENABLED": "true", "API_SERVER_HOST": "127.0.0.1",
                    "API_SERVER_PORT": "8642", "API_SERVER_KEY": "lxup-hermes-dev-2026",
-                   "API_SERVER_CORS_ORIGINS": "*"})
+                   "API_SERVER_CORS_ORIGINS": "*",
+                   "GATEWAY_ALLOW_ALL_USERS": "true"})
         if not launch("Hermes", [py, "-m", "hermes_cli.main", "gateway", "run", "--replace"],
                       cwd=ROOT, se=he, lf="hermes-gateway.log", port=8642, timeout=120): return False
         if not launch("AI Assistant", [NODE, "server.js"], cwd=os.path.join(ROOT, "ai-assistant"),

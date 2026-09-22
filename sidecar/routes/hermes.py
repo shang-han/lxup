@@ -874,6 +874,7 @@ async def hermes_weixin_login_ws(ws: WebSocket) -> None:
     await ws.accept()
     from ..services.hermes_weixin_login import get_session
     session = get_session()
+    session.set_restart_callback(lambda: ws.app.state.hermes_manager.restart())
 
     async def push(snapshot: dict) -> None:
         try:

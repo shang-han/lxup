@@ -72,12 +72,17 @@ class HermesWeixinLoginSession:
         self.qr_data_url: str | None = None
         self._listeners: list = []
         self._tail: list[str] = []
+        self._restart_callback = None
 
     def add_listener(self, cb) -> None:
         self._listeners.append(cb)
 
     def remove_listener(self, cb) -> None:
         self._listeners = [l for l in self._listeners if l is not cb]
+
+    def set_restart_callback(self, cb) -> None:
+        """登录成功后回调：用于重启 Hermes 网关使微信渠道上线"""
+        self._restart_callback = cb
 
     def _emit(self) -> None:
         snap = self.snapshot()
@@ -200,6 +205,17 @@ except Exception as e:
                 else:
                     tail = " | ".join(self._tail[-self._TAIL_LINES:]) if self._tail else "无输出"
                     self._set("error", f"登录进程退出（code {self.proc.returncode}）: {tail}")
+            else:
+                # 登录成功 → 重启网关，让新凭证生效、微信渠道上线
+                self._set("success", "登录成功，正在重启网关…")
+                if self._restart_callback:
+                    try:
+                        await self._restart_callback()
+                    except Exception:
+                        logger.exception("重启 Hermes 网关失败")
+                        self._set("error", "网关重启失败，请手动重启")
+                        return
+                self._set("success", "登录成功，微信渠道已接入")
         except asyncio.CancelledError:
             pass
         except Exception as e:
