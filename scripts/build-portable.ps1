@@ -90,6 +90,10 @@ if (-not (Test-Path -LiteralPath $pythonSource -PathType Container)) {
     throw "Bundled Python runtime is missing: $pythonSource"
 }
 Copy-PortableTree $pythonSource (Join-Path $runtimeStage "python\\cpython-3.11.15-windows-x86_64-none") -ExcludeFiles @(".lock")
+# 更新包必须带 runtime/version.json，否则客户升级后本地版本不前进 → 每次检查都重更（无限循环）
+$versionSrc = Join-Path $runtimeSource "version.json"
+if (-not (Test-Path -LiteralPath $versionSrc -PathType Leaf)) { throw "runtime/version.json missing: $versionSrc" }
+Copy-Item -LiteralPath $versionSrc -Destination (Join-Path $runtimeStage "version.json") -Force
 
 $dataStage = Join-Path $runtimeStage "data"
 New-Item -ItemType Directory -Path $dataStage -Force | Out-Null
