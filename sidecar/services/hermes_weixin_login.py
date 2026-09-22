@@ -84,6 +84,50 @@ class HermesWeixinLoginSession:
         """登录成功后回调：用于重启 Hermes 网关使微信渠道上线"""
         self._restart_callback = cb
 
+    def _save_weixin_platform(self, line: str) -> None:
+        """解析 LOGIN_SUCCESS 凭证，写入 config.yaml 的 platforms.weixin。
+
+        Hermes 网关只从 config.yaml 的 platforms 段加载消息渠道，
+        不写这步的话网关重启后仍是「0 渠道」，微信消息不会回。
+        """
+        payload = line[len("LOGIN_SUCCESS:"):].strip()
+        creds = {}
+        for part in payload.split(","):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                creds[k.strip()] = v.strip()
+        account_id = creds.get("account_id", "")
+        token = creds.get("token", "")
+        base_url = creds.get("base_url", "")
+        if not account_id or not token:
+            logger.warning("解析微信凭证失败: %s", line)
+            return
+        try:
+            import yaml
+        except Exception:
+            logger.exception("yaml 不可用")
+            return
+        config_path = os.path.join(PROJECT_ROOT, "runtime", "hermes-home", "config.yaml")
+        try:
+            cfg = {}
+            if os.path.isfile(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
+            if not isinstance(cfg, dict):
+                cfg = {}
+            platforms = cfg.setdefault("platforms", {})
+            weixin = platforms.setdefault("weixin", {})
+            weixin["enabled"] = True
+            weixin["token"] = token
+            extra = weixin.setdefault("extra", {})
+            extra["account_id"] = account_id
+            extra["base_url"] = base_url
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+            logger.info("微信平台配置已写入 config.yaml: account=%s", account_id)
+        except Exception:
+            logger.exception("写入微信平台配置失败")
+
     def _emit(self) -> None:
         snap = self.snapshot()
         for cb in list(self._listeners):
@@ -161,8 +205,9 @@ except Exception as e:
                 if len(self._tail) > self._TAIL_LINES:
                     self._tail.pop(0)
 
-                # 检测成功（从凭证输出）
+                # 检测成功（从凭证输出）→ 落盘 platforms.weixin 配置，网关重启后才加载微信渠道
                 if line.startswith("LOGIN_SUCCESS:"):
+                    self._save_weixin_platform(line)
                     self._set("success", "登录成功，正在保存凭证…")
                     continue
 

@@ -127,13 +127,18 @@ gw = cfg.get('gateway') or {}
 if isinstance(gw, dict):
     gw.setdefault('auth', {})['token'] = 'dev-local-token'
     cfg['gateway'] = gw
-# 清掉模型 Key / 渠道登录态
-m = cfg.get('models') or {}
-if isinstance(m, dict):
-    for prov in (m.get('providers') or {}).values():
-        if isinstance(prov, dict) and 'apiKey' in prov:
-            prov['apiKey'] = ''
-    cfg['models'] = m
+# 递归清空所有 apiKey 字段（与 build-factory.py 的 _blank_keys 对齐），并清渠道登录态
+def _blank_keys(obj):
+    if isinstance(obj, dict):
+        for k, v in list(obj.items()):
+            if k == 'apiKey' and isinstance(v, str) and v:
+                obj[k] = ''
+            else:
+                _blank_keys(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _blank_keys(item)
+_blank_keys(cfg)
 cfg['channels'] = {}
 # 通道插件仍启用（deepseek/weixin/qqbot/wecom）
 entries = (cfg.get('plugins') or {}).get('entries') or {}
