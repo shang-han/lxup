@@ -151,6 +151,13 @@ def _sanitized_openclaw_config():
                 _blank_keys(item)
     _blank_keys(cfg)
     cfg['channels'] = {}
+    # 清空模型提供方 + 默认模型（客户从零配置，不把开发机模型配置带进包）
+    m = cfg.get('models')
+    if isinstance(m, dict):
+        m['providers'] = {}
+    a = cfg.get('agents')
+    if isinstance(a, dict) and isinstance(a.get('defaults'), dict):
+        a['defaults'].pop('model', None)
     return json.dumps(cfg, ensure_ascii=False, indent=2).encode('utf-8')
 
 os.makedirs(OUT, exist_ok=True)
