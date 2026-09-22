@@ -183,15 +183,16 @@ if (Test-Path -LiteralPath $openClawConfig) {
     if ($config.gateway -and $config.gateway.auth) {
         $config.gateway.auth.token = "dev-local-token"
     }
-    if ($config.models -and $config.models.providers) {
-        foreach ($provider in $config.models.providers.PSObject.Properties) {
-            if ($provider.Value.PSObject.Properties.Name -contains "apiKey") {
-                $provider.Value.apiKey = ""
-            }
-        }
+    # 清空模型提供方（不把开发机服务商/模型选型带进包，客户从零配）+ 去掉默认模型
+    # —— 与 build-factory.py / mac 的 build-portable.sh 口径一致
+    if ($config.models) {
+        $config.models.providers = [pscustomobject]@{}
     }
     if ($config.PSObject.Properties.Name -contains "channels") {
         $config.channels = [pscustomobject]@{}
+    }
+    if ($config.agents -and $config.agents.defaults) {
+        $config.agents.defaults.PSObject.Properties.Remove("model") | Out-Null
     }
     if ($config.agents -and $config.agents.list) {
         foreach ($agent in @($config.agents.list)) {
