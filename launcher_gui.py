@@ -10,8 +10,8 @@ if sys.platform == 'win32':
         except Exception: pass
 IS_WINDOWS = sys.platform == 'win32'
 # 平台字体：Windows 用微软雅黑/Consolas；macOS/Linux 用苹方/Menlo
-_UI_FONT = _UI_FONT if IS_WINDOWS else "PingFang SC"
-_MONO_FONT = _MONO_FONT if IS_WINDOWS else "Menlo"
+_UI_FONT = "Microsoft YaHei" if IS_WINDOWS else "PingFang SC"
+_MONO_FONT = "Consolas" if IS_WINDOWS else "Menlo"
 from datetime import datetime
 import tkinter as tk
 from tkinter import Tk, Toplevel, Frame, Label, Button, Text, Canvas, Scrollbar, messagebox, ttk

@@ -106,6 +106,10 @@ EXCLUDE_FILES = {
     'runtime/data/gateway.db-shm', 'runtime/data/gateway.db-journal',
     'runtime/data/sidecar.log',
     'runtime/python/.gitignore',
+    # 打包/发布工具：出厂包是给客户运行的产物，这些只该留在 git 仓库里，不进交付包。
+    # （scripts/apply_hermes_patches.py 是 bootstrap-hermes 运行时依赖，保留不排）
+    'scripts/build-factory.py', 'scripts/build-release.ps1', 'scripts/secret-scan.py',
+    'scripts/打包说明.md', 'scripts/build-portable.ps1', 'scripts/build-portable.sh',
 }
 
 def norm(rel):
