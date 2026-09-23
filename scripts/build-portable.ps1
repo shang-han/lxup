@@ -195,7 +195,8 @@ if (Test-Path -LiteralPath $openClawConfig) {
     if ($config.PSObject.Properties.Name -contains "channels") {
         $config.channels = [pscustomobject]@{}
     }
-    if ($config.agents -and $config.agents.defaults) {
+    if ($config.agents -and $config.agents.defaults -and
+        $config.agents.defaults.PSObject.Properties.Name -contains "model") {
         $config.agents.defaults.PSObject.Properties.Remove("model") | Out-Null
     }
     if ($config.agents -and $config.agents.list) {
